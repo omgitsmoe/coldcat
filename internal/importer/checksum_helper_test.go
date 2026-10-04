@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/omgitsmoe/coldcat/internal/base"
 )
 
 var errCallback = errors.New("callback failed")
@@ -34,7 +36,7 @@ func TestParse(t *testing.T) {
 					PathRelativeToRoot: "bar foo/bar/baz xer/",
 					MTime:              time.Unix(1673815645, 797977200),
 					SizeInBytes:        0,
-					HashType:           HashType{crypto.SHA512},
+					HashType:           base.HashType{Hash: crypto.SHA512},
 					Hash:               []byte{0xde, 0xad, 0xbe, 0xef},
 				},
 				{
@@ -42,7 +44,7 @@ func TestParse(t *testing.T) {
 					PathRelativeToRoot: "foo/",
 					MTime:              time.Time{},
 					SizeInBytes:        0,
-					HashType:           HashType{crypto.MD5},
+					HashType:           base.HashType{Hash: crypto.MD5},
 					Hash:               []byte{0xff, 0xff, 0xff},
 				},
 				{
@@ -50,7 +52,7 @@ func TestParse(t *testing.T) {
 					PathRelativeToRoot: "xer/",
 					MTime:              time.Time{},
 					SizeInBytes:        0,
-					HashType:           HashType{crypto.SHA256},
+					HashType:           base.HashType{Hash: crypto.SHA256},
 					Hash:               []byte{0xab, 0xab, 0xab},
 				},
 			},
@@ -69,7 +71,7 @@ func TestParse(t *testing.T) {
 					PathRelativeToRoot: "bar foo/bar/baz xer/",
 					MTime:              time.Unix(1673815645, 797977200),
 					SizeInBytes:        1337,
-					HashType:           HashType{crypto.SHA512},
+					HashType:           base.HashType{Hash: crypto.SHA512},
 					Hash:               []byte{0xde, 0xad, 0xbe, 0xef},
 				},
 				{
@@ -77,7 +79,7 @@ func TestParse(t *testing.T) {
 					PathRelativeToRoot: "foo/",
 					MTime:              time.Time{},
 					SizeInBytes:        0,
-					HashType:           HashType{crypto.MD5},
+					HashType:           base.HashType{Hash: crypto.MD5},
 					Hash:               []byte{0xff, 0xff, 0xff},
 				},
 				{
@@ -85,7 +87,7 @@ func TestParse(t *testing.T) {
 					PathRelativeToRoot: "xer/",
 					MTime:              time.Time{},
 					SizeInBytes:        42069,
-					HashType:           HashType{crypto.SHA256},
+					HashType:           base.HashType{Hash: crypto.SHA256},
 					Hash:               []byte{0xab, 0xab, 0xab},
 				},
 			},
@@ -102,7 +104,7 @@ func TestParse(t *testing.T) {
 					PathRelativeToRoot: "foo/",
 					MTime:              time.Time{},
 					SizeInBytes:        0,
-					HashType:           HashType{crypto.MD5},
+					HashType:           base.HashType{Hash: crypto.MD5},
 					Hash:               []byte{0xff, 0xff, 0xff},
 				},
 				{
@@ -110,7 +112,7 @@ func TestParse(t *testing.T) {
 					PathRelativeToRoot: "foo/",
 					MTime:              time.Time{},
 					SizeInBytes:        0,
-					HashType:           HashType{crypto.SHA256},
+					HashType:           base.HashType{Hash: crypto.SHA256},
 					Hash:               []byte{0xab, 0xab, 0xab},
 				},
 			},
@@ -126,7 +128,7 @@ func TestParse(t *testing.T) {
 					PathRelativeToRoot: "foo/",
 					MTime:              time.Time{},
 					SizeInBytes:        0,
-					HashType:           HashType{crypto.MD5},
+					HashType:           base.HashType{Hash: crypto.MD5},
 					Hash:               []byte{0xff, 0xff, 0xff},
 				},
 				{
@@ -134,7 +136,7 @@ func TestParse(t *testing.T) {
 					PathRelativeToRoot: "foo/",
 					MTime:              time.Time{},
 					SizeInBytes:        0,
-					HashType:           HashType{crypto.SHA256},
+					HashType:           base.HashType{Hash: crypto.SHA256},
 					Hash:               []byte{0xab, 0xab, 0xab},
 				},
 			},
@@ -161,7 +163,7 @@ func TestParse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var got []File
-			err := Parse(strings.NewReader(tt.input), func(f File) error {
+			err := ParseCshd(strings.NewReader(tt.input), func(f File) error {
 				if tt.failCallback {
 					return errCallback
 				}
@@ -200,7 +202,7 @@ func TestParseLine(t *testing.T) {
 				PathRelativeToRoot: "foo/bar/baz xer/",
 				SizeInBytes:        0,
 				MTime:              time.Unix(1673815645, 797977200),
-				HashType:           HashType{crypto.SHA512},
+				HashType:           base.HashType{Hash: crypto.SHA512},
 				Hash:               []byte{0xde, 0xad, 0xbe, 0xef},
 			},
 			wantErr: false,
@@ -214,7 +216,7 @@ func TestParseLine(t *testing.T) {
 				PathRelativeToRoot: "foo/bar/baz xer/",
 				SizeInBytes:        0,
 				MTime:              time.Time{},
-				HashType:           HashType{crypto.SHA512},
+				HashType:           base.HashType{Hash: crypto.SHA512},
 				Hash:               []byte{0xde, 0xad, 0xbe, 0xef},
 			},
 			wantErr: false,
@@ -228,7 +230,7 @@ func TestParseLine(t *testing.T) {
 				PathRelativeToRoot: "foo/bar/baz xer/",
 				SizeInBytes:        1337,
 				MTime:              time.Unix(1673815645, 797977200),
-				HashType:           HashType{crypto.SHA512},
+				HashType:           base.HashType{Hash: crypto.SHA512},
 				Hash:               []byte{0xde, 0xad, 0xbe, 0xef},
 			},
 			wantErr: false,
@@ -242,7 +244,7 @@ func TestParseLine(t *testing.T) {
 				PathRelativeToRoot: "foo/bar/baz xer/",
 				SizeInBytes:        0,
 				MTime:              time.Time{},
-				HashType:           HashType{crypto.SHA512},
+				HashType:           base.HashType{Hash: crypto.SHA512},
 				Hash:               []byte{0xde, 0xad, 0xbe, 0xef},
 			},
 			wantErr: false,
@@ -386,19 +388,19 @@ func TestParseHashType(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
-		expected HashType
+		expected base.HashType
 		wantErr  bool
 	}{
 		{
 			name:     "empty string",
 			input:    "",
-			expected: HashType{},
+			expected: base.HashType{},
 			wantErr:  true,
 		},
 		{
 			name:     "valid hash type",
 			input:    "sha512",
-			expected: HashType{crypto.SHA512},
+			expected: base.HashType{Hash: crypto.SHA512},
 			wantErr:  false,
 		},
 		{

@@ -11,11 +11,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/omgitsmoe/coldcat/internal/base"
 )
 
 var ErrMissingField = errors.New("missing or empty field")
 
-func Parse(r io.Reader, fn FileFunc) error {
+func ParseCshd(r io.Reader, fn FileFunc) error {
 	scanner := bufio.NewScanner(r)
 
 	seenHeader := false
@@ -85,7 +87,7 @@ func parseLine(line string, version int) (File, error) {
 	var (
 		mtime    time.Time
 		size     uint64
-		hashType HashType
+		hashType base.HashType
 		hash     []byte
 		err      error
 	)
@@ -170,18 +172,18 @@ func parseSize(field string) (uint64, error) {
 	return 0, nil
 }
 
-func parseHashType(field string) (HashType, error) {
+func parseHashType(field string) (base.HashType, error) {
 	if field != "" {
-		hashType, err := FromIdentifier(field)
+		hashType, err := base.FromIdentifier(field)
 		if err != nil {
-			return HashType{}, fmt.Errorf(
+			return base.HashType{}, fmt.Errorf(
 				"invalid hash type %q: %w", field, err)
 		}
 
 		return hashType, nil
 	}
 
-	return HashType{}, fmt.Errorf("empty hash type: %w", ErrMissingField)
+	return base.HashType{}, fmt.Errorf("empty hash type: %w", ErrMissingField)
 }
 
 func parseHash(field string) ([]byte, error) {

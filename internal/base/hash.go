@@ -1,4 +1,4 @@
-package importer
+package base
 
 import (
 	"crypto"
@@ -56,16 +56,16 @@ func (h HashType) ToIdentifier() (string, error) {
 }
 
 var identifierToHash = map[string]HashType{
-	"md4":      {crypto.MD4},
-	"md5":      {crypto.MD5},
-	"sha1":     {crypto.SHA1},
-	"sha256":   {crypto.SHA256},
-	"sha384":   {crypto.SHA384},
-	"sha3_224": {crypto.SHA3_224},
-	"sha3_256": {crypto.SHA3_256},
-	"sha3_384": {crypto.SHA3_384},
-	"sha3_512": {crypto.SHA3_512},
-	"sha512":   {crypto.SHA512},
+	"md4":      {Hash: crypto.MD4},
+	"md5":      {Hash: crypto.MD5},
+	"sha1":     {Hash: crypto.SHA1},
+	"sha256":   {Hash: crypto.SHA256},
+	"sha384":   {Hash: crypto.SHA384},
+	"sha3_224": {Hash: crypto.SHA3_224},
+	"sha3_256": {Hash: crypto.SHA3_256},
+	"sha3_384": {Hash: crypto.SHA3_384},
+	"sha3_512": {Hash: crypto.SHA3_512},
+	"sha512":   {Hash: crypto.SHA512},
 }
 
 func FromIdentifier(id string) (HashType, error) {
