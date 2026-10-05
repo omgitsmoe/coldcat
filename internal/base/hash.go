@@ -52,7 +52,7 @@ func (h HashType) ToIdentifier() (string, error) {
 		return "", fmt.Errorf("unsupported hash %v", h.Hash.String())
 	}
 
-	panic(fmt.Sprintf("unexpected crypto.Hash: %#v", h.Hash))
+	return "", fmt.Errorf("unsupported hash identifier: %d", h.Hash)
 }
 
 var identifierToHash = map[string]HashType{

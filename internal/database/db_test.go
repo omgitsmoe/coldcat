@@ -21,21 +21,24 @@ func TestForeignKeysAreEnforcedOnEveryConnection(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Take the single connection the pool has and release it each time, so
-	// a query here cannot be reusing the same one.
+	// Holding connections simultaneously forces the pool to open distinct ones.
+	var connections []*sql.Conn
 	for i := range 4 {
-		if err := db.Transaction(func(tx *Tx) error {
-			var fk int
-			if err := tx.QueryRow("PRAGMA foreign_keys").Scan(&fk); err != nil {
-				return err
-			}
-			if fk != 1 {
-				t.Fatalf("round %d: foreign_keys=%d, want 1", i, fk)
-			}
-			return nil
-		}); err != nil {
-			t.Fatalf("round %d: %v", i, err)
+		connection, err := db.db.Conn(t.Context())
+		if err != nil {
+			t.Fatal(err)
 		}
+		connections = append(connections, connection)
+		var fk int
+		if err := connection.QueryRowContext(t.Context(), "PRAGMA foreign_keys").Scan(&fk); err != nil {
+			t.Fatal(err)
+		}
+		if fk != 1 {
+			t.Fatalf("connection %d: foreign_keys=%d", i, fk)
+		}
+	}
+	for _, connection := range connections {
+		connection.Close()
 	}
 }
 
@@ -111,7 +114,7 @@ func TestForeignKeysRejectDanglingReferences(t *testing.T) {
 	// A snapshot for a disk that was never inserted.
 	err = db.Transaction(func(tx *Tx) error {
 		_, err := tx.Exec(
-			"INSERT INTO snapshot(disk_id, created_at) VALUES ($1, $2)",
+			"INSERT INTO snapshot(disk_id,state,captured_at,imported_at,capture_provenance) VALUES ($1,'importing',$2,$2,'explicit')",
 			int64(1), FormatTime(nowFixed()))
 		return err
 	})

@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"path/filepath"
+	"path"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/omgitsmoe/coldcat/internal/base"
+	"github.com/omgitsmoe/coldcat/internal/database"
 )
 
 var ErrMissingField = errors.New("missing or empty field")
@@ -21,14 +22,20 @@ func ParseCshd(r io.Reader, fn FileFunc) error {
 	scanner := bufio.NewScanner(r)
 
 	seenHeader := false
+	seenRecord := false
+	lineNumber := 0
 	var version int
 	for scanner.Scan() {
+		lineNumber++
 		line := scanner.Text()
-		if !seenHeader && strings.HasPrefix(line, "#") {
+		if strings.HasPrefix(line, "# version ") {
+			if seenHeader || seenRecord {
+				return fmt.Errorf("%w: line %d: misplaced or repeated version header", database.ErrValidation, lineNumber)
+			}
 			var err error
 			version, err = parseHeader(line)
 			if err != nil {
-				return err
+				return fmt.Errorf("%w: line %d: %w", database.ErrValidation, lineNumber, err)
 			}
 			seenHeader = true
 			continue
@@ -36,15 +43,19 @@ func ParseCshd(r io.Reader, fn FileFunc) error {
 			// skip comments
 			continue
 		}
+		seenRecord = true
 
 		file, err := parseLine(line, version)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: line %d: %w", database.ErrValidation, lineNumber, err)
 		}
 		err = fn(file)
 		if err != nil {
-			return err
+			return fmt.Errorf("line %d path %q: %w", lineNumber, file.path(), err)
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("read near line %d: %w", lineNumber+1, err)
 	}
 	return nil
 }
@@ -62,16 +73,22 @@ func parseHeader(line string) (version int, err error) {
 			"failed to parse header version number from '%s': %w",
 			version_str, err)
 	}
+	if err == nil && version != 0 && version != 1 {
+		err = fmt.Errorf("unsupported checksum format version %d", version)
+	}
 	return
 }
 
 func parseLine(line string, version int) (File, error) {
+	if version != 0 && version != 1 {
+		return File{}, fmt.Errorf("unsupported checksum format version %d", version)
+	}
 	numFields := 3
 	if version == 1 {
 		numFields = 4
 	}
 
-	allFields, path, found := strings.Cut(line, " ")
+	allFields, filePath, found := strings.Cut(line, " ")
 	if !found {
 		return File{}, fmt.Errorf(
 			"expected a space separating fields and path: %q", line)
@@ -120,17 +137,22 @@ func parseLine(line string, version int) (File, error) {
 		return File{}, fmt.Errorf("parse line %q: %w", line, err)
 	}
 
-	dirPath, name := filepath.Split(path)
+	dirPath, name := path.Split(filePath)
 
 	file := File{
 		Name:               name,
 		PathRelativeToRoot: dirPath,
 		MTime:              mtime,
 		SizeInBytes:        size,
+		SizeKnown:          version == 1 && fields[1] != "",
+		MTimeKnown:         fields[0] != "",
 		HashType:           hashType,
 		Hash:               hash,
 	}
 
+	if err := validateFile(file); err != nil {
+		return File{}, err
+	}
 	return file, nil
 }
 
@@ -140,6 +162,9 @@ func parseMTime(field string) (time.Time, error) {
 		if err != nil {
 			return time.Time{}, fmt.Errorf(
 				"invalid mtime %q: %w", field, err)
+		}
+		if math.IsNaN(f) || math.IsInf(f, 0) || f < -62135596800 || f >= 253402300800 {
+			return time.Time{}, fmt.Errorf("invalid mtime %q: outside supported range", field)
 		}
 		return mTimeF64ToTime(f), nil
 	}
@@ -164,6 +189,9 @@ func parseSize(field string) (uint64, error) {
 		if err != nil {
 			return 0, fmt.Errorf(
 				"invalid size %q: %w", field, err)
+		}
+		if size > math.MaxInt64 {
+			return 0, fmt.Errorf("invalid size %q: exceeds signed 64-bit storage", field)
 		}
 
 		return size, nil

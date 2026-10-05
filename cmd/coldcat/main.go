@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/omgitsmoe/coldcat/internal/app"
 	"github.com/omgitsmoe/coldcat/internal/base"
@@ -11,82 +14,81 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func main() {
+func withCatalog(ctx context.Context, cmd *cli.Command, fn func(*app.App) error) error {
+	db, err := database.OpenContext(ctx, cmd.String("db"))
+	if err != nil {
+		return fmt.Errorf("open catalog: %w", err)
+	}
+	defer db.Close()
+	return fn(app.New(db))
+}
+
+func newCommand() *cli.Command {
 	diskIDFlag := &cli.Int64Flag{Name: "disk-id", Usage: "disk ID"}
 	labelFlag := &cli.StringFlag{Name: "label", Usage: "disk label"}
-	command := &cli.Command{
-		Name:  "coldcat",
-		Usage: "manage checksum data for disks",
+	capturedFlag := &cli.StringFlag{Name: "captured-at", Usage: "inventory time (RFC3339)"}
+	sourceMTimeFlag := &cli.BoolFlag{Name: "use-source-mtime", Usage: "explicitly use the checksum file mtime as inventory time"}
+	return &cli.Command{
+		Name: "coldcat", Usage: "manage checksum data for disks",
+		Flags: []cli.Flag{&cli.StringFlag{Name: "db", Usage: "catalog database path", Value: "coldcat.sqlite"}},
 		Commands: []*cli.Command{
-			{
-				Name:  "create",
-				Usage: "create a disk",
-				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "label", Usage: "disk label", Required: true},
-					&cli.StringFlag{Name: "capacity", Usage: "disk capacity (for example, 2TB)", Required: true},
-					&cli.StringFlag{Name: "serial", Usage: "disk serial number"},
-					&cli.StringFlag{Name: "notes", Usage: "optional notes about the disk"},
-				},
-				Action: func(ctx context.Context, cmd *cli.Command) error {
-					capacity, err := parseCapacity(cmd.String("capacity"))
-					if err != nil {
-						return fmt.Errorf("invalid capacity %q: %w", cmd.String("capacity"), err)
-					}
-
-					db, err := database.Open("coldcat.sqlite")
-					if err != nil {
-						return fmt.Errorf("failed to open database: %w", err)
-					}
-					defer db.Close()
-
-					id, err := app.New(db).CreateDisk(
-						cmd.String("label"),
-						cmd.String("notes"),
-						cmd.String("serial"),
-						capacity,
-					)
+			{Name: "create", Usage: "create a disk", Flags: []cli.Flag{
+				&cli.StringFlag{Name: "label", Required: true}, &cli.StringFlag{Name: "capacity", Required: true},
+				&cli.StringFlag{Name: "serial"}, &cli.StringFlag{Name: "notes"},
+			}, Action: func(ctx context.Context, cmd *cli.Command) error {
+				capacity, err := parseCapacity(cmd.String("capacity"))
+				if err != nil {
+					return fmt.Errorf("invalid capacity: %w", err)
+				}
+				return withCatalog(ctx, cmd, func(a *app.App) error {
+					id, err := a.CreateDisk(ctx, cmd.String("label"), cmd.String("notes"), cmd.String("serial"), capacity)
 					if err != nil {
 						return err
 					}
-					fmt.Printf("created disk %d\n", id)
-					return nil
-				},
-			},
-			{
-				Name:      "import",
-				Usage:     "import checksums for a disk",
-				ArgsUsage: "<path-to-checksum-file>",
-				MutuallyExclusiveFlags: []cli.MutuallyExclusiveFlags{{
-					Flags: [][]cli.Flag{
-						{diskIDFlag},
-						{labelFlag},
-					},
-					Required: true,
-				}},
-				Arguments: []cli.Argument{
-					&cli.StringArg{Name: "checksum-file", Required: true},
-				},
+					_, err = fmt.Fprintf(cmd.Writer, "created disk %d\n", id)
+					return err
+				})
+			}},
+			{Name: "import", Usage: "import a complete disk inventory", ArgsUsage: "<file.cshd>",
+				MutuallyExclusiveFlags: []cli.MutuallyExclusiveFlags{
+					{Flags: [][]cli.Flag{{diskIDFlag}, {labelFlag}}, Required: true},
+					{Flags: [][]cli.Flag{{capturedFlag}, {sourceMTimeFlag}}, Required: true},
+				}, Arguments: []cli.Argument{&cli.StringArg{Name: "checksum-file", Required: true}},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					db, err := database.Open("coldcat.sqlite")
-					if err != nil {
-						return fmt.Errorf("failed to open database: %w", err)
+					req := app.ImportRequest{DiskID: base.DiskId(cmd.Int64("disk-id")), Path: cmd.StringArg("checksum-file"), UseSourceMTime: cmd.Bool("use-source-mtime")}
+					if cmd.IsSet("captured-at") {
+						captured, err := time.Parse(time.RFC3339Nano, cmd.String("captured-at"))
+						if err != nil {
+							return fmt.Errorf("invalid captured-at: %w", err)
+						}
+						req.CapturedAt = captured
+					} else if !req.UseSourceMTime {
+						return fmt.Errorf("use-source-mtime must be true")
 					}
-					defer db.Close()
-
-					application := app.New(db)
-					if cmd.IsSet("label") {
-						return application.ImportByLabel(cmd.String("label"), cmd.StringArg("checksum-file"))
-					}
-					return application.Import(
-						base.DiskId(cmd.Int64("disk-id")),
-						cmd.StringArg("checksum-file"),
-					)
+					return withCatalog(ctx, cmd, func(a *app.App) error {
+						var result base.Snapshot
+						var err error
+						if cmd.IsSet("label") {
+							result, err = a.ImportByLabel(ctx, cmd.String("label"), req)
+						} else {
+							result, err = a.Import(ctx, req)
+						}
+						if err != nil {
+							return err
+						}
+						_, err = fmt.Fprintf(cmd.Writer, "imported snapshot %d: complete, %d files, %d contents\n", result.Id, result.FileCount, result.ContentCount)
+						return err
+					})
 				},
 			},
 		},
 	}
+}
 
-	if err := command.Run(context.Background(), os.Args); err != nil {
+func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	if err := newCommand().Run(ctx, os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

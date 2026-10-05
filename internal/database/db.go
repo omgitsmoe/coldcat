@@ -1,14 +1,24 @@
 package database
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"sync"
 
-	_ "modernc.org/sqlite"
+	"github.com/gofrs/flock"
+	"modernc.org/sqlite"
+	"modernc.org/sqlite/lib"
 )
 
 type DB struct {
-	db *sql.DB
+	db          *sql.DB
+	lock        *flock.Flock
+	access      sync.RWMutex
+	closeOnce   sync.Once
+	closeErr    error
+	recoveryErr error
 }
 
 type Tx struct {
@@ -21,93 +31,83 @@ type Tx struct {
 // so it cannot be enabled once on the pool; the driver applies this to each
 // connection it hands out. Without it the FOREIGN KEY clauses below are
 // parsed and then never enforced.
-const dsnParams = "?_foreign_keys=on"
+const dsnParams = "?_pragma=foreign_keys(1)"
+
+var ErrBusy = errors.New("catalog is in use; stop other catalog commands or the server first")
+var ErrNotFound = errors.New("not found")
+var ErrValidation = errors.New("invalid request")
+var ErrConflict = errors.New("conflict")
 
 func Open(path string) (*DB, error) {
-	db, err := sql.Open("sqlite", path+dsnParams)
+	return OpenContext(context.Background(), path)
+}
+
+func OpenContext(ctx context.Context, path string) (*DB, error) {
+	canonical, lock, err := acquireCatalogLock(path)
 	if err != nil {
-		return &DB{}, fmt.Errorf("failed to open database at %v: %w", path, err)
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", databaseDSN(canonical))
+	if err != nil {
+		lock.Close()
+		return nil, fmt.Errorf("failed to open database at %v: %w", path, err)
 	}
 
 	// Open() doesn't necessarily open the connection right away
 	// force with Ping()
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(ctx); err != nil {
 		db.Close()
+		lock.Close()
 		return nil, err
 	}
 
-	result := &DB{db}
-	err = result.createTables()
+	result := &DB{db: db, lock: lock}
+	err = result.migrate(ctx)
 	if err != nil {
-		db.Close()
-		return &DB{}, fmt.Errorf("failed to initialize DB schema: %w", err)
+		result.Close()
+		return nil, fmt.Errorf("failed to initialize DB schema: %w", err)
+	}
+	if err := result.RecoverImports(ctx); err != nil {
+		result.Close()
+		return nil, fmt.Errorf("recover abandoned imports: %w", err)
 	}
 
 	return result, nil
 }
 
-func (db *DB) createTables() error {
-	_, err := db.db.Exec(`
-		CREATE TABLE IF NOT EXISTS disk (
-			id INTEGER PRIMARY KEY,
-			label TEXT NOT NULL UNIQUE,
-			notes TEXT,
-			serial TEXT,
-			capacity INTEGER NOT NULL
-		);
-
-		CREATE TABLE IF NOT EXISTS snapshot (
-			id INTEGER PRIMARY KEY,
-			disk_id INTEGER NOT NULL,
-			created_at TEXT NOT NULL,
-
-			FOREIGN KEY (disk_id) REFERENCES disk(id)
-		);
-
-		CREATE TABLE IF NOT EXISTS content (
-			id INTEGER PRIMARY KEY,
-			size INTEGER NOT NULL,
-			hash_type TEXT NOT NULL,
-			hash BLOB NOT NULL,
-
-			-- The hash alone is not the identity of a content: the same
-			-- bytes hashed with a different algorithm are a different
-			-- content. A UNIQUE on hash alone would collapse them.
-			UNIQUE (hash_type, hash)
-		);
-
-		CREATE TABLE IF NOT EXISTS observation (
-			id INTEGER PRIMARY KEY,
-			snapshot_id INTEGER NOT NULL,
-			content_id INTEGER NOT NULL,
-
-			path TEXT NOT NULL,
-			mtime TEXT NOT NULL,
-
-			FOREIGN KEY (snapshot_id) REFERENCES snapshot(id),
-			FOREIGN KEY (content_id) REFERENCES content(id)
-		);
-	`)
-	return err
+func (db *DB) Transaction(fn func(*Tx) error) error {
+	return db.TransactionContext(context.Background(), fn)
 }
 
-func (db *DB) Transaction(fn func(*Tx) error) error {
-	tx, err := db.db.Begin()
+func (db *DB) TransactionContext(ctx context.Context, fn func(*Tx) error) error {
+	tx, err := db.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 
 	wrapped := &Tx{tx}
 
 	if err := fn(wrapped); err != nil {
-		_ = tx.Rollback()
-		return err
+		return classifyError(err)
 	}
 
-	return tx.Commit()
+	return classifyError(tx.Commit())
 }
 
 func (db *DB) CreateDisk(label, notes, serial string, capacity int64) (int64, error) {
+	return db.CreateDiskContext(context.Background(), label, notes, serial, capacity)
+}
+
+func (db *DB) CreateDiskContext(ctx context.Context, label, notes, serial string, capacity int64) (int64, error) {
+	release, err := db.readAccess()
+	if err != nil {
+		return 0, err
+	}
+	defer release()
+	if label == "" || capacity < 0 {
+		return 0, fmt.Errorf("%w: label and nonnegative capacity required", ErrValidation)
+	}
 	var notesValue, serialValue *string
 	if notes != "" {
 		notesValue = &notes
@@ -117,8 +117,8 @@ func (db *DB) CreateDisk(label, notes, serial string, capacity int64) (int64, er
 	}
 
 	var id int64
-	err := db.Transaction(func(tx *Tx) error {
-		result, err := tx.Exec(
+	err = db.TransactionContext(ctx, func(tx *Tx) error {
+		result, err := tx.ExecContext(ctx,
 			"INSERT INTO disk(label, notes, serial, capacity) VALUES ($1, $2, $3, $4)",
 			label, notesValue, serialValue, capacity,
 		)
@@ -136,8 +136,20 @@ func (db *DB) CreateDisk(label, notes, serial string, capacity int64) (int64, er
 }
 
 func (db *DB) DiskIDByLabel(label string) (int64, error) {
+	return db.DiskIDByLabelContext(context.Background(), label)
+}
+
+func (db *DB) DiskIDByLabelContext(ctx context.Context, label string) (int64, error) {
+	release, err := db.readAccess()
+	if err != nil {
+		return 0, err
+	}
+	defer release()
 	var id int64
-	err := db.db.QueryRow("SELECT id FROM disk WHERE label = $1", label).Scan(&id)
+	err = db.db.QueryRowContext(ctx, "SELECT id FROM disk WHERE label = $1", label).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, fmt.Errorf("failed to find disk with label %q: %w", label, ErrNotFound)
+	}
 	if err != nil {
 		return 0, fmt.Errorf("failed to find disk with label %q: %w", label, err)
 	}
@@ -145,5 +157,45 @@ func (db *DB) DiskIDByLabel(label string) (int64, error) {
 }
 
 func (db *DB) Close() error {
-	return db.db.Close()
+	db.closeOnce.Do(func() { db.closeErr = errors.Join(db.db.Close(), db.lock.Close()) })
+	return db.closeErr
+}
+
+func (db *DB) AcquireImport(ctx context.Context) (func(), error) {
+	if !db.access.TryLock() {
+		return nil, ErrBusy
+	}
+	if err := db.RecoverImports(ctx); err != nil {
+		db.recoveryErr = err
+		db.access.Unlock()
+		return nil, err
+	}
+	db.recoveryErr = nil
+	return db.access.Unlock, nil
+}
+
+func (db *DB) readAccess() (func(), error) {
+	if !db.access.TryRLock() {
+		return nil, ErrBusy
+	}
+	if db.recoveryErr != nil {
+		db.access.RUnlock()
+		return nil, fmt.Errorf("catalog recovery required: %w", db.recoveryErr)
+	}
+	return db.access.RUnlock, nil
+}
+
+func (db *DB) ImportCleanupFailed(err error) { db.recoveryErr = err }
+
+func classifyError(err error) error {
+	var sqliteErr *sqlite.Error
+	if errors.As(err, &sqliteErr) {
+		switch sqliteErr.Code() {
+		case sqlite3.SQLITE_CONSTRAINT_UNIQUE, sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY:
+			return errors.Join(ErrConflict, err)
+		case sqlite3.SQLITE_CONSTRAINT_CHECK, sqlite3.SQLITE_CONSTRAINT_NOTNULL:
+			return errors.Join(ErrValidation, err)
+		}
+	}
+	return err
 }

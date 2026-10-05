@@ -1,12 +1,14 @@
 package importer
 
 import (
-	"crypto"
+	"context"
 	"database/sql"
-	"encoding/hex"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,506 +16,242 @@ import (
 	"github.com/omgitsmoe/coldcat/internal/database"
 )
 
-type contentRow struct {
-	Id       base.ContentId
-	Size     int64
-	HashType string
-	Hash     []byte
-}
-
-type observationRow struct {
-	Path      string
-	MTime     string
-	ContentId base.ContentId
-}
-
-// testDB opens a database in a temporary directory and returns it together
-// with the path, so a second connection can read back what was written. The
-// sqlite driver is already registered by the database package.
-func testDB(t *testing.T) (*database.DB, string) {
+func testDB(t *testing.T) (*database.DB, *sql.DB, base.DiskId) {
 	t.Helper()
-
-	path := filepath.Join(t.TempDir(), "coldcat.sqlite")
+	path := filepath.Join(t.TempDir(), "catalog.sqlite")
 	db, err := database.Open(path)
 	assertNoErr(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-
-	return db, path
+	t.Cleanup(func() { db.Close() })
+	raw, err := sql.Open("sqlite", path)
+	assertNoErr(t, err)
+	t.Cleanup(func() { raw.Close() })
+	id, err := db.CreateDisk("disk", "", "", 100)
+	assertNoErr(t, err)
+	return db, raw, base.DiskId(id)
 }
 
-// snapshotId inserts a disk and a snapshot to hang observations off, and
-// returns the snapshot id.
-func snapshotId(t *testing.T, db *database.DB) int64 {
+func request(disk base.DiskId) Request {
+	return Request{DiskID: disk, Path: "fixture.cshd", CapturedAt: time.Unix(1673815645, 0)}
+}
+
+func count(t *testing.T, raw *sql.DB, table string) int {
 	t.Helper()
+	var n int
+	assertNoErr(t, raw.QueryRow("SELECT COUNT(*) FROM "+table).Scan(&n))
+	return n
+}
 
-	diskId := addDisk(t, db)
-
-	var id int64
-	err := db.Transaction(func(tx *database.Tx) error {
-		result, err := tx.Exec(
-			"INSERT INTO snapshot(disk_id, created_at) VALUES ($1, $2)",
-			diskId, database.FormatTime(time.Unix(1673815645, 0)))
-		if err != nil {
-			return err
+func manyFiles(n int, known bool) string {
+	var input strings.Builder
+	if known {
+		input.WriteString("# version 1\n")
+	}
+	for i := range n {
+		if known {
+			fmt.Fprintf(&input, ",4,sha256,%08x tree/file-%d\n", i, i)
+		} else {
+			fmt.Fprintf(&input, ",sha256,%08x tree/file-%d\n", i, i)
 		}
-		id, err = result.LastInsertId()
-		return err
-	})
-	assertNoErr(t, err)
-
-	return id
-}
-
-func addDisk(t *testing.T, db *database.DB) base.DiskId {
-	t.Helper()
-
-	var id base.DiskId
-	err := db.Transaction(func(tx *database.Tx) error {
-		result, err := tx.Exec(
-			"INSERT INTO disk(label, capacity) VALUES ($1, $2)",
-			fmt.Sprintf("test disk %d", time.Now().UnixNano()), int64(1<<40))
-		if err != nil {
-			return err
-		}
-		rowId, err := result.LastInsertId()
-		id = base.DiskId(rowId)
-		return err
-	})
-	assertNoErr(t, err)
-
-	return id
-}
-
-func importBatches(t *testing.T, db *database.DB, id int64, batches ...[]File) {
-	t.Helper()
-
-	for _, batch := range batches {
-		err := db.Transaction(func(tx *database.Tx) error {
-			return importBatch(tx, id, batch)
-		})
-		assertNoErr(t, err)
 	}
+	return input.String()
 }
 
-func queryContents(t *testing.T, path string) []contentRow {
-	t.Helper()
-
-	db, err := sql.Open("sqlite", path)
+func TestImportPublishesOnlyAfterSuccess(t *testing.T) {
+	db, raw, disk := testDB(t)
+	result, err := ImportReader(t.Context(), db, request(disk), strings.NewReader(manyFiles(2005, true)))
 	assertNoErr(t, err)
-	defer db.Close()
-
-	rows, err := db.Query(
-		"SELECT id, size, hash_type, hash FROM content ORDER BY id")
-	assertNoErr(t, err)
-	defer rows.Close()
-
-	var contents []contentRow
-	for rows.Next() {
-		var c contentRow
-		assertNoErr(t, rows.Scan(&c.Id, &c.Size, &c.HashType, &c.Hash))
-		contents = append(contents, c)
+	assertEqual(t, result.FileCount, int64(2005))
+	assertEqual(t, result.ContentCount, int64(2005))
+	if result.ImportedAt.IsZero() {
+		t.Fatal("missing import time")
 	}
-	assertNoErr(t, rows.Err())
-
-	return contents
-}
-
-func queryObservations(t *testing.T, path string) []observationRow {
-	t.Helper()
-
-	db, err := sql.Open("sqlite", path)
+	got, err := db.LatestCompleteSnapshot(t.Context(), disk)
 	assertNoErr(t, err)
-	defer db.Close()
-
-	rows, err := db.Query(
-		"SELECT o.path, o.mtime, o.content_id FROM observation o ORDER BY o.id")
-	assertNoErr(t, err)
-	defer rows.Close()
-
-	var observations []observationRow
-	for rows.Next() {
-		var o observationRow
-		assertNoErr(t, rows.Scan(&o.Path, &o.MTime, &o.ContentId))
-		observations = append(observations, o)
-	}
-	assertNoErr(t, rows.Err())
-
-	return observations
+	assertEqual(t, got.Id, result.Id)
+	assertEqual(t, count(t, raw, "pending_size"), 0)
+	assertEqual(t, count(t, raw, "import_content"), 0)
+	var unknown int
+	assertNoErr(t, raw.QueryRow("SELECT COUNT(*) FROM content WHERE size IS NULL").Scan(&unknown))
+	assertEqual(t, unknown, 0)
 }
 
-func mustDecodeHex(t *testing.T, s string) []byte {
-	t.Helper()
-
-	b, err := hex.DecodeString(s)
-	assertNoErr(t, err)
-	return b
-}
-
-func sha256File(t *testing.T, path string, size uint64, hashHex string, mtime time.Time) File {
-	t.Helper()
-
-	return File{
-		Name:               filepath.Base(path),
-		PathRelativeToRoot: path[:len(path)-len(filepath.Base(path))],
-		MTime:              mtime,
-		SizeInBytes:        size,
-		HashType:           base.HashType{Hash: crypto.SHA256},
-		Hash:               mustDecodeHex(t, hashHex),
+func TestImportFailuresCleanEveryCommittedBatch(t *testing.T) {
+	tests := map[string]string{
+		"late parse failure":              manyFiles(1001, true) + "broken\n",
+		"duplicate across batches":        manyFiles(1001, true) + ",4,sha256,00000000 tree/file-0\n",
+		"conflicting size across batches": manyFiles(1001, true) + ",9,sha256,00000000 other\n",
+		"conflicting size within batch":   "# version 1\n,4,sha256,ab a\n,5,sha256,ab b\n",
+		"unsupported version":             "# version 2\n",
+		"absolute path":                   ",sha256,ab /absolute\n",
+		"parent traversal":                ",sha256,ab foo/../bar\n",
+		"overflow":                        "# version 1\n,9223372036854775808,sha256,ab a\n",
 	}
-}
-
-func TestImportBatch(t *testing.T) {
-	mtime := time.Unix(1673815645, 797977209)
-
-	tests := []struct {
-		name string
-		// batches are imported in order, each in its own transaction.
-		batches [][]File
-
-		wantContents []contentRow
-		// wantContentIds, when set, are compared against the content id
-		// of the observation at the same index.
-		wantObservations []observationRow
-	}{
-		{
-			name:    "empty batch is a no-op",
-			batches: [][]File{{}},
-		},
-		{
-			name: "single file",
-			batches: [][]File{{
-				sha256File(t, "foo/bar.txt", 1337, "deadbeef", mtime),
-			}},
-			wantContents: []contentRow{
-				{Id: 1, Size: 1337, HashType: "sha256", Hash: mustDecodeHex(t, "deadbeef")},
-			},
-			wantObservations: []observationRow{
-				{
-					Path:      "foo/bar.txt",
-					MTime:     "2023-01-15T20:47:25.797977209Z",
-					ContentId: 1,
-				},
-			},
-		},
-		{
-			name: "path is rejoined from directory and name",
-			batches: [][]File{{
-				sha256File(t, "bar foo/bar/baz xer/file.txt", 0, "deadbeef", time.Time{}),
-			}},
-			wantContents: []contentRow{
-				{Id: 1, Size: 0, HashType: "sha256", Hash: mustDecodeHex(t, "deadbeef")},
-			},
-			wantObservations: []observationRow{
-				{Path: "bar foo/bar/baz xer/file.txt", MTime: "0001-01-01T00:00:00Z", ContentId: 1},
-			},
-		},
-		{
-			name: "distinct contents get distinct rows and observations",
-			batches: [][]File{{
-				sha256File(t, "foo/a", 1, "deadbeef", mtime),
-				sha256File(t, "foo/b", 2, "beefdead", mtime),
-			}},
-			wantContents: []contentRow{
-				{Id: 1, Size: 1, HashType: "sha256", Hash: mustDecodeHex(t, "deadbeef")},
-				{Id: 2, Size: 2, HashType: "sha256", Hash: mustDecodeHex(t, "beefdead")},
-			},
-			wantObservations: []observationRow{
-				{
-					Path:      "foo/a",
-					MTime:     "2023-01-15T20:47:25.797977209Z",
-					ContentId: 1,
-				},
-				{
-					Path:      "foo/b",
-					MTime:     "2023-01-15T20:47:25.797977209Z",
-					ContentId: 2,
-				},
-			},
-		},
-		{
-			// A repeated hash in one batch must not conflict with the
-			// batch's own multi-row insert, and both files are still
-			// observed.
-			name: "duplicate hash within a batch",
-			batches: [][]File{{
-				sha256File(t, "foo/a", 1, "deadbeef", mtime),
-				sha256File(t, "foo/b", 2, "deadbeef", mtime),
-			}},
-			wantContents: []contentRow{
-				{Id: 1, Size: 1, HashType: "sha256", Hash: mustDecodeHex(t, "deadbeef")},
-			},
-			wantObservations: []observationRow{
-				{
-					Path:      "foo/a",
-					MTime:     "2023-01-15T20:47:25.797977209Z",
-					ContentId: 1,
-				},
-				{
-					Path:      "foo/b",
-					MTime:     "2023-01-15T20:47:25.797977209Z",
-					ContentId: 1,
-				},
-			},
-		},
-		{
-			// Deduplication is per content, not per file: a file
-			// repeated several times still gets one observation per
-			// occurrence.
-			name: "a file repeated within a batch",
-			batches: [][]File{{
-				sha256File(t, "foo/a", 1, "deadbeef", mtime),
-				sha256File(t, "foo/a", 1, "deadbeef", mtime),
-				sha256File(t, "foo/a", 1, "deadbeef", mtime),
-			}},
-			wantContents: []contentRow{
-				{Id: 1, Size: 1, HashType: "sha256", Hash: mustDecodeHex(t, "deadbeef")},
-			},
-			wantObservations: []observationRow{
-				{
-					Path:      "foo/a",
-					MTime:     "2023-01-15T20:47:25.797977209Z",
-					ContentId: 1,
-				},
-				{
-					Path:      "foo/a",
-					MTime:     "2023-01-15T20:47:25.797977209Z",
-					ContentId: 1,
-				},
-				{
-					Path:      "foo/a",
-					MTime:     "2023-01-15T20:47:25.797977209Z",
-					ContentId: 1,
-				},
-			},
-		},
-		{
-			// The same content in a later batch must reuse the row
-			// created by the earlier batch.
-			name: "content is shared across batches",
-			batches: [][]File{
-				{sha256File(t, "foo/a", 1, "deadbeef", mtime)},
-				{
-					sha256File(t, "foo/b", 2, "beefdead", mtime),
-					sha256File(t, "foo/c", 1, "deadbeef", mtime),
-				},
-			},
-			wantContents: []contentRow{
-				{Id: 1, Size: 1, HashType: "sha256", Hash: mustDecodeHex(t, "deadbeef")},
-				{Id: 2, Size: 2, HashType: "sha256", Hash: mustDecodeHex(t, "beefdead")},
-			},
-			wantObservations: []observationRow{
-				{
-					Path:      "foo/a",
-					MTime:     "2023-01-15T20:47:25.797977209Z",
-					ContentId: 1,
-				},
-				{
-					Path:      "foo/b",
-					MTime:     "2023-01-15T20:47:25.797977209Z",
-					ContentId: 2,
-				},
-				{
-					Path:      "foo/c",
-					MTime:     "2023-01-15T20:47:25.797977209Z",
-					ContentId: 1,
-				},
-			},
-		},
-		{
-			// A v0 line reports no size, so the content is stored with
-			// size 0 until a v1 import fills it in.
-			name: "a known size is filled in by a later import",
-			batches: [][]File{
-				{sha256File(t, "foo/a", 0, "deadbeef", mtime)},
-				{sha256File(t, "foo/a", 4096, "deadbeef", mtime)},
-			},
-			wantContents: []contentRow{
-				{Id: 1, Size: 4096, HashType: "sha256", Hash: mustDecodeHex(t, "deadbeef")},
-			},
-			wantObservations: []observationRow{
-				{
-					Path:      "foo/a",
-					MTime:     "2023-01-15T20:47:25.797977209Z",
-					ContentId: 1,
-				},
-				{
-					Path:      "foo/a",
-					MTime:     "2023-01-15T20:47:25.797977209Z",
-					ContentId: 1,
-				},
-			},
-		},
-		{
-			name: "a size-less import does not blank out a known size",
-			batches: [][]File{
-				{sha256File(t, "foo/a", 4096, "deadbeef", mtime)},
-				{sha256File(t, "foo/a", 0, "deadbeef", mtime)},
-			},
-			wantContents: []contentRow{
-				{Id: 1, Size: 4096, HashType: "sha256", Hash: mustDecodeHex(t, "deadbeef")},
-			},
-			wantObservations: []observationRow{
-				{
-					Path:      "foo/a",
-					MTime:     "2023-01-15T20:47:25.797977209Z",
-					ContentId: 1,
-				},
-				{
-					Path:      "foo/a",
-					MTime:     "2023-01-15T20:47:25.797977209Z",
-					ContentId: 1,
-				},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			db, path := testDB(t)
-			id := snapshotId(t, db)
-
-			importBatches(t, db, id, tt.batches...)
-
-			contents := queryContents(t, path)
-			if len(contents) != len(tt.wantContents) {
-				t.Fatalf("got %d contents, want %d", len(contents), len(tt.wantContents))
-			}
-			for i, want := range tt.wantContents {
-				got := contents[i]
-				assertEqual(t, got.Id, want.Id)
-				assertEqual(t, got.Size, want.Size)
-				assertEqual(t, got.HashType, want.HashType)
-				assertSliceEqual(t, got.Hash, want.Hash)
-			}
-
-			observations := queryObservations(t, path)
-			if len(observations) != len(tt.wantObservations) {
-				t.Fatalf("got %d observations, want %d",
-					len(observations), len(tt.wantObservations))
-			}
-			for i, want := range tt.wantObservations {
-				got := observations[i]
-				assertEqual(t, got.Path, want.Path)
-				assertEqual(t, got.MTime, want.MTime)
-				assertEqual(t, got.ContentId, want.ContentId)
+	for name, input := range tests {
+		t.Run(name, func(t *testing.T) {
+			db, raw, disk := testDB(t)
+			_, err := ImportReader(t.Context(), db, request(disk), strings.NewReader(input))
+			assertErr(t, err)
+			for _, table := range []string{"snapshot", "observation", "content", "pending_size", "import_content"} {
+				assertEqual(t, count(t, raw, table), 0)
 			}
 		})
 	}
 }
 
-func TestImportBatchIdentifiesContentByHashTypeAndHash(t *testing.T) {
-	hash := mustDecodeHex(t, "deadbeef")
-	mtime := time.Unix(1673815645, 797977209)
+type errorReader struct{ err error }
 
-	// The same bytes under two hash types are two contents, so the second
-	// file must not be folded into the first one's row.
-	sha256 := File{
-		Name: "a", MTime: mtime, SizeInBytes: 10,
-		HashType: base.HashType{Hash: crypto.SHA256}, Hash: hash,
-	}
-	md5 := File{
-		Name: "b", MTime: mtime, SizeInBytes: 20,
-		HashType: base.HashType{Hash: crypto.MD5}, Hash: hash,
-	}
+func (r errorReader) Read([]byte) (int, error) { return 0, r.err }
 
-	tests := []struct {
-		name  string
-		files []File
-	}{
-		{name: "distinct hash types", files: []File{sha256, md5}},
-		{name: "same hash type", files: []File{sha256, sha256}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			db, path := testDB(t)
-			id := snapshotId(t, db)
-			importBatches(t, db, id, tt.files)
-
-			contents := queryContents(t, path)
-			observations := queryObservations(t, path)
-			assertEqual(t, len(observations), len(tt.files))
-
-			// every file must resolve to a content row, and distinct
-			// hash types must not share one
-			byType := map[string]base.ContentId{}
-			for _, c := range contents {
-				if other, dup := byType[c.HashType]; dup {
-					t.Fatalf("hash type %q reused content id %d and %d",
-						c.HashType, other, c.Id)
+func TestReaderErrorAndCancellationCleanCommittedBatches(t *testing.T) {
+	for _, cancelled := range []bool{false, true} {
+		t.Run(fmt.Sprint(cancelled), func(t *testing.T) {
+			db, raw, disk := testDB(t)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			failure := errors.New("reader failed")
+			var reader io.Reader = io.MultiReader(strings.NewReader(manyFiles(1001, true)), errorReader{failure})
+			if cancelled {
+				reader = io.MultiReader(strings.NewReader(manyFiles(1001, true)), cancelReader{cancel: cancel})
+			}
+			_, err := ImportReader(ctx, db, request(disk), reader)
+			if cancelled {
+				if !errors.Is(err, context.Canceled) {
+					t.Fatal(err)
 				}
-				byType[c.HashType] = c.Id
+			} else if !errors.Is(err, failure) {
+				t.Fatal(err)
 			}
-
-			for i, o := range observations {
-				want := byType[hashTypeOf(t, tt.files[i])]
-				assertEqual(t, o.ContentId, want)
+			for _, table := range []string{"snapshot", "observation", "content", "pending_size", "import_content"} {
+				assertEqual(t, count(t, raw, table), 0)
 			}
 		})
 	}
 }
 
-func hashTypeOf(t *testing.T, f File) string {
-	t.Helper()
+type cancelReader struct{ cancel context.CancelFunc }
 
-	id, err := f.HashType.ToIdentifier()
+func (r cancelReader) Read([]byte) (int, error) { r.cancel(); return 0, context.Canceled }
+
+func TestFailedEnrichmentPreservesCompletedContent(t *testing.T) {
+	db, raw, disk := testDB(t)
+	first, err := ImportReader(t.Context(), db, request(disk), strings.NewReader(",sha256,00000000 original\n"))
 	assertNoErr(t, err)
-	return id
-}
-
-func TestImportChecksExtension(t *testing.T) {
-	// filepath.Ext keeps the leading dot, so the lookup must not: without
-	// trimming it, Import rejects every path it supports.
-	write := func(name string) string {
-		path := filepath.Join(t.TempDir(), name)
-		assertNoErr(t, os.WriteFile(path, []byte(",sha256,deadbeef foo/bar\n"), 0o644))
-		return path
-	}
-
-	db, _ := testDB(t)
-	diskId := addDisk(t, db)
-	assertNoErr(t, Import(db, diskId, write("checksums.cshd")))
-
-	assertErr(t, Import(db, diskId, write("checksums.txt")))
-	assertErr(t, Import(db, diskId, write("checksums")))
-}
-
-func TestImportRejectsUnknownDisk(t *testing.T) {
-	// Foreign keys are enforced, so importing for a disk that does not
-	// exist must fail instead of writing a dangling snapshot.
-	db, _ := testDB(t)
-
-	path := filepath.Join(t.TempDir(), "checksums.cshd")
-	assertNoErr(t, os.WriteFile(
-		path, []byte(",sha256,deadbeef foo/bar\n"), 0o644))
-
-	assertErr(t, Import(db, 404, path))
-}
-
-func TestImportBatchRollsBackOnError(t *testing.T) {
-	db, path := testDB(t)
-	id := snapshotId(t, db)
-
-	unsupported := File{
-		Name:               "foo",
-		PathRelativeToRoot: "",
-		HashType:           base.HashType{Hash: crypto.SHA224},
-		Hash:               mustDecodeHex(t, "deadbeef"),
-	}
-
-	err := db.Transaction(func(tx *database.Tx) error {
-		return importBatch(tx, id, []File{
-			sha256File(t, "ok", 1, "cafebabe", time.Unix(1, 0)),
-			unsupported,
-		})
-	})
+	_, err = ImportReader(t.Context(), db, request(disk), strings.NewReader(manyFiles(1001, true)+"broken\n"))
 	assertErr(t, err)
-
-	// The whole batch, including the file that would have imported fine, is
-	// rolled back.
-	if contents := queryContents(t, path); len(contents) != 0 {
-		t.Fatalf("got %d contents, want 0", len(contents))
+	assertEqual(t, count(t, raw, "snapshot"), 1)
+	assertEqual(t, count(t, raw, "content"), 1)
+	var size sql.NullInt64
+	assertNoErr(t, raw.QueryRow("SELECT size FROM content").Scan(&size))
+	if size.Valid {
+		t.Fatal("failed import enriched shared content")
 	}
-	if observations := queryObservations(t, path); len(observations) != 0 {
-		t.Fatalf("got %d observations, want 0", len(observations))
+	_, err = db.GetCompleteSnapshot(t.Context(), first.Id)
+	assertNoErr(t, err)
+	_, err = ImportReader(t.Context(), db, request(disk), strings.NewReader("# version 1\n,0,sha256,00000000 empty\n"))
+	assertNoErr(t, err)
+	assertNoErr(t, raw.QueryRow("SELECT size FROM content").Scan(&size))
+	if !size.Valid || size.Int64 != 0 {
+		t.Fatalf("empty file: %v", size)
+	}
+	_, err = ImportReader(t.Context(), db, request(disk), strings.NewReader("# version 1\n,1,sha256,00000000 conflict\n"))
+	if !errors.Is(err, database.ErrConflict) {
+		t.Fatal(err)
+	}
+	assertNoErr(t, raw.QueryRow("SELECT size FROM content").Scan(&size))
+	if !size.Valid || size.Int64 != 0 {
+		t.Fatal("known zero changed")
+	}
+}
+
+func TestCleanupFailurePoisonsQueriesUntilRecovery(t *testing.T) {
+	db, raw, disk := testDB(t)
+	assertNoErr(t, execSQL(raw, `CREATE TRIGGER fail_cleanup BEFORE DELETE ON snapshot BEGIN SELECT RAISE(ABORT,'cleanup blocked'); END;`))
+	_, err := ImportReader(t.Context(), db, request(disk), strings.NewReader(manyFiles(1001, true)+"broken\n"))
+	if err == nil || !strings.Contains(err.Error(), "cleanup blocked") || !strings.Contains(err.Error(), "line 1003") {
+		t.Fatal(err)
+	}
+	if _, err := db.LatestCompleteSnapshot(t.Context(), disk); err == nil || errors.Is(err, database.ErrNotFound) {
+		t.Fatalf("query not blocked: %v", err)
+	}
+	assertEqual(t, count(t, raw, "snapshot"), 1)
+	assertNoErr(t, execSQL(raw, "DROP TRIGGER fail_cleanup"))
+	_, err = ImportReader(t.Context(), db, request(disk), strings.NewReader(",sha256,ab valid\n"))
+	assertNoErr(t, err)
+	assertEqual(t, count(t, raw, "snapshot"), 1)
+	assertEqual(t, count(t, raw, "content"), 1)
+}
+
+func execSQL(raw *sql.DB, statement string) error { _, err := raw.Exec(statement); return err }
+
+type probeReader struct {
+	probe  func()
+	reader io.Reader
+	done   bool
+}
+
+func (r *probeReader) Read(p []byte) (int, error) {
+	if !r.done {
+		r.done = true
+		r.probe()
+	}
+	return r.reader.Read(p)
+}
+
+func TestImportBlocksCatalogQueriesAndSecondImport(t *testing.T) {
+	db, _, disk := testDB(t)
+	reader := &probeReader{reader: strings.NewReader(",sha256,ab a\n"), probe: func() {
+		if _, err := db.LatestCompleteSnapshot(t.Context(), disk); !errors.Is(err, database.ErrBusy) {
+			t.Fatalf("query during import: %v", err)
+		}
+		if _, err := db.CreateDisk("other", "", "", 1); !errors.Is(err, database.ErrBusy) {
+			t.Fatalf("disk creation during import: %v", err)
+		}
+		if _, err := ImportReader(t.Context(), db, request(disk), strings.NewReader("")); !errors.Is(err, database.ErrBusy) {
+			t.Fatalf("second import: %v", err)
+		}
+	}}
+	_, err := ImportReader(t.Context(), db, request(disk), reader)
+	assertNoErr(t, err)
+}
+
+func TestImportMetadataAndHashIdentity(t *testing.T) {
+	db, raw, disk := testDB(t)
+	_, err := ImportReader(t.Context(), db, request(disk), strings.NewReader("# version 1\n,,sha256,ab unknown\n,0,sha256,cd empty\n1,4,md5,ab known\n,4,md5,ab copy\n"))
+	assertNoErr(t, err)
+	assertEqual(t, count(t, raw, "content"), 3)
+	assertEqual(t, count(t, raw, "observation"), 4)
+	var size sql.NullInt64
+	var mtime sql.NullString
+	assertNoErr(t, raw.QueryRow("SELECT size,mtime FROM observation o JOIN content c ON c.id=o.content_id WHERE path='unknown'").Scan(&size, &mtime))
+	if size.Valid || mtime.Valid {
+		t.Fatal("missing metadata was not null")
+	}
+	assertNoErr(t, raw.QueryRow("SELECT size,mtime FROM observation o JOIN content c ON c.id=o.content_id WHERE path='empty'").Scan(&size, &mtime))
+	if !size.Valid || size.Int64 != 0 || mtime.Valid {
+		t.Fatal("empty file metadata incorrect")
+	}
+}
+
+func TestImportPathAndCaptureValidation(t *testing.T) {
+	db, _, disk := testDB(t)
+	path := filepath.Join(t.TempDir(), "checksums.cshd")
+	assertNoErr(t, os.WriteFile(path, []byte(",sha256,ab foo/bar\n"), 0o600))
+	_, err := Import(t.Context(), db, Request{DiskID: disk, Path: path})
+	if !errors.Is(err, database.ErrValidation) {
+		t.Fatal(err)
+	}
+	result, err := Import(t.Context(), db, Request{DiskID: disk, Path: path, UseSourceMTime: true})
+	assertNoErr(t, err)
+	assertEqual(t, result.CaptureProvenance, "source_mtime")
+	st, err := os.Stat(path)
+	assertNoErr(t, err)
+	if !result.CapturedAt.Equal(st.ModTime()) {
+		t.Fatal("capture time differs from source mtime")
+	}
+	_, err = Import(t.Context(), db, Request{DiskID: disk, Path: path + ".txt", CapturedAt: time.Now()})
+	assertErr(t, err)
+	_, err = ImportReader(t.Context(), db, request(404), strings.NewReader(""))
+	if !errors.Is(err, database.ErrNotFound) {
+		t.Fatal(err)
 	}
 }

@@ -3,6 +3,7 @@ module github.com/omgitsmoe/coldcat
 go 1.27.1
 
 require (
+	github.com/gofrs/flock v0.12.1
 	github.com/urfave/cli/v3 v3.14.0
 	modernc.org/sqlite v1.60.1
 )
