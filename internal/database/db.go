@@ -107,6 +107,43 @@ func (db *DB) Transaction(fn func(*Tx) error) error {
 	return tx.Commit()
 }
 
+func (db *DB) CreateDisk(label, notes, serial string, capacity int64) (int64, error) {
+	var notesValue, serialValue *string
+	if notes != "" {
+		notesValue = &notes
+	}
+	if serial != "" {
+		serialValue = &serial
+	}
+
+	var id int64
+	err := db.Transaction(func(tx *Tx) error {
+		result, err := tx.Exec(
+			"INSERT INTO disk(label, notes, serial, capacity) VALUES ($1, $2, $3, $4)",
+			label, notesValue, serialValue, capacity,
+		)
+		if err != nil {
+			return err
+		}
+
+		id, err = result.LastInsertId()
+		return err
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to create disk: %w", err)
+	}
+	return id, nil
+}
+
+func (db *DB) DiskIDByLabel(label string) (int64, error) {
+	var id int64
+	err := db.db.QueryRow("SELECT id FROM disk WHERE label = $1", label).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("failed to find disk with label %q: %w", label, err)
+	}
+	return id, nil
+}
+
 func (db *DB) Close() error {
 	return db.db.Close()
 }

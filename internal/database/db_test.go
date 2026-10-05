@@ -1,6 +1,7 @@
 package database
 
 import (
+	"database/sql"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -35,6 +36,68 @@ func TestForeignKeysAreEnforcedOnEveryConnection(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("round %d: %v", i, err)
 		}
+	}
+}
+
+func TestCreateDisk(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "coldcat.sqlite"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+
+	id, err := db.CreateDisk("archive", "important files", "ABC123", 2_000_000_000_000)
+	if err != nil {
+		t.Fatalf("create disk: %v", err)
+	}
+
+	var label string
+	var notes, serial sql.NullString
+	var capacity int64
+	if err := db.db.QueryRow(
+		"SELECT label, notes, serial, capacity FROM disk WHERE id = $1", id,
+	).Scan(&label, &notes, &serial, &capacity); err != nil {
+		t.Fatalf("query created disk: %v", err)
+	}
+	if label != "archive" || !notes.Valid || notes.String != "important files" || !serial.Valid || serial.String != "ABC123" || capacity != 2_000_000_000_000 {
+		t.Fatalf("unexpected disk row: label=%q notes=%+v serial=%+v capacity=%d", label, notes, serial, capacity)
+	}
+
+	if _, err := db.CreateDisk("empty optional fields", "", "", 1); err != nil {
+		t.Fatalf("create disk without optional fields: %v", err)
+	}
+	if err := db.db.QueryRow(
+		"SELECT notes, serial FROM disk WHERE label = $1", "empty optional fields",
+	).Scan(&notes, &serial); err != nil {
+		t.Fatalf("query disk without optional fields: %v", err)
+	}
+	if notes.Valid || serial.Valid {
+		t.Fatalf("expected optional fields to be NULL, got notes=%+v serial=%+v", notes, serial)
+	}
+}
+
+func TestDiskIDByLabel(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "coldcat.sqlite"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+
+	wantID, err := db.CreateDisk("archive", "", "", 1)
+	if err != nil {
+		t.Fatalf("create disk: %v", err)
+	}
+
+	gotID, err := db.DiskIDByLabel("archive")
+	if err != nil {
+		t.Fatalf("find disk by label: %v", err)
+	}
+	if gotID != wantID {
+		t.Fatalf("disk ID = %d, want %d", gotID, wantID)
+	}
+
+	if _, err := db.DiskIDByLabel("missing"); err == nil || !strings.Contains(err.Error(), `label "missing"`) {
+		t.Fatalf("lookup for missing label returned %v; want a descriptive error", err)
 	}
 }
 

@@ -22,3 +22,19 @@ func (a *App) Import(disk base.DiskId, path string) error {
 	}
 	return nil
 }
+
+func (a *App) ImportByLabel(label, path string) error {
+	diskID, err := a.db.DiskIDByLabel(label)
+	if err != nil {
+		return err
+	}
+	return a.Import(base.DiskId(diskID), path)
+}
+
+func (a *App) CreateDisk(label, notes, serial string, capacity int64) (base.DiskId, error) {
+	id, err := a.db.CreateDisk(label, notes, serial, capacity)
+	if err != nil {
+		return 0, err
+	}
+	return base.DiskId(id), nil
+}
