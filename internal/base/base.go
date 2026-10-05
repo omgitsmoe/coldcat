@@ -69,3 +69,22 @@ type ObservationSummary struct {
 	OtherLocationCount int64
 	OtherDiskCount     int64
 }
+
+type CatalogState struct {
+	Revision SnapshotId
+}
+
+type ContentObservation struct {
+	Observation FileObservation
+	Snapshot    Snapshot
+	Disk        Disk
+	Size        *int64
+	IsCurrent   bool
+}
+
+type ContentObservationPage struct {
+	Scope      Scope
+	Catalog    CatalogState
+	Items      []ContentObservation
+	NextCursor string
+}

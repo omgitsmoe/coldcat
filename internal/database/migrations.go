@@ -41,6 +41,7 @@ CREATE TABLE import_content (
 );
 CREATE INDEX snapshot_current ON snapshot(disk_id,captured_at DESC,id DESC) WHERE state='complete';
 CREATE INDEX observation_content_snapshot ON observation(content_id,snapshot_id);
+CREATE INDEX observation_content_id ON observation(content_id,id);
 CREATE INDEX observation_path_snapshot ON observation(path,snapshot_id);
 CREATE TRIGGER immutable_snapshot_update BEFORE UPDATE ON snapshot WHEN OLD.state='complete'
  BEGIN SELECT RAISE(ABORT,'complete snapshot is immutable'); END;

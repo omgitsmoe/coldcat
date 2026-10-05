@@ -32,6 +32,9 @@ func newCommand() *cli.Command {
 		Name: "coldcat", Usage: "manage checksum data for disks",
 		Flags: []cli.Flag{&cli.StringFlag{Name: "db", Usage: "catalog database path", Value: "coldcat.sqlite"}},
 		Commands: []*cli.Command{
+			{Name: "serve", Usage: "serve the catalog HTTP API; stop before importing", Flags: []cli.Flag{
+				&cli.StringFlag{Name: "listen", Usage: "HTTP listen address", Value: "127.0.0.1:8080"},
+			}, Action: serveCommand},
 			{Name: "create", Usage: "create a disk", Flags: []cli.Flag{
 				&cli.StringFlag{Name: "label", Required: true}, &cli.StringFlag{Name: "capacity", Required: true},
 				&cli.StringFlag{Name: "serial"}, &cli.StringFlag{Name: "notes"},

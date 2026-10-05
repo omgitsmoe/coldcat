@@ -89,6 +89,7 @@ coldcat --db /path/to/catalog.sqlite import --label archive \
   --captured-at 2023-01-01T00:00:00Z inventory.cshd
 coldcat --db /path/to/catalog.sqlite import --disk-id 1 \
   --use-source-mtime inventory.cshd
+coldcat --db /path/to/catalog.sqlite serve --listen 127.0.0.1:8080
 ```
 
 `--db` defaults to `coldcat.sqlite`. Import requires exactly one disk selector and
@@ -103,6 +104,47 @@ characters, independently of the host OS. Absolute paths, drive-qualified paths,
 empty/dot/parent segments, NULs, unsupported declared versions, invalid hex, numeric
 overflow, and conflicting known sizes are rejected. Scanner/read failures propagate.
 
+## HTTP content workflow
+
+The server opens through the same lock/migration/recovery path as CLI commands and
+holds ownership until requests have drained and the database closes. Stop the server
+before importing. `serve` defaults to `127.0.0.1:8080`; startup errors fail the command,
+and SIGINT/SIGTERM request graceful shutdown with a ten-second drain deadline.
+
+`internal/httpapi` implements readiness, exact hash lookup, content detail, content
+observation pages, observation detail, and complete snapshot detail. See
+[openapi.json](openapi.json) for the implemented wire contract. IDs, byte counts and
+aggregate counts are decimal strings; timestamps are UTC RFC3339 with optional
+fractional seconds, and unknown sizes/mtimes are null. CORS is not enabled.
+
+```sh
+curl 'http://127.0.0.1:8080/api/v1/contents/lookup?hash_type=sha256&hash=ab'
+curl 'http://127.0.0.1:8080/api/v1/contents/1/observations?scope=current&limit=50'
+```
+
+Observation pages sort by immutable observation ID ascending and use indexed
+keyset pagination. The default limit is 50 and the maximum is 200. Current lists
+contain locations from the latest complete inventory of each disk. History lists
+contain every complete observation, including repeated disk/path observations;
+this can exceed the historical distinct-location count. `is_current` indicates
+whether the observation belongs to its disk's selected current inventory.
+
+The inventory revision is `MAX(id)` over complete snapshots, or zero when none
+exist. Completed snapshots cannot be deleted, so every successful publication
+advances it, including empty or older-dated inventories. Cursors bind the revision,
+content ID, scope, page size, ordering version and last observation ID. Keep scope
+and limit unchanged when following `next_cursor`. Changed inventory revisions
+return `409 stale_cursor`; restart pagination. Restarts, empty-disk creation and
+failed-import cleanup leave cursors valid. Cursors are scoped to the issuing
+catalog; detecting reuse against another/recreated database is not implemented.
+
+The revision is derived rather than stored: no catalog identity table or mutation
+counter is needed for these read-only endpoints. Cursor revision validation and
+page retrieval hold the same application read gate, preventing an in-session
+import from publishing between them. Hash lookup uses the importer's supported
+algorithms and accepts its current hash lengths; algorithm-specific length
+validation remains follow-on work.
+
 ## Verification and follow-on work
 
 Run `go test ./...`, `go test -race ./...`, and `go vet ./...` with the configured
@@ -111,7 +153,18 @@ cross-process locking, recovery failure, multi-batch import cleanup, metadata
 staging, timestamp ordering, and current/history replica semantics. Focused
 `EXPLAIN QUERY PLAN` checks verify indexes for the implemented lookup shapes.
 
+Focused warm-query benchmarks are available with:
+
+```sh
+go test ./internal/database -run '^$' -bench BenchmarkContentQueries -benchmem
+```
+
+An initial Linux amd64 run on an AMD Ryzen 5 9600X, with 50,000 observations of
+one high-replica content, measured warm hash lookup plus its summary counts at
+17.8 ms/op, first observation pages at 0.226 ms/op, and deep pages at 0.254 ms/op.
+These are focused query measurements, not the pending catalog-wide latency gate.
+
 This foundation precedes source-digest duplicate detection, full CLI progress and
-machine-readable contracts, directory-derived publication data, search, HTTP and
-OpenAPI, and directory/history endpoints. Short ADRs for catalog ownership and
+machine-readable contracts, directory-derived publication data, search, the
+remaining HTTP routes, and directory/history endpoints. Short ADRs for catalog ownership and
 snapshot/replica semantics remain proposed pending approval.

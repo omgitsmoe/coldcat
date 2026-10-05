@@ -57,8 +57,14 @@ func TestQueryIndexes(t *testing.T) {
 		{"SELECT id FROM observation WHERE snapshot_id=1 AND path='foo/bar'", "sqlite_autoindex_observation"},
 		{"SELECT o.id FROM observation o JOIN snapshot s ON s.id=o.snapshot_id WHERE s.disk_id=1 AND o.path='foo/bar' AND s.state='complete'", "sqlite_autoindex_observation"},
 		{"SELECT id FROM observation WHERE path='foo/bar'", "observation_path_snapshot"},
+		{"SELECT id FROM content WHERE hash_type='sha256' AND hash=X'AB'", "sqlite_autoindex_content"},
+		{contentObservationQuery, "observation_content_id"},
 	} {
-		rows, err := db.db.Query("EXPLAIN QUERY PLAN " + test.query)
+		var args []any
+		if test.query == contentObservationQuery {
+			args = []any{1, 0, "current", 51}
+		}
+		rows, err := db.db.Query("EXPLAIN QUERY PLAN "+test.query, args...)
 		if err != nil {
 			t.Fatal(err)
 		}
