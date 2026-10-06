@@ -17,7 +17,7 @@ func TestInventoryRevisionAndRecovery(t *testing.T) {
 	}
 	t.Cleanup(func() { db.Close() })
 	if _, err := db.db.Exec(`INSERT INTO disk(id,label,capacity) VALUES(1,'disk',0);
-INSERT INTO snapshot(id,disk_id,state,captured_at,imported_at,capture_provenance,file_count,content_count) VALUES(3,1,'complete','2023-01-01T00:00:00.000000000Z','2023-01-01T00:00:00.000000000Z','explicit',0,0);
+INSERT INTO snapshot(id,disk_id,state,captured_at,imported_at,capture_provenance,file_count,content_count,source_digest) VALUES(3,1,'complete','2023-01-01T00:00:00.000000000Z','2023-01-01T00:00:00.000000000Z','explicit',0,0,zeroblob(32));
 INSERT INTO snapshot(id,disk_id,state,captured_at,imported_at,capture_provenance) VALUES(100,1,'importing','2023-01-02T00:00:00.000000000Z','2023-01-02T00:00:00.000000000Z','explicit');
 INSERT INTO content(id,hash_type,hash) VALUES(100,'sha256',X'AB');
 INSERT INTO observation(snapshot_id,content_id,path) VALUES(100,100,'unfinished');
@@ -69,7 +69,7 @@ INSERT INTO snapshot(id,disk_id,state,captured_at,imported_at,capture_provenance
 INSERT INTO content(id,hash_type,hash) VALUES(1,'sha256',X'AB');
 WITH RECURSIVE files(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM files WHERE n<50000)
 INSERT INTO observation(id,snapshot_id,content_id,path) SELECT n,1,1,'photos/é-'||n||'.jpg' FROM files;
-UPDATE snapshot SET state='complete',file_count=50000,content_count=1 WHERE id=1;`); err != nil {
+UPDATE snapshot SET state='complete',file_count=50000,content_count=1,source_digest=zeroblob(32) WHERE id=1;`); err != nil {
 			return err
 		}
 		return nil

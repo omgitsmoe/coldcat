@@ -28,6 +28,7 @@ func newCommand() *cli.Command {
 	labelFlag := &cli.StringFlag{Name: "label", Usage: "disk label"}
 	capturedFlag := &cli.StringFlag{Name: "captured-at", Usage: "inventory time (RFC3339)"}
 	sourceMTimeFlag := &cli.BoolFlag{Name: "use-source-mtime", Usage: "explicitly use the checksum file mtime as inventory time"}
+	allowRepeatFlag := &cli.BoolFlag{Name: "allow-repeat", Usage: "explicitly record another snapshot of an already imported inventory"}
 	return &cli.Command{
 		Name: "coldcat", Usage: "manage checksum data for disks",
 		Flags: []cli.Flag{&cli.StringFlag{Name: "db", Usage: "catalog database path", Value: "coldcat.sqlite"}},
@@ -53,12 +54,13 @@ func newCommand() *cli.Command {
 				})
 			}},
 			{Name: "import", Usage: "import a complete disk inventory", ArgsUsage: "<file.cshd>",
+				Flags: []cli.Flag{allowRepeatFlag},
 				MutuallyExclusiveFlags: []cli.MutuallyExclusiveFlags{
 					{Flags: [][]cli.Flag{{diskIDFlag}, {labelFlag}}, Required: true},
 					{Flags: [][]cli.Flag{{capturedFlag}, {sourceMTimeFlag}}, Required: true},
 				}, Arguments: []cli.Argument{&cli.StringArg{Name: "checksum-file", Required: true}},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					req := app.ImportRequest{DiskID: base.DiskId(cmd.Int64("disk-id")), Path: cmd.StringArg("checksum-file"), UseSourceMTime: cmd.Bool("use-source-mtime")}
+					req := app.ImportRequest{DiskID: base.DiskId(cmd.Int64("disk-id")), Path: cmd.StringArg("checksum-file"), UseSourceMTime: cmd.Bool("use-source-mtime"), AllowRepeat: cmd.Bool("allow-repeat")}
 					if cmd.IsSet("captured-at") {
 						captured, err := time.Parse(time.RFC3339Nano, cmd.String("captured-at"))
 						if err != nil {

@@ -36,6 +36,7 @@ type Request struct {
 	Path           string
 	CapturedAt     time.Time
 	UseSourceMTime bool
+	AllowRepeat    bool
 }
 
 func Import(ctx context.Context, db *database.DB, req Request) (base.Snapshot, error) {
@@ -121,8 +122,12 @@ func ImportReader(ctx context.Context, db *database.DB, req Request, r io.Reader
 		batch = batch[:0]
 		return nil
 	}
+	digest := newInventoryDigest()
 	err = ParseCshd(contextReader{ctx: ctx, reader: r}, func(file File) error {
 		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := digest.add(file); err != nil {
 			return err
 		}
 		batch = append(batch, file)
@@ -137,7 +142,7 @@ func ImportReader(ctx context.Context, db *database.DB, req Request, r io.Reader
 	if err = flush(); err != nil {
 		return result, err
 	}
-	result, err = db.PublishImport(ctx, snapshotID)
+	result, err = db.PublishImport(ctx, database.PublishImportRequest{SnapshotID: snapshotID, SourceDigest: digest.sum(), AllowRepeat: req.AllowRepeat})
 	if err != nil {
 		return result, err
 	}

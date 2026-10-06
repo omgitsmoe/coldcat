@@ -20,7 +20,7 @@ func TestTimestampOrderingAndImmutability(t *testing.T) {
 	}
 	for _, capture := range []time.Time{time.Unix(1, 100_000_000), time.Unix(1, 0), time.Unix(1, 90_000_000)} {
 		err := db.Transaction(func(tx *Tx) error {
-			_, err := tx.Exec(`INSERT INTO snapshot(disk_id,state,captured_at,imported_at,capture_provenance,file_count,content_count) VALUES(?,'complete',?,?,'explicit',0,0)`, id, FormatTime(capture), FormatTime(time.Unix(2, 0)))
+			_, err := tx.Exec(`INSERT INTO snapshot(disk_id,state,captured_at,imported_at,capture_provenance,file_count,content_count,source_digest) VALUES(?,'complete',?,?,'explicit',0,0,zeroblob(32))`, id, FormatTime(capture), FormatTime(time.Unix(2, 0)))
 			return err
 		})
 		if err != nil {
@@ -37,6 +37,7 @@ func TestTimestampOrderingAndImmutability(t *testing.T) {
 	for _, statement := range []string{
 		"DELETE FROM snapshot WHERE id=1",
 		"UPDATE snapshot SET captured_at='2020-01-01T00:00:00Z' WHERE id=1",
+		"UPDATE snapshot SET source_digest=randomblob(32) WHERE id=1",
 		"INSERT INTO content(id,hash_type,hash) VALUES(1,'sha256',X'AB'); INSERT INTO observation(snapshot_id,content_id,path) VALUES(1,1,'a')",
 	} {
 		if err := db.Transaction(func(tx *Tx) error { _, err := tx.Exec(statement); return err }); err == nil {
@@ -53,6 +54,7 @@ func TestQueryIndexes(t *testing.T) {
 	defer db.Close()
 	for _, test := range []struct{ query, index string }{
 		{"SELECT id FROM snapshot WHERE disk_id=1 AND state='complete' ORDER BY captured_at DESC,id DESC LIMIT 1", "snapshot_current"},
+		{"SELECT id FROM snapshot WHERE state='complete' AND disk_id=1 AND input_format='cshd' AND captured_at='2023-01-01T00:00:00.000000000Z' AND source_digest=zeroblob(32) ORDER BY id LIMIT 1", "snapshot_source_identity"},
 		{currentSnapshots + "SELECT COUNT(*) FROM observation o JOIN current_snapshot cs ON cs.id=o.snapshot_id WHERE o.content_id=1", "observation_content_snapshot"},
 		{"SELECT id FROM observation WHERE snapshot_id=1 AND path='foo/bar'", "sqlite_autoindex_observation"},
 		{"SELECT o.id FROM observation o JOIN snapshot s ON s.id=o.snapshot_id WHERE s.disk_id=1 AND o.path='foo/bar' AND s.state='complete'", "sqlite_autoindex_observation"},
@@ -97,7 +99,7 @@ func TestRecoveryPreservesCompletedSnapshotsAndSharedContent(t *testing.T) {
 INSERT INTO snapshot(id,disk_id,state,captured_at,imported_at,capture_provenance) VALUES(9,7,'importing','2023-01-01T00:00:00.000000000Z','2023-01-02T00:00:00.000000000Z','explicit');
 INSERT INTO content(id,hash_type,hash) VALUES(11,'sha256',X'AB');
 INSERT INTO observation(snapshot_id,content_id,path) VALUES(9,11,'original');
-UPDATE snapshot SET state='complete',file_count=1,content_count=1 WHERE id=9;
+UPDATE snapshot SET state='complete',file_count=1,content_count=1,source_digest=zeroblob(32) WHERE id=9;
 INSERT INTO snapshot(id,disk_id,state,captured_at,imported_at,capture_provenance) VALUES(100,7,'importing','2023-01-03T00:00:00.000000000Z','2023-01-04T00:00:00.000000000Z','explicit');
 INSERT INTO observation(snapshot_id,content_id,path) VALUES(100,11,'shared');
 INSERT INTO import_content(snapshot_id,content_id) VALUES(100,11);

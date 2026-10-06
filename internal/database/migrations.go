@@ -18,8 +18,9 @@ CREATE TABLE snapshot (
  captured_at TEXT NOT NULL, imported_at TEXT NOT NULL,
  capture_provenance TEXT NOT NULL CHECK(capture_provenance IN ('explicit','source_mtime')),
  input_path TEXT, input_format TEXT,
+ source_digest BLOB CHECK(source_digest IS NULL OR (typeof(source_digest)='blob' AND length(source_digest)=32)),
  file_count INTEGER CHECK(file_count >= 0), content_count INTEGER CHECK(content_count >= 0),
- CHECK(state != 'complete' OR (file_count IS NOT NULL AND content_count IS NOT NULL))
+ CHECK(state != 'complete' OR (file_count IS NOT NULL AND content_count IS NOT NULL AND source_digest IS NOT NULL))
 );
 CREATE TABLE content (
  id INTEGER PRIMARY KEY, size INTEGER CHECK(size >= 0),
@@ -40,6 +41,7 @@ CREATE TABLE import_content (
  content_id INTEGER NOT NULL REFERENCES content(id) ON DELETE CASCADE, PRIMARY KEY(snapshot_id,content_id)
 );
 CREATE INDEX snapshot_current ON snapshot(disk_id,captured_at DESC,id DESC) WHERE state='complete';
+CREATE INDEX snapshot_source_identity ON snapshot(disk_id,input_format,captured_at,source_digest) WHERE state='complete';
 CREATE INDEX observation_content_snapshot ON observation(content_id,snapshot_id);
 CREATE INDEX observation_content_id ON observation(content_id,id);
 CREATE INDEX observation_path_snapshot ON observation(path,snapshot_id);
