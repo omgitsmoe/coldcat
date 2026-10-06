@@ -16,6 +16,7 @@ func nullableTime(value *time.Time) *string {
 	if value == nil {
 		return nil
 	}
+
 	result := timestamp(*value)
 	return &result
 }
@@ -24,6 +25,7 @@ func nullableSize(value *int64) *string {
 	if value == nil {
 		return nil
 	}
+
 	result := decimal(*value)
 	return &result
 }
@@ -50,8 +52,20 @@ func contentResponse(value base.ContentSummary) (contentDTO, error) {
 	if err != nil {
 		return contentDTO{}, err
 	}
-	return contentDTO{ID: decimal(value.Content.Id), Hash: hashDTO{Algorithm: algorithm, Hex: hex.EncodeToString(value.Content.Hash)}, Size: nullableSize(value.Content.Size), Scope: value.Scope,
-		LocationCount: decimal(value.LocationCount), DiskCount: decimal(value.DiskCount), ObservationCount: decimal(value.ObservationCount), CurrentLocationCount: decimal(value.CurrentLocationCount), CurrentDiskCount: decimal(value.CurrentDiskCount)}, nil
+
+	return contentDTO{
+		ID:    decimal(value.Content.Id),
+		Hash:  hashDTO{Algorithm: algorithm, Hex: hex.EncodeToString(value.Content.Hash)},
+		Size:  nullableSize(value.Content.Size),
+		Scope: value.Scope,
+		LocationCount: decimal(
+			value.LocationCount,
+		),
+		DiskCount:            decimal(value.DiskCount),
+		ObservationCount:     decimal(value.ObservationCount),
+		CurrentLocationCount: decimal(value.CurrentLocationCount),
+		CurrentDiskCount:     decimal(value.CurrentDiskCount),
+	}, nil
 }
 
 type diskDTO struct {
@@ -62,7 +76,12 @@ type diskDTO struct {
 }
 
 func diskResponse(value base.Disk) diskDTO {
-	return diskDTO{ID: decimal(value.Id), Label: value.Label, Serial: value.Serial, Capacity: decimal(value.Capacity)}
+	return diskDTO{
+		ID:       decimal(value.Id),
+		Label:    value.Label,
+		Serial:   value.Serial,
+		Capacity: decimal(value.Capacity),
+	}
 }
 
 type snapshotDTO struct {
@@ -79,7 +98,18 @@ type snapshotDTO struct {
 }
 
 func snapshotResponse(value base.Snapshot) snapshotDTO {
-	return snapshotDTO{ID: decimal(value.Id), DiskID: decimal(value.DiskId), State: "complete", CapturedAt: timestamp(value.CapturedAt), ImportedAt: timestamp(value.ImportedAt), CaptureProvenance: value.CaptureProvenance, InputPath: value.InputPath, InputFormat: value.InputFormat, FileCount: decimal(value.FileCount), ContentCount: decimal(value.ContentCount)}
+	return snapshotDTO{
+		ID:                decimal(value.Id),
+		DiskID:            decimal(value.DiskId),
+		State:             "complete",
+		CapturedAt:        timestamp(value.CapturedAt),
+		ImportedAt:        timestamp(value.ImportedAt),
+		CaptureProvenance: value.CaptureProvenance,
+		InputPath:         value.InputPath,
+		InputFormat:       value.InputFormat,
+		FileCount:         decimal(value.FileCount),
+		ContentCount:      decimal(value.ContentCount),
+	}
 }
 
 type observationDTO struct {
@@ -91,7 +121,13 @@ type observationDTO struct {
 }
 
 func observationResponse(value base.FileObservation) observationDTO {
-	return observationDTO{ID: decimal(value.Id), ContentID: decimal(value.ContentId), SnapshotID: decimal(value.SnapshotId), Path: value.Path, MTime: nullableTime(value.MTime)}
+	return observationDTO{
+		ID:         decimal(value.Id),
+		ContentID:  decimal(value.ContentId),
+		SnapshotID: decimal(value.SnapshotId),
+		Path:       value.Path,
+		MTime:      nullableTime(value.MTime),
+	}
 }
 
 type observationSummaryDTO struct {
@@ -119,12 +155,27 @@ type observationPageDTO struct {
 }
 
 func pageResponse(value base.ContentObservationPage) observationPageDTO {
-	result := observationPageDTO{Scope: value.Scope, Revision: decimal(value.Catalog.Revision), Items: make([]contentObservationDTO, 0, len(value.Items))}
+	result := observationPageDTO{
+		Scope:    value.Scope,
+		Revision: decimal(value.Catalog.Revision),
+		Items:    make([]contentObservationDTO, 0, len(value.Items)),
+	}
 	if value.NextCursor != "" {
 		result.NextCursor = &value.NextCursor
 	}
+
 	for _, item := range value.Items {
-		result.Items = append(result.Items, contentObservationDTO{Observation: observationResponse(item.Observation), Snapshot: snapshotResponse(item.Snapshot), Disk: diskResponse(item.Disk), Size: nullableSize(item.Size), IsCurrent: item.IsCurrent})
+		result.Items = append(
+			result.Items,
+			contentObservationDTO{
+				Observation: observationResponse(item.Observation),
+				Snapshot:    snapshotResponse(item.Snapshot),
+				Disk:        diskResponse(item.Disk),
+				Size:        nullableSize(item.Size),
+				IsCurrent:   item.IsCurrent,
+			},
+		)
 	}
+
 	return result
 }

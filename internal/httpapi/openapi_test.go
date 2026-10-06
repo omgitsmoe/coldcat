@@ -16,10 +16,12 @@ func openAPIDocument(t *testing.T) map[string]any {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	var document map[string]any
 	if err := json.Unmarshal(data, &document); err != nil {
 		t.Fatal(err)
 	}
+
 	return document
 }
 
@@ -28,6 +30,7 @@ func resolveReference(t *testing.T, document map[string]any, ref string) map[str
 	if !strings.HasPrefix(ref, "#/") {
 		t.Fatalf("nonlocal reference: %s", ref)
 	}
+
 	var value any = document
 	for _, part := range strings.Split(strings.TrimPrefix(ref, "#/"), "/") {
 		part = strings.ReplaceAll(strings.ReplaceAll(part, "~1", "/"), "~0", "~")
@@ -35,15 +38,18 @@ func resolveReference(t *testing.T, document map[string]any, ref string) map[str
 		if !ok {
 			t.Fatalf("invalid reference: %s", ref)
 		}
+
 		value, ok = object[part]
 		if !ok {
 			t.Fatalf("missing reference: %s", ref)
 		}
 	}
+
 	result, ok := value.(map[string]any)
 	if !ok {
 		t.Fatalf("reference is not an object: %s", ref)
 	}
+
 	return result
 }
 
@@ -53,6 +59,7 @@ func assertResponseSchema(t *testing.T, document map[string]any, schema map[stri
 		assertResponseSchema(t, document, resolveReference(t, document, ref), value)
 		return
 	}
+
 	var kinds []any
 	switch kind := schema["type"].(type) {
 	case string:
@@ -62,6 +69,7 @@ func assertResponseSchema(t *testing.T, document map[string]any, schema map[stri
 	default:
 		t.Fatal("response schema must declare a type")
 	}
+
 	valid := false
 	for _, kind := range kinds {
 		switch kind {
@@ -83,26 +91,32 @@ func assertResponseSchema(t *testing.T, document map[string]any, schema map[stri
 			t.Fatalf("unsupported response schema type: %v", kind)
 		}
 	}
+
 	if !valid {
 		t.Fatalf("value %#v does not match schema %v", value, schema)
 	}
+
 	if constant, ok := schema["const"]; ok && !reflect.DeepEqual(constant, value) {
 		t.Fatalf("constant mismatch: %v != %v", value, constant)
 	}
+
 	if enum, ok := schema["enum"].([]any); ok {
 		found := false
 		for _, item := range enum {
 			found = found || reflect.DeepEqual(item, value)
 		}
+
 		if !found {
 			t.Fatalf("value %v outside enum %v", value, enum)
 		}
 	}
+
 	switch typed := value.(type) {
 	case string:
 		if pattern, ok := schema["pattern"].(string); ok && !regexp.MustCompile(pattern).MatchString(typed) {
 			t.Fatalf("%q does not match %s", typed, pattern)
 		}
+
 		if schema["format"] == "date-time" {
 			if _, err := time.Parse(time.RFC3339Nano, typed); err != nil {
 				t.Fatal(err)
@@ -113,16 +127,19 @@ func assertResponseSchema(t *testing.T, document map[string]any, schema map[stri
 		if !ok {
 			t.Fatal("object schema missing properties")
 		}
+
 		for _, required := range schema["required"].([]any) {
 			if _, ok := typed[required.(string)]; !ok {
 				t.Fatalf("missing required property %s", required)
 			}
 		}
+
 		for key, item := range typed {
 			property, ok := properties[key].(map[string]any)
 			if !ok {
 				t.Fatalf("undocumented response property: %s", key)
 			}
+
 			assertResponseSchema(t, document, property, item)
 		}
 	case []any:
@@ -137,6 +154,7 @@ func TestOpenAPIReferencesAndExamples(t *testing.T) {
 	if document["openapi"] != "3.1.0" {
 		t.Fatal("wrong OpenAPI version")
 	}
+
 	var walk func(any)
 	walk = func(value any) {
 		switch typed := value.(type) {
@@ -148,16 +166,19 @@ func TestOpenAPIReferencesAndExamples(t *testing.T) {
 			if ref, ok := typed["$ref"].(string); ok {
 				resolveReference(t, document, ref)
 			}
+
 			if schema, ok := typed["schema"].(map[string]any); ok {
 				if example, ok := typed["example"]; ok {
 					assertResponseSchema(t, document, schema, example)
 				}
+
 				if examples, ok := typed["examples"].(map[string]any); ok {
 					for _, example := range examples {
 						assertResponseSchema(t, document, schema, example.(map[string]any)["value"])
 					}
 				}
 			}
+
 			for _, item := range typed {
 				walk(item)
 			}

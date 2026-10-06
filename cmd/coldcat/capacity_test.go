@@ -21,6 +21,7 @@ func TestParseCapacity(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseCapacity(%q): %v", test.input, err)
 			}
+
 			if got != test.want {
 				t.Fatalf("parseCapacity(%q) = %d, want %d", test.input, got, test.want)
 			}

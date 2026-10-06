@@ -167,6 +167,7 @@ func TestParse(t *testing.T) {
 				if tt.failCallback {
 					return errCallback
 				}
+
 				got = append(got, f)
 				return nil
 			})
@@ -176,8 +177,10 @@ func TestParse(t *testing.T) {
 				if !errors.Is(err, tt.wantErrIs) {
 					t.Fatalf("expected error %v, got %v", tt.wantErrIs, err)
 				}
+
 				return
 			}
+
 			assertNoErr(t, err)
 
 			assertFilesEqual(t, got, tt.expected)
@@ -293,6 +296,7 @@ func TestParseLine(t *testing.T) {
 				assertErr(t, err)
 				return
 			}
+
 			assertNoErr(t, err)
 
 			assertFilesEqual(t, []File{file}, []File{tt.expectedFile})
@@ -334,6 +338,7 @@ func TestParseMTime(t *testing.T) {
 				assertErr(t, err)
 				return
 			}
+
 			assertNoErr(t, err)
 
 			if !got.Equal(tt.expectedMTime) {
@@ -377,6 +382,7 @@ func TestParseSize(t *testing.T) {
 				assertErr(t, err)
 				return
 			}
+
 			assertNoErr(t, err)
 
 			assertEqual(t, got, tt.expected)
@@ -418,6 +424,7 @@ func TestParseHashType(t *testing.T) {
 				assertErr(t, err)
 				return
 			}
+
 			assertNoErr(t, err)
 
 			assertEqual(t, got, tt.expected)
@@ -459,6 +466,7 @@ func TestParseHash(t *testing.T) {
 				assertErr(t, err)
 				return
 			}
+
 			assertNoErr(t, err)
 
 			assertSliceEqual(t, got, tt.expected)
@@ -519,6 +527,7 @@ func TestParseHeader(t *testing.T) {
 				assertErr(t, err)
 				return
 			}
+
 			assertNoErr(t, err)
 
 			assertEqual(t, got, tt.expected)

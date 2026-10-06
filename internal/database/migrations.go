@@ -73,29 +73,36 @@ func (db *DB) migrate(ctx context.Context) error {
 
 func (db *DB) applyMigrations(ctx context.Context, steps []migration) error {
 	schemaVersion := len(steps)
+
 	var version int
 	if err := db.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
+
 	if version < 0 || version > schemaVersion {
 		return fmt.Errorf("unsupported schema version %d (supported: %d)", version, schemaVersion)
 	}
+
 	for version < schemaVersion {
 		next := version + 1
 		if err := db.TransactionContext(ctx, func(tx *Tx) error {
 			if err := steps[version](ctx, tx); err != nil {
 				return err
 			}
+
 			if err := checkForeignKeys(ctx, tx); err != nil {
 				return err
 			}
+
 			_, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version=%d", next))
 			return err
 		}); err != nil {
 			return fmt.Errorf("migration %d: %w", next, err)
 		}
+
 		version = next
 	}
+
 	return db.TransactionContext(ctx, func(tx *Tx) error { return checkForeignKeys(ctx, tx) })
 }
 
@@ -112,8 +119,15 @@ func checkForeignKeys(ctx context.Context, tx *Tx) error {
 		if err := rows.Scan(&table, &rowID, &parent, &constraint); err != nil {
 			return err
 		}
-		return fmt.Errorf("foreign key violation: table %s row %v references %s", table, rowID, parent)
+
+		return fmt.Errorf(
+			"foreign key violation: table %s row %v references %s",
+			table,
+			rowID,
+			parent,
+		)
 	}
+
 	return rows.Err()
 }
 
@@ -122,9 +136,13 @@ func migrateInitial(ctx context.Context, tx *Tx) error {
 	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").Scan(&objects); err != nil {
 		return err
 	}
+
 	if objects != 0 {
-		return fmt.Errorf("initial schema requires an empty database; recreate the development catalog")
+		return fmt.Errorf(
+			"initial schema requires an empty database; recreate the development catalog",
+		)
 	}
+
 	_, err := tx.ExecContext(ctx, diskSchema+inventorySchema)
 	return err
 }

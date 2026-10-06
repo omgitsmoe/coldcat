@@ -72,5 +72,6 @@ func FromIdentifier(id string) (HashType, error) {
 	if h, ok := identifierToHash[id]; ok {
 		return h, nil
 	}
+
 	return HashType{}, fmt.Errorf("unknown hash identifier: %q", id)
 }

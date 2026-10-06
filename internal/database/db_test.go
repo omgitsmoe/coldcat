@@ -28,15 +28,19 @@ func TestForeignKeysAreEnforcedOnEveryConnection(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		connections = append(connections, connection)
+
 		var fk int
 		if err := connection.QueryRowContext(t.Context(), "PRAGMA foreign_keys").Scan(&fk); err != nil {
 			t.Fatal(err)
 		}
+
 		if fk != 1 {
 			t.Fatalf("connection %d: foreign_keys=%d", i, fk)
 		}
 	}
+
 	for _, connection := range connections {
 		connection.Close()
 	}
@@ -62,18 +66,29 @@ func TestCreateDisk(t *testing.T) {
 	).Scan(&label, &notes, &serial, &capacity); err != nil {
 		t.Fatalf("query created disk: %v", err)
 	}
-	if label != "archive" || !notes.Valid || notes.String != "important files" || !serial.Valid || serial.String != "ABC123" || capacity != 2_000_000_000_000 {
-		t.Fatalf("unexpected disk row: label=%q notes=%+v serial=%+v capacity=%d", label, notes, serial, capacity)
+
+	if label != "archive" || !notes.Valid || notes.String != "important files" || !serial.Valid ||
+		serial.String != "ABC123" ||
+		capacity != 2_000_000_000_000 {
+		t.Fatalf(
+			"unexpected disk row: label=%q notes=%+v serial=%+v capacity=%d",
+			label,
+			notes,
+			serial,
+			capacity,
+		)
 	}
 
 	if _, err := db.CreateDisk("empty optional fields", "", "", 1); err != nil {
 		t.Fatalf("create disk without optional fields: %v", err)
 	}
+
 	if err := db.db.QueryRow(
 		"SELECT notes, serial FROM disk WHERE label = $1", "empty optional fields",
 	).Scan(&notes, &serial); err != nil {
 		t.Fatalf("query disk without optional fields: %v", err)
 	}
+
 	if notes.Valid || serial.Valid {
 		t.Fatalf("expected optional fields to be NULL, got notes=%+v serial=%+v", notes, serial)
 	}
@@ -95,11 +110,13 @@ func TestDiskIDByLabel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find disk by label: %v", err)
 	}
+
 	if gotID != wantID {
 		t.Fatalf("disk ID = %d, want %d", gotID, wantID)
 	}
 
-	if _, err := db.DiskIDByLabel("missing"); err == nil || !strings.Contains(err.Error(), `label "missing"`) {
+	if _, err := db.DiskIDByLabel("missing"); err == nil ||
+		!strings.Contains(err.Error(), `label "missing"`) {
 		t.Fatalf("lookup for missing label returned %v; want a descriptive error", err)
 	}
 }
@@ -115,12 +132,15 @@ func TestForeignKeysRejectDanglingReferences(t *testing.T) {
 	err = db.Transaction(func(tx *Tx) error {
 		_, err := tx.Exec(
 			"INSERT INTO snapshot(disk_id,state,captured_at,imported_at,capture_provenance) VALUES ($1,'importing',$2,$2,'explicit')",
-			int64(1), FormatTime(nowFixed()))
+			int64(1),
+			FormatTime(nowFixed()),
+		)
 		return err
 	})
 	if err == nil {
 		t.Fatal("expected a foreign key error for a missing disk")
 	}
+
 	if !strings.Contains(err.Error(), "FOREIGN KEY") {
 		t.Fatalf("expected a foreign key error, got: %v", err)
 	}
@@ -136,6 +156,7 @@ func TestForeignKeysRejectDanglingReferences(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a foreign key error for missing references")
 	}
+
 	if !strings.Contains(err.Error(), "FOREIGN KEY") {
 		t.Fatalf("expected a foreign key error, got: %v", err)
 	}
@@ -158,6 +179,7 @@ func TestContentUniquenessCoversHashType(t *testing.T) {
 				return err
 			}
 		}
+
 		return nil
 	})
 	if err != nil {
@@ -174,6 +196,7 @@ func TestContentUniquenessCoversHashType(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a uniqueness error for a repeated hash type and hash")
 	}
+
 	if !strings.Contains(err.Error(), "UNIQUE") {
 		t.Fatalf("expected a uniqueness error, got: %v", err)
 	}

@@ -47,6 +47,7 @@ func OpenContext(ctx context.Context, path string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	db, err := sql.Open("sqlite", databaseDSN(canonical))
 	if err != nil {
 		lock.Close()
@@ -67,6 +68,7 @@ func OpenContext(ctx context.Context, path string) (*DB, error) {
 		result.Close()
 		return nil, fmt.Errorf("failed to initialize DB schema: %w", err)
 	}
+
 	if err := result.RecoverImports(ctx); err != nil {
 		result.Close()
 		return nil, fmt.Errorf("recover abandoned imports: %w", err)
@@ -99,7 +101,11 @@ func (db *DB) CreateDisk(label, notes, serial string, capacity int64) (int64, er
 	return db.CreateDiskContext(context.Background(), label, notes, serial, capacity)
 }
 
-func (db *DB) CreateDiskContext(ctx context.Context, label, notes, serial string, capacity int64) (int64, error) {
+func (db *DB) CreateDiskContext(
+	ctx context.Context,
+	label, notes, serial string,
+	capacity int64,
+) (int64, error) {
 	release, err := db.readAccess()
 	if err != nil {
 		return 0, err
@@ -108,10 +114,12 @@ func (db *DB) CreateDiskContext(ctx context.Context, label, notes, serial string
 	if label == "" || capacity < 0 {
 		return 0, fmt.Errorf("%w: label and nonnegative capacity required", ErrValidation)
 	}
+
 	var notesValue, serialValue *string
 	if notes != "" {
 		notesValue = &notes
 	}
+
 	if serial != "" {
 		serialValue = &serial
 	}
@@ -132,6 +140,7 @@ func (db *DB) CreateDiskContext(ctx context.Context, label, notes, serial string
 	if err != nil {
 		return 0, fmt.Errorf("failed to create disk: %w", err)
 	}
+
 	return id, nil
 }
 
@@ -145,14 +154,17 @@ func (db *DB) DiskIDByLabelContext(ctx context.Context, label string) (int64, er
 		return 0, err
 	}
 	defer release()
+
 	var id int64
 	err = db.db.QueryRowContext(ctx, "SELECT id FROM disk WHERE label = $1", label).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, fmt.Errorf("failed to find disk with label %q: %w", label, ErrNotFound)
 	}
+
 	if err != nil {
 		return 0, fmt.Errorf("failed to find disk with label %q: %w", label, err)
 	}
+
 	return id, nil
 }
 
@@ -165,11 +177,13 @@ func (db *DB) AcquireImport(ctx context.Context) (func(), error) {
 	if !db.access.TryLock() {
 		return nil, ErrBusy
 	}
+
 	if err := db.RecoverImports(ctx); err != nil {
 		db.recoveryErr = err
 		db.access.Unlock()
 		return nil, err
 	}
+
 	db.recoveryErr = nil
 	return db.access.Unlock, nil
 }
@@ -178,10 +192,12 @@ func (db *DB) readAccess() (func(), error) {
 	if !db.access.TryRLock() {
 		return nil, ErrBusy
 	}
+
 	if db.recoveryErr != nil {
 		db.access.RUnlock()
 		return nil, fmt.Errorf("catalog recovery required: %w", db.recoveryErr)
 	}
+
 	return db.access.RUnlock, nil
 }
 
@@ -197,5 +213,6 @@ func classifyError(err error) error {
 			return errors.Join(ErrValidation, err)
 		}
 	}
+
 	return err
 }

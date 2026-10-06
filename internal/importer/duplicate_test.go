@@ -20,24 +20,34 @@ func TestDuplicateImportCleanupAndExplicitRepeat(t *testing.T) {
 	assertNoErr(t, err)
 	digest := newInventoryDigest()
 	assertNoErr(t, ParseCshd(strings.NewReader(input), digest.add))
+
 	var stored []byte
-	assertNoErr(t, raw.QueryRow("SELECT source_digest FROM snapshot WHERE id=?", first.Id).Scan(&stored))
+	assertNoErr(
+		t,
+		raw.QueryRow("SELECT source_digest FROM snapshot WHERE id=?", first.Id).Scan(&stored),
+	)
 	expected := digest.sum()
 	if !bytes.Equal(stored, expected[:]) {
 		t.Fatalf("stored digest: %x, expected %x", stored, expected)
 	}
+
 	req.Path = "renamed.cshd"
 	req.CapturedAt = req.CapturedAt.In(time.FixedZone("offset", 3600))
 	_, err = ImportReader(t.Context(), db, req, strings.NewReader("# comment\n"+input))
+
 	var duplicate *database.DuplicateImportError
-	if !errors.As(err, &duplicate) || !errors.Is(err, database.ErrConflict) || duplicate.SnapshotID != first.Id || duplicate.DiskID != disk {
+	if !errors.As(err, &duplicate) || !errors.Is(err, database.ErrConflict) ||
+		duplicate.SnapshotID != first.Id ||
+		duplicate.DiskID != disk {
 		t.Fatalf("duplicate result: %v", err)
 	}
+
 	assertEqual(t, count(t, raw, "snapshot"), 1)
 	assertEqual(t, count(t, raw, "observation"), 2005)
 	assertEqual(t, count(t, raw, "content"), 2005)
 	assertEqual(t, count(t, raw, "pending_size"), 0)
 	assertEqual(t, count(t, raw, "import_content"), 0)
+
 	var known int
 	assertNoErr(t, raw.QueryRow("SELECT COUNT(*) FROM content WHERE size=4").Scan(&known))
 	assertEqual(t, known, 2005)
@@ -47,6 +57,7 @@ func TestDuplicateImportCleanupAndExplicitRepeat(t *testing.T) {
 	if repeated.Id <= first.Id {
 		t.Fatal("explicit repeat did not create a new snapshot")
 	}
+
 	latest, err := db.LatestCompleteSnapshot(t.Context(), disk)
 	assertNoErr(t, err)
 	assertEqual(t, latest.Id, repeated.Id)
@@ -79,6 +90,7 @@ func TestDuplicateIdentityBoundaries(t *testing.T) {
 			case "order":
 				input = ",sha256,cd second\n,sha256,ab first\n"
 			}
+
 			_, err = ImportReader(t.Context(), db, req, strings.NewReader(input))
 			assertNoErr(t, err)
 		})
@@ -93,13 +105,20 @@ func TestDigestDoesNotDependOnSharedContentEnrichment(t *testing.T) {
 	assertNoErr(t, err)
 	later := req
 	later.CapturedAt = later.CapturedAt.Add(time.Second)
-	_, err = ImportReader(t.Context(), db, later, strings.NewReader("# version 1\n,5,sha256,ab file\n"))
+	_, err = ImportReader(
+		t.Context(),
+		db,
+		later,
+		strings.NewReader("# version 1\n,5,sha256,ab file\n"),
+	)
 	assertNoErr(t, err)
 	_, err = ImportReader(t.Context(), db, req, strings.NewReader(input))
+
 	var duplicate *database.DuplicateImportError
 	if !errors.As(err, &duplicate) || duplicate.SnapshotID != first.Id {
 		t.Fatalf("enrichment changed duplicate identity: %v", err)
 	}
+
 	var size int
 	assertNoErr(t, raw.QueryRow("SELECT size FROM content").Scan(&size))
 	assertEqual(t, size, 5)
@@ -115,8 +134,14 @@ func TestIncompleteDigestDoesNotBlockRetry(t *testing.T) {
 	digest := newInventoryDigest()
 	assertNoErr(t, ParseCshd(strings.NewReader(input), digest.add))
 	sum := digest.sum()
-	_, err = raw.Exec(`INSERT INTO snapshot(disk_id,state,captured_at,imported_at,capture_provenance,input_format,source_digest)
- VALUES(?,'importing',?,?,'explicit','cshd',?)`, disk, database.FormatTime(req.CapturedAt), database.FormatTime(time.Now()), sum[:])
+	_, err = raw.Exec(
+		`INSERT INTO snapshot(disk_id,state,captured_at,imported_at,capture_provenance,input_format,source_digest)
+ VALUES(?,'importing',?,?,'explicit','cshd',?)`,
+		disk,
+		database.FormatTime(req.CapturedAt),
+		database.FormatTime(time.Now()),
+		sum[:],
+	)
 	assertNoErr(t, err)
 	_, err = ImportReader(t.Context(), db, req, strings.NewReader(input))
 	assertNoErr(t, err)

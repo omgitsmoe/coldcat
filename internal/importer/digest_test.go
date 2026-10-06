@@ -26,6 +26,7 @@ func TestSemanticDigest(t *testing.T) {
 			t.Fatalf("equivalent records have different digest: %q", input)
 		}
 	}
+
 	for name, input := range map[string]string{
 		"order":        ",sha256,cd second\n,sha256,ab dir/file\n",
 		"path":         ",sha256,ab dir/other\n,sha256,cd second\n",
@@ -41,13 +42,19 @@ func TestSemanticDigest(t *testing.T) {
 			}
 		})
 	}
+
 	if digest("1,sha256,ab file\n") != digest("1.000000000,sha256,ab file") {
 		t.Fatal("equivalent timestamps differ")
 	}
 }
 
 func TestDigestUsesOnlyKnownMetadataAndCanonicalPath(t *testing.T) {
-	file := File{Name: "file", PathRelativeToRoot: "dir/", HashType: base.HashType{Hash: crypto.SHA256}, Hash: []byte{0xab}}
+	file := File{
+		Name:               "file",
+		PathRelativeToRoot: "dir/",
+		HashType:           base.HashType{Hash: crypto.SHA256},
+		Hash:               []byte{0xab},
+	}
 	first := newInventoryDigest()
 	assertNoErr(t, first.add(file))
 	file.Name = "dir/file"
@@ -59,6 +66,7 @@ func TestDigestUsesOnlyKnownMetadataAndCanonicalPath(t *testing.T) {
 	if first.sum() != second.sum() {
 		t.Fatal("path split or unknown metadata changed digest")
 	}
+
 	if bytes.Equal(first.h.Sum(nil), newInventoryDigest().h.Sum(nil)) {
 		t.Fatal("record omitted from digest")
 	}

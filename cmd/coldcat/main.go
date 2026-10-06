@@ -27,28 +27,56 @@ func newCommand() *cli.Command {
 	diskIDFlag := &cli.Int64Flag{Name: "disk-id", Usage: "disk ID"}
 	labelFlag := &cli.StringFlag{Name: "label", Usage: "disk label"}
 	capturedFlag := &cli.StringFlag{Name: "captured-at", Usage: "inventory time (RFC3339)"}
-	sourceMTimeFlag := &cli.BoolFlag{Name: "use-source-mtime", Usage: "explicitly use the checksum file mtime as inventory time"}
-	allowRepeatFlag := &cli.BoolFlag{Name: "allow-repeat", Usage: "explicitly record another snapshot of an already imported inventory"}
+	sourceMTimeFlag := &cli.BoolFlag{
+		Name:  "use-source-mtime",
+		Usage: "explicitly use the checksum file mtime as inventory time",
+	}
+	allowRepeatFlag := &cli.BoolFlag{
+		Name:  "allow-repeat",
+		Usage: "explicitly record another snapshot of an already imported inventory",
+	}
 	return &cli.Command{
 		Name: "coldcat", Usage: "manage checksum data for disks",
-		Flags: []cli.Flag{&cli.StringFlag{Name: "db", Usage: "catalog database path", Value: "coldcat.sqlite"}},
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "db", Usage: "catalog database path", Value: "coldcat.sqlite"},
+		},
 		Commands: []*cli.Command{
-			{Name: "serve", Usage: "serve the catalog HTTP API; stop before importing", Flags: []cli.Flag{
-				&cli.StringFlag{Name: "listen", Usage: "HTTP listen address", Value: "127.0.0.1:8080"},
-			}, Action: serveCommand},
+			{
+				Name:  "serve",
+				Usage: "serve the catalog HTTP API; stop before importing",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "listen",
+						Usage: "HTTP listen address",
+						Value: "127.0.0.1:8080",
+					},
+				},
+				Action: serveCommand,
+			},
 			{Name: "create", Usage: "create a disk", Flags: []cli.Flag{
-				&cli.StringFlag{Name: "label", Required: true}, &cli.StringFlag{Name: "capacity", Required: true},
+				&cli.StringFlag{
+					Name:     "label",
+					Required: true,
+				}, &cli.StringFlag{Name: "capacity", Required: true},
 				&cli.StringFlag{Name: "serial"}, &cli.StringFlag{Name: "notes"},
 			}, Action: func(ctx context.Context, cmd *cli.Command) error {
 				capacity, err := parseCapacity(cmd.String("capacity"))
 				if err != nil {
 					return fmt.Errorf("invalid capacity: %w", err)
 				}
+
 				return withCatalog(ctx, cmd, func(a *app.App) error {
-					id, err := a.CreateDisk(ctx, cmd.String("label"), cmd.String("notes"), cmd.String("serial"), capacity)
+					id, err := a.CreateDisk(
+						ctx,
+						cmd.String("label"),
+						cmd.String("notes"),
+						cmd.String("serial"),
+						capacity,
+					)
 					if err != nil {
 						return err
 					}
+
 					_, err = fmt.Fprintf(cmd.Writer, "created disk %d\n", id)
 					return err
 				})
@@ -60,16 +88,23 @@ func newCommand() *cli.Command {
 					{Flags: [][]cli.Flag{{capturedFlag}, {sourceMTimeFlag}}, Required: true},
 				}, Arguments: []cli.Argument{&cli.StringArg{Name: "checksum-file", Required: true}},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
-					req := app.ImportRequest{DiskID: base.DiskId(cmd.Int64("disk-id")), Path: cmd.StringArg("checksum-file"), UseSourceMTime: cmd.Bool("use-source-mtime"), AllowRepeat: cmd.Bool("allow-repeat")}
+					req := app.ImportRequest{
+						DiskID:         base.DiskId(cmd.Int64("disk-id")),
+						Path:           cmd.StringArg("checksum-file"),
+						UseSourceMTime: cmd.Bool("use-source-mtime"),
+						AllowRepeat:    cmd.Bool("allow-repeat"),
+					}
 					if cmd.IsSet("captured-at") {
 						captured, err := time.Parse(time.RFC3339Nano, cmd.String("captured-at"))
 						if err != nil {
 							return fmt.Errorf("invalid captured-at: %w", err)
 						}
+
 						req.CapturedAt = captured
 					} else if !req.UseSourceMTime {
 						return fmt.Errorf("use-source-mtime must be true")
 					}
+
 					return withCatalog(ctx, cmd, func(a *app.App) error {
 						var result base.Snapshot
 						var err error
@@ -78,10 +113,18 @@ func newCommand() *cli.Command {
 						} else {
 							result, err = a.Import(ctx, req)
 						}
+
 						if err != nil {
 							return err
 						}
-						_, err = fmt.Fprintf(cmd.Writer, "imported snapshot %d: complete, %d files, %d contents\n", result.Id, result.FileCount, result.ContentCount)
+
+						_, err = fmt.Fprintf(
+							cmd.Writer,
+							"imported snapshot %d: complete, %d files, %d contents\n",
+							result.Id,
+							result.FileCount,
+							result.ContentCount,
+						)
 						return err
 					})
 				},

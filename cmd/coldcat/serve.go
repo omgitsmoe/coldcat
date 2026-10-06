@@ -23,6 +23,7 @@ func serveCatalog(ctx context.Context, path, address string, output io.Writer) (
 	if _, _, err := net.SplitHostPort(address); err != nil {
 		return fmt.Errorf("invalid listen address: %w", err)
 	}
+
 	db, err := database.OpenContext(ctx, path)
 	if err != nil {
 		return fmt.Errorf("open catalog: %w", err)
@@ -43,6 +44,7 @@ func serveCatalog(ctx context.Context, path, address string, output io.Writer) (
 	if _, err := fmt.Fprintf(output, "serving http://%s\n", listener.Addr()); err != nil {
 		return err
 	}
+
 	done := make(chan error, 1)
 	go func() { done <- server.Serve(listener) }()
 	select {
@@ -55,10 +57,12 @@ func serveCatalog(ctx context.Context, path, address string, output io.Writer) (
 		if shutdownErr != nil {
 			shutdownErr = errors.Join(shutdownErr, server.Close())
 		}
+
 		serveErr := <-done
 		if errors.Is(serveErr, http.ErrServerClosed) {
 			serveErr = nil
 		}
+
 		return errors.Join(shutdownErr, serveErr)
 	}
 }

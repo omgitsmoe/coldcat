@@ -11,10 +11,14 @@ import (
 )
 
 func (db *DB) RecoverImports(ctx context.Context) error {
-	rows, err := db.db.QueryContext(ctx, "SELECT id FROM snapshot WHERE state='importing' ORDER BY id")
+	rows, err := db.db.QueryContext(
+		ctx,
+		"SELECT id FROM snapshot WHERE state='importing' ORDER BY id",
+	)
 	if err != nil {
 		return err
 	}
+
 	var ids []int64
 	for rows.Next() {
 		var id int64
@@ -22,18 +26,22 @@ func (db *DB) RecoverImports(ctx context.Context) error {
 			rows.Close()
 			return err
 		}
+
 		ids = append(ids, id)
 	}
+
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
 		return err
 	}
+
 	for _, id := range ids {
 		if err := db.CleanupImport(ctx, id); err != nil {
 			return fmt.Errorf("snapshot %d: %w", id, err)
 		}
 	}
+
 	return nil
 }
 
@@ -44,15 +52,19 @@ func (db *DB) CleanupImport(ctx context.Context, id int64) error {
 		if err == sql.ErrNoRows {
 			return nil
 		}
+
 		if err != nil {
 			return err
 		}
+
 		if state != "importing" {
 			return fmt.Errorf("%w: snapshot %d is not importing", ErrConflict, id)
 		}
+
 		if _, err := tx.ExecContext(ctx, "DELETE FROM observation WHERE snapshot_id=?", id); err != nil {
 			return err
 		}
+
 		if _, err := tx.ExecContext(ctx, "DELETE FROM pending_size WHERE snapshot_id=?", id); err != nil {
 			return err
 		}
@@ -63,6 +75,7 @@ func (db *DB) CleanupImport(ctx context.Context, id int64) error {
  AND NOT EXISTS(SELECT 1 FROM import_content WHERE content_id=content.id AND snapshot_id!=?)`, id, id); err != nil {
 			return err
 		}
+
 		_, err = tx.ExecContext(ctx, "DELETE FROM snapshot WHERE id=?", id)
 		return err
 	})
@@ -80,13 +93,18 @@ type DuplicateImportError struct {
 }
 
 func (e *DuplicateImportError) Error() string {
-	return fmt.Sprintf("inventory already imported as snapshot %d for disk %d; use --allow-repeat to record another snapshot explicitly", e.SnapshotID, e.DiskID)
+	return fmt.Sprintf(
+		"inventory already imported as snapshot %d for disk %d; use --allow-repeat to record another snapshot explicitly",
+		e.SnapshotID,
+		e.DiskID,
+	)
 }
 
 func (e *DuplicateImportError) Unwrap() error { return ErrConflict }
 
 func (db *DB) PublishImport(ctx context.Context, req PublishImportRequest) (base.Snapshot, error) {
 	id := req.SnapshotID
+
 	var result base.Snapshot
 	err := db.TransactionContext(ctx, func(tx *Tx) error {
 		var state string
@@ -95,9 +113,11 @@ func (db *DB) PublishImport(ctx context.Context, req PublishImportRequest) (base
 		if err := tx.QueryRowContext(ctx, "SELECT state,disk_id,captured_at,input_format FROM snapshot WHERE id=?", id).Scan(&state, &diskID, &capturedAt, &format); err != nil {
 			return err
 		}
+
 		if state != "importing" {
 			return fmt.Errorf("%w: snapshot is not importing", ErrConflict)
 		}
+
 		if !req.AllowRepeat {
 			var existing base.SnapshotId
 			err := tx.QueryRowContext(ctx, `SELECT id FROM snapshot WHERE state='complete'
@@ -105,33 +125,59 @@ func (db *DB) PublishImport(ctx context.Context, req PublishImportRequest) (base
 			if err == nil {
 				return &DuplicateImportError{SnapshotID: existing, DiskID: diskID}
 			}
+
 			if !errors.Is(err, sql.ErrNoRows) {
 				return err
 			}
 		}
+
 		var conflict int
-		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM pending_size p JOIN content c ON c.id=p.content_id WHERE p.snapshot_id=? AND c.size IS NOT NULL AND c.size!=p.size`, id).Scan(&conflict); err != nil {
+		if err := tx.QueryRowContext(
+			ctx,
+			`SELECT COUNT(*)
+			FROM pending_size AS p
+			JOIN content AS c ON c.id = p.content_id
+			WHERE p.snapshot_id = ?
+			  AND c.size IS NOT NULL
+			  AND c.size != p.size`,
+			id,
+		).Scan(&conflict); err != nil {
 			return err
 		}
+
 		if conflict != 0 {
 			return fmt.Errorf("%w: conflicting known content sizes", ErrConflict)
 		}
+
 		if _, err := tx.ExecContext(ctx, `UPDATE content SET size=(SELECT size FROM pending_size WHERE snapshot_id=? AND content_id=content.id)
  WHERE size IS NULL AND id IN(SELECT content_id FROM pending_size WHERE snapshot_id=?)`, id, id); err != nil {
 			return err
 		}
+
 		if _, err := tx.ExecContext(ctx, "DELETE FROM pending_size WHERE snapshot_id=?", id); err != nil {
 			return err
 		}
+
 		if _, err := tx.ExecContext(ctx, "DELETE FROM import_content WHERE snapshot_id=?", id); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `UPDATE snapshot SET state='complete',source_digest=?,file_count=(SELECT COUNT(*) FROM observation WHERE snapshot_id=?),
- content_count=(SELECT COUNT(DISTINCT content_id) FROM observation WHERE snapshot_id=?) WHERE id=?`, req.SourceDigest[:], id, id, id)
+
+		_, err := tx.ExecContext(
+			ctx,
+			`UPDATE snapshot SET state='complete',source_digest=?,file_count=(SELECT COUNT(*) FROM observation WHERE snapshot_id=?),
+ content_count=(SELECT COUNT(DISTINCT content_id) FROM observation WHERE snapshot_id=?) WHERE id=?`,
+			req.SourceDigest[:],
+			id,
+			id,
+			id,
+		)
 		if err != nil {
 			return err
 		}
-		result, err = scanSnapshot(tx.QueryRowContext(ctx, "SELECT "+snapshotColumns+" FROM snapshot WHERE id=?", id))
+
+		result, err = scanSnapshot(
+			tx.QueryRowContext(ctx, "SELECT "+snapshotColumns+" FROM snapshot WHERE id=?", id),
+		)
 		return err
 	})
 	return result, err

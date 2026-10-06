@@ -19,7 +19,9 @@ func TestParserPreservesMetadataPresenceAndPathSpelling(t *testing.T) {
 		if err := ParseCshd(strings.NewReader(test.input), func(f File) error { got = f; return nil }); err != nil {
 			t.Fatal(err)
 		}
-		if got.SizeKnown != test.sizeKnown || got.MTimeKnown != test.mtimeKnown || got.path() != test.path {
+
+		if got.SizeKnown != test.sizeKnown || got.MTimeKnown != test.mtimeKnown ||
+			got.path() != test.path {
 			t.Fatalf("presence/spelling: %+v", got)
 		}
 	}

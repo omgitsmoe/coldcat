@@ -3,8 +3,8 @@
 ## Catalog sessions
 
 Application code opens a catalog through `database.OpenContext` (or `Open`).
-Opening acquires an exclusive advisory lock, applies ordered transactional
-migrations, verifies foreign keys, and recovers abandoned imports before returning
+Opening acquires an exclusive advisory lock, initializes the schema transactionally,
+verifies foreign keys, and recovers abandoned imports before returning
 a usable catalog. All CLI commands use this path. The lock is held until `Close`.
 
 Locking uses `github.com/gofrs/flock`, which supports Windows and Unix. Another
@@ -23,7 +23,8 @@ The schema version is `PRAGMA user_version`. An empty database receives the init
 schema transactionally. Ordered migrations and version checks remain available for
 future schema changes, with tests covering rollback, retry, ordering, and reopening.
 
-During pre-0.1 development, schema changes update the initial definition directly.
+During pre-0.1 development, schema changes update the initial definition directly;
+no upgrade migrations are added. The migration infrastructure is retained for future use.
 Recreate development catalogs instead of converting old schemas. Existing inventories
 are assumed complete; there is no persistent trust or visibility state and no
 confirmation workflow. The initial schema enforces unique `(snapshot_id, path)`
@@ -46,6 +47,27 @@ Known sizes are staged, including enrichment of existing content. Publication
 atomically applies those sizes, records counters, removes staging/ownership rows,
 and changes the snapshot to `complete`. Completed snapshots and observations are
 immutable.
+
+The importer computes a streaming SHA-256 semantic digest over parsed records in
+input order. The version-1 encoding starts with a length-prefixed
+`coldcat-semantic-inventory-v1` domain string. Each record encodes the full relative
+path, canonical hash algorithm, hash bytes, size-known marker and optional size,
+then mtime-known marker and optional fixed-width UTC timestamp. Lengths, markers,
+and sizes are unsigned 64-bit big-endian integers; strings and byte arrays are
+length-prefixed. Unknown metadata has no encoded value. The digest depends on the
+supplied records, not existing or enriched catalog metadata.
+
+Publication rejects a completed snapshot with the same disk, input format,
+capture instant, and semantic digest before applying staged size enrichment.
+The error identifies the existing snapshot. Input filenames, comments, line
+endings, and equivalent parsed representations do not affect identity; record
+order does. The snapshot stores the 32-byte digest atomically with completion.
+Duplicate lookup uses a non-unique partial index over completed snapshots.
+
+Use `import --allow-repeat` to deliberately record another snapshot of the same
+inventory. This creates normal historical observations, participates in the
+existing capture-time/ID tie-break, and invalidates previous pagination cursors.
+Rejected repeats use ordinary failed-import cleanup and preserve cursor validity.
 
 Failure or cancellation immediately runs transactional cleanup with a separate
 30-second context. Cleanup removes observations, staging, and the failed snapshot;

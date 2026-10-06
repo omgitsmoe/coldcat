@@ -13,7 +13,8 @@ var ErrStaleCursor = errors.New("cursor belongs to a different inventory revisio
 
 func (db *DB) catalogState(ctx context.Context) (base.CatalogState, error) {
 	var state base.CatalogState
-	err := db.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(id),0) FROM snapshot WHERE state='complete'`).Scan(&state.Revision)
+	err := db.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(id),0) FROM snapshot WHERE state='complete'`).
+		Scan(&state.Revision)
 	return state, err
 }
 
@@ -26,7 +27,12 @@ func (db *DB) GetCatalogState(ctx context.Context) (base.CatalogState, error) {
 	return db.catalogState(ctx)
 }
 
-func (db *DB) LookupContent(ctx context.Context, algorithm string, hash []byte, scope base.Scope) (base.ContentSummary, error) {
+func (db *DB) LookupContent(
+	ctx context.Context,
+	algorithm string,
+	hash []byte,
+	scope base.Scope,
+) (base.ContentSummary, error) {
 	release, err := db.readAccess()
 	if err != nil {
 		return base.ContentSummary{}, err
@@ -35,17 +41,22 @@ func (db *DB) LookupContent(ctx context.Context, algorithm string, hash []byte, 
 	if _, err := base.FromIdentifier(algorithm); err != nil || len(hash) == 0 {
 		return base.ContentSummary{}, fmt.Errorf("%w: invalid hash identity", ErrValidation)
 	}
+
 	if scope != base.ScopeCurrent && scope != base.ScopeHistory {
 		return base.ContentSummary{}, fmt.Errorf("%w: invalid scope %q", ErrValidation, scope)
 	}
+
 	var id base.ContentId
-	err = db.db.QueryRowContext(ctx, `SELECT id FROM content WHERE hash_type=? AND hash=?`, algorithm, hash).Scan(&id)
+	err = db.db.QueryRowContext(ctx, `SELECT id FROM content WHERE hash_type=? AND hash=?`, algorithm, hash).
+		Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return base.ContentSummary{}, ErrNotFound
 	}
+
 	if err != nil {
 		return base.ContentSummary{}, err
 	}
+
 	return db.contentSummary(ctx, id, scope)
 }
 
@@ -59,11 +70,20 @@ const contentObservationQuery = currentSnapshots + `SELECT
  WHERE o.content_id=? AND o.id>? AND s.state='complete' AND (?='history' OR cs.id IS NOT NULL)
  ORDER BY o.id LIMIT ?`
 
-func (db *DB) ListContentObservations(ctx context.Context, id base.ContentId, scope base.Scope, limit int, after base.FileObservationId, expected *base.CatalogState) (base.ContentObservationPage, error) {
+func (db *DB) ListContentObservations(
+	ctx context.Context,
+	id base.ContentId,
+	scope base.Scope,
+	limit int,
+	after base.FileObservationId,
+	expected *base.CatalogState,
+) (base.ContentObservationPage, error) {
 	result := base.ContentObservationPage{Scope: scope, Items: []base.ContentObservation{}}
-	if id <= 0 || limit < 1 || limit > 200 || after < 0 || (scope != base.ScopeCurrent && scope != base.ScopeHistory) {
+	if id <= 0 || limit < 1 || limit > 200 || after < 0 ||
+		(scope != base.ScopeCurrent && scope != base.ScopeHistory) {
 		return result, fmt.Errorf("%w: invalid observation list request", ErrValidation)
 	}
+
 	release, err := db.readAccess()
 	if err != nil {
 		return result, err
@@ -73,25 +93,52 @@ func (db *DB) ListContentObservations(ctx context.Context, id base.ContentId, sc
 	if err != nil {
 		return result, err
 	}
+
 	if expected != nil && *expected != result.Catalog {
 		return result, ErrStaleCursor
 	}
+
 	var exists bool
-	if err := db.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM observation o JOIN snapshot s ON s.id=o.snapshot_id WHERE o.content_id=? AND s.state='complete')`, id).Scan(&exists); err != nil {
+	if err := db.db.QueryRowContext(ctx, `SELECT EXISTS (
+			SELECT 1
+			FROM observation AS o
+			JOIN snapshot AS s ON s.id = o.snapshot_id
+			WHERE o.content_id = ?
+			  AND s.state = 'complete'
+		)`, id).Scan(&exists); err != nil {
 		return result, err
 	}
+
 	if !exists {
 		return result, ErrNotFound
 	}
+
 	if after > 0 {
 		var valid bool
-		if err := db.db.QueryRowContext(ctx, currentSnapshots+`SELECT EXISTS(SELECT 1 FROM observation o JOIN snapshot s ON s.id=o.snapshot_id LEFT JOIN current_snapshot cs ON cs.id=s.id WHERE o.id=? AND o.content_id=? AND s.state='complete' AND (?='history' OR cs.id IS NOT NULL))`, after, id, scope).Scan(&valid); err != nil {
+		if err := db.db.QueryRowContext(
+			ctx,
+			currentSnapshots+`SELECT EXISTS (
+				SELECT 1
+				FROM observation AS o
+				JOIN snapshot AS s ON s.id = o.snapshot_id
+				LEFT JOIN current_snapshot AS cs ON cs.id = s.id
+				WHERE o.id = ?
+				  AND o.content_id = ?
+				  AND s.state = 'complete'
+				  AND (? = 'history' OR cs.id IS NOT NULL)
+			)`,
+			after,
+			id,
+			scope,
+		).Scan(&valid); err != nil {
 			return result, err
 		}
+
 		if !valid {
 			return result, fmt.Errorf("%w: invalid cursor anchor", ErrValidation)
 		}
 	}
+
 	rows, err := db.db.QueryContext(ctx, contentObservationQuery, id, after, scope, limit+1)
 	if err != nil {
 		return result, err
@@ -104,35 +151,60 @@ func (db *DB) ListContentObservations(ctx context.Context, id base.ContentId, sc
 		var captured, imported string
 		var capacity int64
 		s := &item.Snapshot
-		err := rows.Scan(&item.Observation.Id, &item.Observation.SnapshotId, &item.Observation.ContentId, &item.Observation.Path, &mtime,
-			&s.DiskId, &captured, &imported, &s.CaptureProvenance, &s.InputPath, &s.InputFormat, &s.FileCount, &s.ContentCount,
-			&item.Disk.Label, &item.Disk.Serial, &capacity, &size, &item.IsCurrent)
+		err := rows.Scan(
+			&item.Observation.Id,
+			&item.Observation.SnapshotId,
+			&item.Observation.ContentId,
+			&item.Observation.Path,
+			&mtime,
+			&s.DiskId,
+			&captured,
+			&imported,
+			&s.CaptureProvenance,
+			&s.InputPath,
+			&s.InputFormat,
+			&s.FileCount,
+			&s.ContentCount,
+			&item.Disk.Label,
+			&item.Disk.Serial,
+			&capacity,
+			&size,
+			&item.IsCurrent,
+		)
 		if err != nil {
 			return result, err
 		}
+
 		s.Id = item.Observation.SnapshotId
 		item.Disk.Id = s.DiskId
 		if capacity < 0 {
 			return result, fmt.Errorf("invalid stored disk capacity")
 		}
+
 		item.Disk.Capacity = uint64(capacity)
 		if s.CapturedAt, err = ParseTime(captured); err != nil {
 			return result, err
 		}
+
 		if s.ImportedAt, err = ParseTime(imported); err != nil {
 			return result, err
 		}
+
 		if mtime.Valid {
 			t, err := ParseTime(mtime.String)
 			if err != nil {
 				return result, err
 			}
+
 			item.Observation.MTime = &t
 		}
+
 		if size.Valid {
 			item.Size = &size.Int64
 		}
+
 		result.Items = append(result.Items, item)
 	}
+
 	return result, rows.Err()
 }

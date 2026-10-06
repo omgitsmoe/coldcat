@@ -34,6 +34,7 @@ func (d inventoryDigest) add(file File) error {
 	if err != nil {
 		return err
 	}
+
 	d.bytes([]byte(file.path()))
 	d.bytes([]byte(algorithm))
 	d.bytes(file.Hash)
@@ -43,12 +44,14 @@ func (d inventoryDigest) add(file File) error {
 	} else {
 		d.number(0)
 	}
+
 	if file.MTimeKnown {
 		d.number(1)
 		d.bytes([]byte(database.FormatTime(file.MTime)))
 	} else {
 		d.number(0)
 	}
+
 	return nil
 }
 
