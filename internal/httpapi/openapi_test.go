@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func openAPIDocument(t *testing.T) map[string]any {
@@ -113,6 +114,10 @@ func assertResponseSchema(t *testing.T, document map[string]any, schema map[stri
 
 	switch typed := value.(type) {
 	case string:
+		if minimum, ok := schema["minLength"].(float64); ok &&
+			utf8.RuneCountInString(typed) < int(minimum) {
+			t.Fatalf("string %q shorter than minLength %v", typed, minimum)
+		}
 		if pattern, ok := schema["pattern"].(string); ok && !regexp.MustCompile(pattern).MatchString(typed) {
 			t.Fatalf("%q does not match %s", typed, pattern)
 		}
@@ -128,10 +133,14 @@ func assertResponseSchema(t *testing.T, document map[string]any, schema map[stri
 			t.Fatal("object schema missing properties")
 		}
 
-		for _, required := range schema["required"].([]any) {
+		requiredProperties, _ := schema["required"].([]any)
+		for _, required := range requiredProperties {
 			if _, ok := typed[required.(string)]; !ok {
 				t.Fatalf("missing required property %s", required)
 			}
+		}
+		if minimum, ok := schema["minProperties"].(float64); ok && len(typed) < int(minimum) {
+			t.Fatalf("object has fewer than %v properties", minimum)
 		}
 
 		for key, item := range typed {

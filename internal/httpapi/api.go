@@ -42,6 +42,10 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 func writeError(w http.ResponseWriter, err error) {
 	status, code, message := http.StatusInternalServerError, "internal_error", "internal server error"
 	switch {
+	case errors.Is(err, errUnsupportedMediaType):
+		status, code, message = 415, "unsupported_media_type", "Content-Type must be application/json"
+	case errors.Is(err, errBodyTooLarge):
+		status, code, message = 413, "request_too_large", "request body exceeds 65536 bytes"
 	case errors.Is(err, database.ErrValidation):
 		status, code, message = 400, "invalid_request", err.Error()
 	case errors.Is(err, database.ErrNotFound):
@@ -118,10 +122,18 @@ func resourceID(r *http.Request) (int64, error) {
 
 func New(a *app.App) http.Handler {
 	mux := http.NewServeMux()
-	register := func(pattern string, handler func(http.ResponseWriter, *http.Request) error) {
+	registerMethods := func(
+		pattern string, allow string,
+		handlers map[string]func(http.ResponseWriter, *http.Request) error,
+	) {
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-			if r.Method != http.MethodGet && r.Method != http.MethodHead {
-				w.Header().Set("Allow", "GET, HEAD")
+			method := r.Method
+			if method == http.MethodHead {
+				method = http.MethodGet
+			}
+			handler, ok := handlers[method]
+			if !ok {
+				w.Header().Set("Allow", allow)
 				writeJSON(
 					w,
 					405,
@@ -137,6 +149,20 @@ func New(a *app.App) http.Handler {
 			}
 		})
 	}
+	register := func(pattern string, handler func(http.ResponseWriter, *http.Request) error) {
+		registerMethods(pattern, "GET, HEAD",
+			map[string]func(http.ResponseWriter, *http.Request) error{"GET": handler})
+	}
+	registerMethods("/api/v1/disks", "GET, HEAD, POST",
+		map[string]func(http.ResponseWriter, *http.Request) error{
+			"GET":  func(w http.ResponseWriter, r *http.Request) error { return listDisks(a, w, r) },
+			"POST": func(w http.ResponseWriter, r *http.Request) error { return createDisk(a, w, r) },
+		})
+	registerMethods("/api/v1/disks/{id}", "GET, HEAD, PATCH",
+		map[string]func(http.ResponseWriter, *http.Request) error{
+			"GET":   func(w http.ResponseWriter, r *http.Request) error { return getDisk(a, w, r) },
+			"PATCH": func(w http.ResponseWriter, r *http.Request) error { return updateDisk(a, w, r) },
+		})
 	register("/healthz", func(w http.ResponseWriter, r *http.Request) error {
 		if _, err := query(r); err != nil {
 			return err

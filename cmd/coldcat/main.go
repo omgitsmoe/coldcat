@@ -53,34 +53,9 @@ func newCommand() *cli.Command {
 				},
 				Action: serveCommand,
 			},
-			{Name: "create", Usage: "create a disk", Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:     "label",
-					Required: true,
-				}, &cli.StringFlag{Name: "capacity", Required: true},
-				&cli.StringFlag{Name: "serial"}, &cli.StringFlag{Name: "notes"},
-			}, Action: func(ctx context.Context, cmd *cli.Command) error {
-				capacity, err := parseCapacity(cmd.String("capacity"))
-				if err != nil {
-					return fmt.Errorf("invalid capacity: %w", err)
-				}
-
-				return withCatalog(ctx, cmd, func(a *app.App) error {
-					id, err := a.CreateDisk(
-						ctx,
-						cmd.String("label"),
-						cmd.String("notes"),
-						cmd.String("serial"),
-						capacity,
-					)
-					if err != nil {
-						return err
-					}
-
-					_, err = fmt.Fprintf(cmd.Writer, "created disk %d\n", id)
-					return err
-				})
-			}},
+			diskCreateCommand("create"),
+			diskCommands(),
+			snapshotCommands(),
 			{Name: "import", Usage: "import a complete disk inventory", ArgsUsage: "<file.cshd>",
 				Flags: []cli.Flag{allowRepeatFlag},
 				MutuallyExclusiveFlags: []cli.MutuallyExclusiveFlags{

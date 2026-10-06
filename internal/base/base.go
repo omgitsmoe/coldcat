@@ -13,6 +13,7 @@ type Disk struct {
 	Id       DiskId
 	Label    string
 	Serial   string
+	Notes    string
 	Capacity uint64
 }
 

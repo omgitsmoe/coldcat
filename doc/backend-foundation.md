@@ -15,7 +15,7 @@ files for the same catalog. Ordinary symlink aliases are canonicalized; hard-lin
 aliases and network-filesystem locking are outside this path-based contract.
 
 Within a session, importing also acquires an exclusive application gate. Queries,
-disk creation, and a second import fail while that gate is held.
+disk creation/editing, and a second import fail while that gate is held.
 
 ## Schema initialization and migrations
 
@@ -107,6 +107,9 @@ Unknown content sizes and observation mtimes are pointers with nil meaning unkno
 
 ```sh
 coldcat --db /path/to/catalog.sqlite create --label archive --capacity 2TB
+coldcat --db /path/to/catalog.sqlite disk create --label backup --capacity 2TB
+coldcat --db /path/to/catalog.sqlite disk list --json
+coldcat --db /path/to/catalog.sqlite snapshot list --disk-id 1 --json
 coldcat --db /path/to/catalog.sqlite import --label archive \
   --captured-at 2023-01-01T00:00:00Z inventory.cshd
 coldcat --db /path/to/catalog.sqlite import --disk-id 1 \
@@ -119,12 +122,49 @@ one capture-time choice. The mtime choice must explicitly be true. Successful
 import prints the complete snapshot ID and file/content counts. SIGINT/SIGTERM
 cancel through the import context.
 
+`create` and `disk create` share flags and output. `disk list` and `snapshot list`
+iterate all application pages; `--json` emits one JSON array on stdout, with decimal
+strings for IDs, byte counts and counters, and UTC timestamps. Optional disk metadata
+and absent latest inventories are null. Human-readable lists emit one row per item;
+empty lists emit no rows. Stop the server before running these catalog commands.
+
 CSHD v0 has unknown size; v1 distinguishes an empty size field from supplied zero.
 Missing mtime is unknown; supplied Unix epoch zero is known. Paths are disk-relative,
 case-sensitive Unicode strings with `/` separators. Backslashes are literal filename
 characters, independently of the host OS. Absolute paths, drive-qualified paths,
 empty/dot/parent segments, NULs, unsupported declared versions, invalid hex, numeric
 overflow, and conflicting known sizes are rejected. Scanner/read failures propagate.
+
+## Disk management
+
+The application supports typed disk creation, listing, detail and partial-update
+requests. HTTP exposes `GET/POST /api/v1/disks` and `GET/PATCH /api/v1/disks/{id}`.
+Creation requires a nonempty case-sensitive unique label and nonnegative capacity.
+Capacity is a decimal string on the wire, bounded by signed 64-bit storage. Labels
+are preserved without trimming or normalization. Serial and notes are optional;
+empty strings and null clear them. Omitted PATCH fields remain unchanged. Null labels
+or capacities, empty PATCH objects, unknown fields and trailing JSON values are rejected.
+Write requests require `application/json` and have a 65,536-byte body limit.
+
+Metadata updates are atomic and preserve inventory/observation identities. Reads
+return currently stored disk metadata, including for historical observations.
+Disk list/detail responses include the latest complete snapshot by `(captured_at,id)`,
+or null for disks without a complete inventory. Detail aggregates known content sizes
+per path, including repeated contents, and reports `unknown_size_file_count` and
+`size_complete`. These are cataloged subtotals, not measured disk usage/free space.
+A disk without an inventory has null aggregates; a complete empty inventory has zero
+counts and complete size information. Integer overflow fails explicitly. Each disk
+page/detail is assembled in a transaction for a coherent read.
+
+Disk lists use primary-key keyset pagination in ID-ascending order, with default 50
+and maximum 200 items per page. A cursor includes its kind, version, page size, last
+disk ID, initial maximum disk ID, and complete-inventory revision. Newly created
+disks do not enter an ongoing traversal. Metadata edits appear as stored when a page
+is fetched and do not invalidate cursors; a traversal is not a historical metadata
+snapshot. Successful imports invalidate cursors, while unchanged restarts, failed
+imports and recovery of abandoned imports preserve them. No metadata revision table
+is introduced. List pages use indexed per-disk latest-snapshot lookups; size aggregation
+is restricted to detail queries for one selected snapshot.
 
 ## HTTP content workflow
 
@@ -133,8 +173,9 @@ holds ownership until requests have drained and the database closes. Stop the se
 before importing. `serve` defaults to `127.0.0.1:8080`; startup errors fail the command,
 and SIGINT/SIGTERM request graceful shutdown with a ten-second drain deadline.
 
-`internal/httpapi` implements readiness, exact hash lookup, content lists/detail,
-content observation pages, disk snapshot pages, observation detail, and complete snapshot detail. See
+`internal/httpapi` implements readiness, disk management, exact hash lookup, content
+lists/detail, content observation pages, disk snapshot pages, observation detail,
+and complete snapshot detail. See
 [openapi.json](openapi.json) for the implemented wire contract. IDs, byte counts and
 aggregate counts are decimal strings; timestamps are UTC RFC3339 with optional
 fractional seconds, and unknown sizes/mtimes are null. CORS is not enabled.

@@ -1,6 +1,6 @@
 {
   "openapi": "3.1.0",
-  "info": {"title": "Coldcat content API", "version": "0.1.0", "description": "Read-only content and observation API. Imports run offline with the server stopped. IDs, counts and bytes are decimal strings. Only complete inventories are visible."},
+  "info": {"title": "Coldcat backend API", "version": "0.1.0", "description": "Content, observation and disk-management API. Imports run offline with the server stopped. GETs are read-only. IDs, counts and bytes are decimal strings. Only complete inventories are visible."},
   "servers": [{"url": "http://127.0.0.1:8080"}],
   "paths": {
     "/healthz": {
@@ -113,6 +113,71 @@
         }
       }
     },
+    "/api/v1/disks": {
+      "get": {
+        "summary": "List disk metadata and latest complete inventories",
+        "description": "Disk ID ascending. Keep limit unchanged when following a cursor. The first page fixes the maximum disk ID; disks created later are excluded from that traversal. Metadata edits appear as currently stored on each page and do not invalidate cursors. Successful offline imports invalidate cursors; unchanged restarts and failed imports preserve them. This is not a historical metadata snapshot. Unknown, repeated and empty parameters are rejected.",
+        "parameters": [
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}},
+          {"name": "cursor", "in": "query", "schema": {"type": "string", "minLength": 1, "maxLength": 2048}}
+        ],
+        "responses": {
+          "200": {"description": "Disk page", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DiskPage"}, "example": {"revision": "0", "items": [{"id": "1", "label": "archive", "notes": null, "serial": null, "capacity": "1000000000000", "latest_snapshot": null}], "next_cursor": null}}}},
+          "400": {"$ref": "#/components/responses/Invalid"},
+          "405": {"$ref": "#/components/responses/DiskCollectionMethod"},
+          "409": {"$ref": "#/components/responses/StaleCursor"},
+          "500": {"$ref": "#/components/responses/Internal"},
+          "503": {"$ref": "#/components/responses/Unavailable"}
+        }
+      },
+      "post": {
+        "summary": "Create a disk",
+        "description": "Requires a unique case-sensitive nonempty label and capacity as a decimal string in the range 0..9223372036854775807. Optional notes/serial may be omitted, null or empty. Unknown fields, trailing JSON values and query parameters are rejected. Body maximum 65536 bytes; Content-Type must be application/json.",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreateDisk"}, "example": {"label": "archive", "capacity": "1000000000000", "notes": "offline backup"}}}},
+        "responses": {
+          "201": {"description": "Created disk", "headers": {"Location": {"description": "Created disk detail route", "schema": {"type": "string"}, "example": "/api/v1/disks/1"}}, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DiskDetail"}, "example": {"id": "1", "label": "archive", "notes": "offline backup", "serial": null, "capacity": "1000000000000", "latest_snapshot": null, "cataloged": null}}}},
+          "400": {"$ref": "#/components/responses/Invalid"},
+          "405": {"$ref": "#/components/responses/DiskCollectionMethod"},
+          "409": {"$ref": "#/components/responses/DiskConflict"},
+          "413": {"$ref": "#/components/responses/TooLarge"},
+          "415": {"$ref": "#/components/responses/UnsupportedMedia"},
+          "500": {"$ref": "#/components/responses/Internal"},
+          "503": {"$ref": "#/components/responses/Unavailable"}
+        }
+      }
+    },
+    "/api/v1/disks/{id}": {
+      "get": {
+        "summary": "Read disk metadata and cataloged size completeness",
+        "description": "Latest complete inventory by (captured_at,id). Cataloged bytes sum known content sizes per file path, including repeated contents. Unknown sizes are counted separately. These are inventory subtotals, not measured disk usage/free space. A disk without an inventory has null latest_snapshot and cataloged; a complete empty inventory has zero counts and size_complete=true. Size-sum overflow is an explicit server error. No query parameters are accepted.",
+        "parameters": [{"$ref": "#/components/parameters/ID"}],
+        "responses": {
+          "200": {"description": "Disk detail", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DiskDetail"}, "example": {"id": "1", "label": "archive", "notes": null, "serial": "ABC", "capacity": "1000000000000", "latest_snapshot": {"id": "3", "disk_id": "1", "state": "complete", "captured_at": "2023-01-01T00:00:00Z", "imported_at": "2026-10-06T12:00:00Z", "capture_provenance": "explicit", "input_path": "/inventories/archive.cshd", "input_format": "cshd", "file_count": "4", "content_count": "3"}, "cataloged": {"file_count": "4", "content_count": "3", "known_bytes": "20", "unknown_size_file_count": "1", "size_complete": false}}}}},
+          "400": {"$ref": "#/components/responses/Invalid"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "405": {"$ref": "#/components/responses/DiskDetailMethod"},
+          "500": {"$ref": "#/components/responses/Internal"},
+          "503": {"$ref": "#/components/responses/Unavailable"}
+        }
+      },
+      "patch": {
+        "summary": "Atomically edit disk metadata",
+        "description": "Omitted fields remain unchanged. Null or empty notes/serial clear the field; label/capacity cannot be null. Empty requests, unknown fields, trailing JSON values and query parameters are rejected. Labels remain case-sensitive and unique. No inventory/content mutation. Body maximum 65536 bytes; Content-Type must be application/json.",
+        "parameters": [{"$ref": "#/components/parameters/ID"}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UpdateDisk"}, "example": {"label": "renamed archive", "notes": null}}}},
+        "responses": {
+          "200": {"description": "Updated disk detail", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DiskDetail"}}}},
+          "400": {"$ref": "#/components/responses/Invalid"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "405": {"$ref": "#/components/responses/DiskDetailMethod"},
+          "409": {"$ref": "#/components/responses/DiskConflict"},
+          "413": {"$ref": "#/components/responses/TooLarge"},
+          "415": {"$ref": "#/components/responses/UnsupportedMedia"},
+          "500": {"$ref": "#/components/responses/Internal"},
+          "503": {"$ref": "#/components/responses/Unavailable"}
+        }
+      }
+    },
     "/api/v1/disks/{id}/snapshots": {
       "get": {
         "summary": "Page through a disk's complete inventories",
@@ -156,6 +221,12 @@
       "Scope": {"name": "scope", "in": "query", "schema": {"type": "string", "enum": ["current", "history"], "default": "current"}}
     },
     "responses": {
+      "DiskCollectionMethod": {"description": "Allowed methods: GET, HEAD, POST", "headers": {"Allow": {"schema": {"type": "string", "const": "GET, HEAD, POST"}}}, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+      "DiskDetailMethod": {"description": "Allowed methods: GET, HEAD, PATCH", "headers": {"Allow": {"schema": {"type": "string", "const": "GET, HEAD, PATCH"}}}, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+      "DiskConflict": {"description": "Label already belongs to another disk", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "conflict", "message": "request conflicts with catalog state"}}}}},
+      "StaleCursor": {"description": "Inventory changed; restart pagination", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "stale_cursor", "message": "cursor belongs to a different inventory revision"}}}}},
+      "TooLarge": {"description": "Body exceeds 65536 bytes", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "request_too_large", "message": "request body exceeds 65536 bytes"}}}}},
+      "UnsupportedMedia": {"description": "Content-Type must be application/json", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "unsupported_media_type", "message": "Content-Type must be application/json"}}}}},
       "Content": {"description": "Content summary. Observation count always includes all complete historical observations. Unknown size is null, known zero is string 0.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Content"}, "example": {"id": "1", "hash": {"algorithm": "sha256", "hex": "ab"}, "size": "0", "scope": "current", "location_count": "4", "disk_count": "3", "observation_count": "4", "current_location_count": "4", "current_disk_count": "3"}}}},
       "Invalid": {"description": "Invalid or mismatched request/cursor", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "invalid_request", "message": "invalid request: limit must be between 1 and 200"}}}}},
       "NotFound": {"description": "Resource absent or visible only in an incomplete inventory", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "not_found", "message": "resource not found"}}}}},
@@ -163,6 +234,62 @@
       "Internal": {"description": "Unexpected server failure", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "internal_error", "message": "internal server error"}}}}}
     },
     "schemas": {
+      "CreateDisk": {
+        "type": "object", "required": ["label", "capacity"], "additionalProperties": false,
+        "properties": {
+          "label": {"type": "string", "minLength": 1},
+          "capacity": {"type": "string", "pattern": "^[0-9]+$", "description": "Decimal bytes, maximum 9223372036854775807"},
+          "notes": {"type": ["string", "null"]}, "serial": {"type": ["string", "null"]}
+        }
+      },
+      "UpdateDisk": {
+        "type": "object", "minProperties": 1, "additionalProperties": false,
+        "properties": {
+          "label": {"type": "string", "minLength": 1},
+          "capacity": {"type": "string", "pattern": "^[0-9]+$", "description": "Decimal bytes, maximum 9223372036854775807"},
+          "notes": {"type": ["string", "null"]}, "serial": {"type": ["string", "null"]}
+        }
+      },
+      "DiskSummary": {
+        "type": "object", "required": ["id", "label", "notes", "serial", "capacity", "latest_snapshot"],
+        "properties": {
+          "id": {"$ref": "#/components/schemas/ID"}, "label": {"type": "string"},
+          "notes": {"type": ["string", "null"]}, "serial": {"type": ["string", "null"]},
+          "capacity": {"$ref": "#/components/schemas/Decimal"},
+          "latest_snapshot": {"$ref": "#/components/schemas/NullableSnapshot"}
+        }
+      },
+      "DiskDetail": {
+        "type": "object", "required": ["id", "label", "notes", "serial", "capacity", "latest_snapshot", "cataloged"],
+        "properties": {
+          "id": {"$ref": "#/components/schemas/ID"}, "label": {"type": "string"},
+          "notes": {"type": ["string", "null"]}, "serial": {"type": ["string", "null"]},
+          "capacity": {"$ref": "#/components/schemas/Decimal"},
+          "latest_snapshot": {"$ref": "#/components/schemas/NullableSnapshot"},
+          "cataloged": {"type": ["object", "null"], "required": ["file_count", "content_count", "known_bytes", "unknown_size_file_count", "size_complete"], "properties": {
+            "file_count": {"$ref": "#/components/schemas/Count"}, "content_count": {"$ref": "#/components/schemas/Count"},
+            "known_bytes": {"$ref": "#/components/schemas/Decimal"}, "unknown_size_file_count": {"$ref": "#/components/schemas/Count"},
+            "size_complete": {"type": "boolean"}
+          }}
+        }
+      },
+      "DiskPage": {
+        "type": "object", "required": ["revision", "items", "next_cursor"],
+        "properties": {
+          "revision": {"$ref": "#/components/schemas/Decimal"},
+          "items": {"type": "array", "items": {"$ref": "#/components/schemas/DiskSummary"}},
+          "next_cursor": {"type": ["string", "null"]}
+        }
+      },
+      "NullableSnapshot": {
+        "type": ["object", "null"], "required": ["id", "disk_id", "state", "captured_at", "imported_at", "capture_provenance", "input_path", "input_format", "file_count", "content_count"],
+        "properties": {
+          "id": {"$ref": "#/components/schemas/ID"}, "disk_id": {"$ref": "#/components/schemas/ID"}, "state": {"type": "string", "const": "complete"},
+          "captured_at": {"$ref": "#/components/schemas/Timestamp"}, "imported_at": {"$ref": "#/components/schemas/Timestamp"},
+          "capture_provenance": {"type": "string", "enum": ["explicit", "source_mtime"]}, "input_path": {"type": "string"}, "input_format": {"type": "string"},
+          "file_count": {"$ref": "#/components/schemas/Count"}, "content_count": {"$ref": "#/components/schemas/Count"}
+        }
+      },
       "Decimal": {"type": "string", "pattern": "^(0|[1-9][0-9]*)$", "description": "Nonnegative signed 64-bit integer as decimal text"},
       "ContentPage": {
         "type": "object", "required": ["scope", "revision", "filters", "items", "next_cursor"],
@@ -237,7 +364,7 @@
       },
       "Error": {
         "type": "object", "required": ["error"],
-        "properties": {"error": {"type": "object", "required": ["code", "message"], "properties": {"code": {"type": "string", "enum": ["invalid_request", "not_found", "stale_cursor", "conflict", "catalog_unavailable", "internal_error", "method_not_allowed"]}, "message": {"type": "string"}}}}
+        "properties": {"error": {"type": "object", "required": ["code", "message"], "properties": {"code": {"type": "string", "enum": ["invalid_request", "not_found", "stale_cursor", "conflict", "catalog_unavailable", "internal_error", "method_not_allowed", "request_too_large", "unsupported_media_type"]}, "message": {"type": "string"}}}}
       }
     }
   }

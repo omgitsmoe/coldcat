@@ -63,7 +63,7 @@ func (db *DB) LookupContent(
 const contentObservationQuery = currentSnapshots + `SELECT
  o.id,o.snapshot_id,o.content_id,o.path,o.mtime,
  s.disk_id,s.captured_at,s.imported_at,s.capture_provenance,COALESCE(s.input_path,''),COALESCE(s.input_format,''),s.file_count,s.content_count,
- d.label,COALESCE(d.serial,''),d.capacity,c.size,cs.id IS NOT NULL
+ d.label,COALESCE(d.serial,''),COALESCE(d.notes,''),d.capacity,c.size,cs.id IS NOT NULL
  FROM observation o JOIN snapshot s ON s.id=o.snapshot_id
  JOIN disk d ON d.id=s.disk_id JOIN content c ON c.id=o.content_id
  LEFT JOIN current_snapshot cs ON cs.id=s.id
@@ -167,6 +167,7 @@ func (db *DB) ListContentObservations(
 			&s.ContentCount,
 			&item.Disk.Label,
 			&item.Disk.Serial,
+			&item.Disk.Notes,
 			&capacity,
 			&size,
 			&item.IsCurrent,

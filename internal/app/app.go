@@ -47,12 +47,9 @@ func (a *App) CreateDisk(
 	label, notes, serial string,
 	capacity int64,
 ) (base.DiskId, error) {
-	id, err := a.db.CreateDiskContext(ctx, label, notes, serial, capacity)
-	if err != nil {
-		return 0, err
-	}
-
-	return base.DiskId(id), nil
+	return a.CreateDiskWithRequest(ctx, CreateDiskRequest{
+		Label: label, Notes: notes, Serial: serial, Capacity: capacity,
+	})
 }
 
 func (a *App) LatestCompleteSnapshot(ctx context.Context, id base.DiskId) (base.Snapshot, error) {

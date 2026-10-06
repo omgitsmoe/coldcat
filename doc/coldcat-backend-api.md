@@ -16,9 +16,9 @@ Also support directory browsing/sizing, directory replication, redundancy filter
 - `internal/base`: disk, snapshot, content, observation, scope, and query-result types with nullable unknown metadata.
 - `internal/database`: transactional schema initialization/migration infrastructure, Windows/Unix exclusive catalog locking, import staging/publication/cleanup/recovery, and focused snapshot/content/observation queries.
 - `internal/importer`: streams `.cshd` records in batches of 1,000, validates records, propagates scanner/read errors and cancellation, and cleans up failed imports.
-- `internal/app`: context-aware application methods for disk creation, importing, snapshot reads, content/hash lookup, observation summaries, and cursor-paginated content lists, observations and disk snapshots. Content lists support catalog-wide redundancy counts and disk/directory membership filters.
-- `internal/httpapi`: readiness and read-only content/observation/snapshot routes, explicit wire DTOs, structured errors, and HTTP contract tests; implemented routes are described in [openapi.json](openapi.json).
-- `cmd/coldcat`: testable `create` and `import` commands with configurable `--db`, explicit capture-time selection, and signal cancellation.
+- `internal/app`: context-aware application methods for disk creation/editing/detail, importing, snapshot reads, content/hash lookup, observation summaries, and cursor-paginated disk/content lists, observations and disk snapshots. Content lists support catalog-wide redundancy counts and disk/directory membership filters.
+- `internal/httpapi`: readiness, disk management and read-only content/observation/snapshot routes, explicit wire DTOs, structured errors, and HTTP contract tests; implemented routes are described in [openapi.json](openapi.json).
+- `cmd/coldcat`: testable `create`, grouped `disk create/list`, `snapshot list`, and `import` commands with configurable `--db`, JSON list output, explicit capture-time selection, and signal cancellation.
 - Tests cover schema initialization and migration infrastructure, constraints, cross-process locking, import failure/recovery, metadata staging, current/history selection, replica counts, and lookup query plans.
 - Project-local `AGENTS.md` and backend documentation are present. No root `justfile` exists. `serve` runs the HTTP API on loopback by default.
 
@@ -30,7 +30,7 @@ Completed tasks use `[x]`; unfinished tasks use `[ ]`. **Partial** identifies a 
 | --- | --- |
 | A — fixtures, semantics, migration safety | Core schema and semantic tests complete; distributed partial-copy fixture remains. |
 | B — reliable streaming imports and CLI | Cleanup, recovery, validation, locking, duplicate-input detection, and basic CLI complete; remaining CLI contracts and server integration remain. |
-| C — primary workflow | Content/hash lookup, paginated content lists with redundancy/membership filters, observations and disk snapshots, snapshot/detail HTTP routes, and replica-count tests complete; search, disk lists/management, and remaining HTTP routes remain. |
+| C — primary workflow | Disk management, content/hash lookup, paginated disk/content lists with redundancy/membership filters, observations and disk snapshots, snapshot/detail HTTP routes, and replica-count tests complete; search and remaining HTTP routes remain. |
 | D — directories and history | Directory-shaped fixtures exist; directory services/comparisons and path-history timelines remain. |
 | E — performance and handoff | Test/race/vet checks and foundational query-plan checks complete; benchmarks, server restart/pagination tests, and the backend handoff gate remain. |
 
@@ -168,12 +168,12 @@ coldcat --db <database> serve --listen 127.0.0.1:8080
 - [x] Implement graceful server shutdown and process-level SIGINT/SIGTERM success-exit contract tests. Import-specific process contracts remain pending.
 - [x] Open/migrate/recover through one shared initialization path, using configurable `--db` rather than a hard-coded path in handlers.
 - [x] Automatically recover interrupted imports; no manual failed-snapshot cleanup command is required.
-- [ ] **Partial:** `serve` is implemented with exclusive catalog ownership. Grouped `disk create`, `disk list`, and `snapshot list` remain. Stop the server before importing.
-- [ ] Expose disk creation/editing over HTTP for future catalog management.
+- [x] Implement `serve` with exclusive catalog ownership, grouped `disk create`, `disk list`, and `snapshot list`. List commands support `--json` and traverse all pages. Stop the server before importing or running other catalog CLI commands.
+- [x] Expose disk creation/editing over HTTP for future catalog management.
 
 ## 5. HTTP API contract
 
-**Status: partial.** Readiness, hash lookup, content detail, paginated content lists with redundancy/membership filters, paginated content observations, paginated disk snapshots, observation detail, and complete snapshot detail are implemented with contract tests and [OpenAPI](openapi.json). Other routes below remain pending.
+**Status: partial.** Readiness, disk list/detail/create/edit, hash lookup, content detail, paginated content lists with redundancy/membership filters, paginated content observations, paginated disk snapshots, observation detail, and complete snapshot detail are implemented with contract tests and [OpenAPI](openapi.json). Other routes below remain pending.
 
 Version under `/api/v1`. GETs are read-only. Keep result lists bounded and paginated with deterministic sorting. Use structured errors such as `{error: {code, message, details}}`; map validation/not-found/conflict failures consistently. Emit UTC RFC3339 timestamps, nullable unknown metadata, and hashes as algorithm + hex. Define byte counts/IDs safely for JavaScript clients (decimal strings for potentially unsafe integers).
 
@@ -181,10 +181,10 @@ Version under `/api/v1`. GETs are read-only. Keep result lists bounded and pagin
 | --- | --- |
 | `GET /healthz` | Server/database readiness; failure is explicit. |
 | `GET /api/v1/catalog` | Catalog identity/revision, disk/file/content totals, current-scope definition. |
-| `GET /api/v1/disks` | Disk metadata and latest complete snapshot summary. |
-| `POST /api/v1/disks` | Create disk using existing application functionality. |
-| `GET /api/v1/disks/{id}` | Metadata, cataloged bytes/counts, latest snapshot and capture time. Cataloged bytes are not measured disk usage/free space. |
-| `PATCH /api/v1/disks/{id}` | Edit label/notes/serial/capacity; no arbitrary snapshot/content mutation. |
+| `GET /api/v1/disks` | Implemented: paginated disk metadata and latest complete snapshot summary. |
+| `POST /api/v1/disks` | Implemented: create disk, returning 201 and Location. |
+| `GET /api/v1/disks/{id}` | Implemented: metadata, cataloged bytes/counts and size completeness, latest snapshot and capture time. Cataloged bytes are not measured disk usage/free space. |
+| `PATCH /api/v1/disks/{id}` | Implemented: atomically edit label/notes/serial/capacity; omitted fields remain unchanged, null/empty notes and serial clear them. |
 | `GET /api/v1/disks/{id}/snapshots` | Paginated complete inventories. |
 | `GET /api/v1/snapshots/{id}` | Complete inventory provenance, dates, counts, and metadata completeness. |
 | `GET /api/v1/search` | Ranked observation search with content IDs and replica summaries. |
@@ -247,7 +247,7 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 ### Milestone C — primary search → content → replicas workflow
 
 - [x] Implement context-aware content summaries, observation detail with disk/snapshot context, explicit snapshot detail, and latest-complete-snapshot selection (`internal/app/app.go`, `internal/database/queries.go`).
-- [ ] **Partial:** hash lookup, paginated current/history content lists and observation lists, and paginated disk snapshot lists are implemented through application and HTTP APIs. Disk detail/list/edit remain.
+- [x] Implement hash lookup, paginated current/history content lists and observation lists, paginated disk snapshot lists, and disk detail/list/create/edit through application and HTTP APIs. Test disk metadata updates, latest-complete summaries, unknown-size completeness, revision-bound pagination, and grouped CLI list/create contracts.
 - [x] List distinct contents with current/history scope, disk/directory membership filters, and current redundancy bounds using both metrics. Test catalog-wide counts, literal path/segment semantics, nullable sizes, revision-bound pagination, reopen/recovery and HTTP/OpenAPI contracts.
 - [x] List a disk's complete snapshots through the application and `GET /api/v1/disks/{id}/snapshots`, ordered by capture time and ID descending, with revision-bound keyset cursors. Test empty/missing disks, capture-time ties, indexed first/deep pages, restart/recovery preservation, failed-import preservation, and successful-import invalidation.
 - [x] Exercise hash lookup → content → paginated observations → observation/snapshot detail through HTTP integration tests, including three current disks and two other disks.

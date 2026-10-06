@@ -184,14 +184,17 @@ func (db *DB) GetObservationSummary(
 	var mtime sql.NullString
 	var capacity int64
 	err = db.db.QueryRowContext(ctx, `SELECT o.id, o.snapshot_id, o.content_id, o.path, o.mtime,
-		d.id, d.label, COALESCE(d.serial, ''), d.capacity
+		d.id, d.label, COALESCE(d.serial, ''), COALESCE(d.notes, ''), d.capacity
 		FROM observation AS o
 		JOIN snapshot AS s ON s.id = o.snapshot_id
 		JOIN disk AS d ON d.id = s.disk_id
 		WHERE o.id = ?
 		  AND s.state = 'complete'`, id).
 		Scan(
-			&result.Observation.Id, &result.Observation.SnapshotId, &result.Observation.ContentId, &result.Observation.Path, &mtime, &result.Disk.Id, &result.Disk.Label, &result.Disk.Serial, &capacity)
+			&result.Observation.Id, &result.Observation.SnapshotId,
+			&result.Observation.ContentId, &result.Observation.Path, &mtime,
+			&result.Disk.Id, &result.Disk.Label, &result.Disk.Serial, &result.Disk.Notes, &capacity,
+		)
 	if errors.Is(err, sql.ErrNoRows) {
 		return result, ErrNotFound
 	}
