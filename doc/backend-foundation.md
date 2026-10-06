@@ -41,6 +41,40 @@ with chronological ordering.
 
 ## Import publication and recovery
 
+### CLI output and progress
+
+`import` writes progress to stderr and a final success summary to stdout. Add
+`--json` for exactly one newline-terminated object with `snapshot` and `elapsed_ms`.
+The snapshot has the same fields as `snapshot list --json`; IDs, counts, and elapsed
+milliseconds are decimal strings, and timestamps are UTC RFC3339Nano. Elapsed time
+uses a monotonic clock from catalog opening through successful application import,
+including recovery and label lookup, but excluding final output serialization.
+
+Progress reports committed file observations in the still-unpublished inventory,
+not visible files or distinct contents. The first batch is reported immediately;
+intermediate messages are throttled to one per 250 milliseconds. A final partial
+batch and the pre-publication phase are always reported. No percentage is claimed
+because the total input record count is unknown. Progress also uses stderr in JSON
+mode, leaving stdout suitable for scripts.
+
+Application imports accept an optional synchronous typed progress callback. Events
+run after batch commits, outside transactions, and immediately before publication.
+Callback errors and cancellation use normal failed-import cleanup. No fallible
+callback runs after publication. The CLI fails an import if progress output fails.
+
+Successful imports exit zero. Import errors and SIGINT/SIGTERM cancellation before
+publication exit one with diagnostics on stderr and no success result on stdout.
+Abrupt termination can leave committed import batches; normal catalog opening
+recovers them before exposing queries. Process tests cover both graceful signals
+and abrupt termination, including cursor preservation after recovery and cursor
+invalidation after a subsequent successful import.
+
+Final stdout write failures exit one but do not undo an already published snapshot;
+output can be partial in that case. Before retrying, inspect snapshot history or use
+the existing duplicate-import diagnostic to identify the completed inventory.
+
+### Publication and cleanup
+
 Each input represents a complete inventory of one disk. Imports commit bounded
 batches of 1,000 records while their snapshot is internally `importing`.
 Known sizes are staged, including enrichment of existing content. Publication

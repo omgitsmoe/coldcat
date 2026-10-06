@@ -31,12 +31,29 @@ func (f File) path() string { return f.PathRelativeToRoot + f.Name }
 
 type FileFunc = func(File) error
 
+type ProgressPhase string
+
+const (
+	ProgressImporting  ProgressPhase = "importing"
+	ProgressPublishing ProgressPhase = "publishing"
+)
+
+type Progress struct {
+	SnapshotID        base.SnapshotId
+	Phase             ProgressPhase
+	CommittedFiles    int64
+	StreamingComplete bool
+}
+
+type ProgressFunc func(Progress) error
+
 type Request struct {
 	DiskID         base.DiskId
 	Path           string
 	CapturedAt     time.Time
 	UseSourceMTime bool
 	AllowRepeat    bool
+	Progress       ProgressFunc
 }
 
 func Import(ctx context.Context, db *database.DB, req Request) (base.Snapshot, error) {
@@ -153,8 +170,20 @@ func ImportReader(
 	}()
 
 	const batchSize = 1000
+	var committed int64
+	report := func(phase ProgressPhase, final bool) error {
+		if req.Progress != nil {
+			if err := req.Progress(Progress{
+				SnapshotID: base.SnapshotId(snapshotID), Phase: phase,
+				CommittedFiles: committed, StreamingComplete: final,
+			}); err != nil {
+				return fmt.Errorf("report import progress: %w", err)
+			}
+		}
+		return ctx.Err()
+	}
 	batch := make([]File, 0, batchSize)
-	flush := func() error {
+	flush := func(final bool) error {
 		if len(batch) == 0 {
 			return ctx.Err()
 		}
@@ -163,8 +192,9 @@ func ImportReader(
 			return err
 		}
 
+		committed += int64(len(batch))
 		batch = batch[:0]
-		return nil
+		return report(ProgressImporting, final)
 	}
 	digest := newInventoryDigest()
 	err = ParseCshd(contextReader{ctx: ctx, reader: r}, func(file File) error {
@@ -178,7 +208,7 @@ func ImportReader(
 
 		batch = append(batch, file)
 		if len(batch) == batchSize {
-			return flush()
+			return flush(false)
 		}
 
 		return nil
@@ -187,7 +217,11 @@ func ImportReader(
 		return result, fmt.Errorf("parse %q: %w", req.Path, err)
 	}
 
-	if err = flush(); err != nil {
+	if err = flush(true); err != nil {
+		return result, err
+	}
+
+	if err = report(ProgressPublishing, true); err != nil {
 		return result, err
 	}
 

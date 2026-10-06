@@ -8,7 +8,7 @@ Build a tested backend for an offline disk catalog. The primary workflow is:
 2. Open the matching content.
 3. See its known locations, disks, replica counts, and observation details.
 
-Also support directory browsing/sizing, directory replication, redundancy filters, and observation history. Implement and exercise the application and HTTP APIs through tests before starting a frontend. No web UI or Wails integration in this work.
+Also support directory browsing/sizing, directory replication, and redundancy filters. Implement and exercise the application and HTTP APIs through tests before starting a frontend. No web UI or Wails integration in this work.
 
 ## Existing implementation
 
@@ -29,10 +29,10 @@ Completed tasks use `[x]`; unfinished tasks use `[ ]`. **Partial** identifies a 
 | Milestone | Status |
 | --- | --- |
 | A — fixtures, semantics, migration safety | Core schema and semantic tests complete; distributed partial-copy fixture remains. |
-| B — reliable streaming imports and CLI | Cleanup, recovery, validation, locking, duplicate-input detection, and basic CLI complete; remaining CLI contracts and server integration remain. |
+| B — reliable streaming imports and CLI | Cleanup, recovery, locking, duplicate-input detection, CLI output/progress/signal contracts, and process interruption tests complete; hash-length validation and import measurements remain. |
 | C — primary workflow | Disk management, content/hash lookup, paginated disk/content lists with redundancy/membership filters, observations and disk snapshots, snapshot/detail HTTP routes, and replica-count tests complete; search and remaining HTTP routes remain. |
-| D — directories and history | Directory-shaped fixtures exist; directory services/comparisons and path-history timelines remain. |
-| E — performance and handoff | Test/race/vet checks and foundational query-plan checks complete; benchmarks, server restart/pagination tests, and the backend handoff gate remain. |
+| D — directories | Directory-shaped fixtures exist; directory services/comparisons remain. |
+| E — performance and handoff | Foundational checks and restart/recovery pagination tests complete; remaining performance measurements and the backend handoff gate remain. |
 
 Resolved foundation gaps:
 
@@ -91,13 +91,10 @@ Implementation details are documented in [backend-foundation.md](backend-foundat
 - Coverage uses the same source-file selection rules; destination lookup remains content-based regardless of destination filenames.
 - Whole-tree fingerprints accelerate unfiltered comparisons. Arbitrary filters require query-specific manifests/fingerprints; an unfiltered fingerprint mismatch must not exclude a candidate that could match after filtering. Cache keys, if needed, include normalized filters and the comparison algorithm version.
 
-### Observation dates and history
+### Observation dates
 
 - Distinguish source `mtime`, inventory `captured_at`, and catalog `imported_at`.
 - Missing mtime is null. Mtime is reported metadata, not proof of a content change.
-- History follows `(disk_id, path)` across complete snapshots. Compare content identities and metadata separately; distinguish first observation, content change, metadata-only change, and absence from a later complete inventory.
-- Expose first/last observed times and the inventory interval in which a content change was observed. The exact change time between inventories is unknown.
-- Ordinary observation history remains path-based and does not declare renames from shared hashes. Future snapshot diffing may expose explicitly labelled move/rename candidates.
 
 ## 2. Backend boundaries and future metadata
 
@@ -123,7 +120,7 @@ Use the existing application layer as the shared backend:
 - [x] Adopt the pre-0.1 policy of updating the initial schema instead of writing compatibility migrations. Keep the transactional migration runner and its tests for future upgrades. Recreate development databases when needed; this session's recreation was skipped.
 - [x] Enforce unique `(snapshot_id, path)` observations. Unknown size is null; a supplied zero means a known empty file.
 - [x] Remove persistent trust/visibility states. Inventories are assumed complete; `importing` exists only until publication or cleanup. Recover interrupted imports before catalog access.
-- [x] Index observation content/snapshot and snapshot/path lookups, path-history lookup foundations, and latest-snapshot selection. Validate these lookup shapes with `EXPLAIN QUERY PLAN`.
+- [x] Index observation content/snapshot and snapshot/path lookups and latest-snapshot selection. Validate these lookup shapes with `EXPLAIN QUERY PLAN`.
 - [ ] Add basename/path search indexes and directory parent/fingerprint indexes, with query-plan tests for those services.
 - [ ] Add a derived directory table keyed by `(snapshot_id, path)` with parent, counts, known-byte aggregates, and manifest fingerprint; build it bottom-up before snapshot publication.
 
@@ -131,7 +128,7 @@ Use the existing application layer as the shared backend:
 
 1. **Done:** acquire exclusive catalog access, recover abandoned imports, and validate disk, format, explicit inventory time, and input path.
 2. **Done:** create an `importing` snapshot.
-3. **Partial:** stream records in bounded batches of 1,000. Progress reporting and measured memory bounds remain.
+3. **Partial:** stream records in bounded batches of 1,000 with typed progress and throttled CLI stderr reporting. Measured memory bounds remain.
 4. **Done for current validation:** validate paths/metadata/hash encoding, deduplicate content, and reject duplicate snapshot paths. Algorithm-specific hash-length validation remains.
 5. **Done:** return scanner/read errors and cancellation, with line/path context in record failures.
 6. **Pending:** build directory aggregates/fingerprints and search indexes.
@@ -163,9 +160,9 @@ coldcat --db <database> serve --listen 127.0.0.1:8080
 ```
 
 - [x] Retain `create` and provide local `import` with explicit capture-time selection. Successful import prints snapshot ID, complete state, and file/content counters to stdout.
-- [ ] Add elapsed time, stderr progress, and machine-readable final output.
+- [x] Add elapsed time, stderr progress, and machine-readable final output (`import --json`).
 - [x] Propagate SIGINT/SIGTERM cancellation and return nonzero exit codes on command errors.
-- [x] Implement graceful server shutdown and process-level SIGINT/SIGTERM success-exit contract tests. Import-specific process contracts remain pending.
+- [x] Implement graceful server shutdown and process-level SIGINT/SIGTERM success-exit contract tests. Import signals before publication clean up and exit nonzero, with process-level contracts.
 - [x] Open/migrate/recover through one shared initialization path, using configurable `--db` rather than a hard-coded path in handlers.
 - [x] Automatically recover interrupted imports; no manual failed-snapshot cleanup command is required.
 - [x] Implement `serve` with exclusive catalog ownership, grouped `disk create`, `disk list`, and `snapshot list`. List commands support `--json` and traverse all pages. Stop the server before importing or running other catalog CLI commands.
@@ -193,7 +190,6 @@ Version under `/api/v1`. GETs are read-only. Keep result lists bounded and pagin
 | `GET /api/v1/contents/{id}` | Hash, size/completeness, scoped location/disk counts, historical observation count. |
 | `GET /api/v1/contents/{id}/observations` | Paginated disks/paths/snapshots/mtimes; current or history scope. |
 | `GET /api/v1/observations/{id}` | Observation, content, disk, inventory context, other-location/disk counts. |
-| `GET /api/v1/observations/{id}/history` | Paginated timeline for that disk/path, including observed absences and change intervals. |
 | `GET /api/v1/snapshots/{id}/directories?parent=...` | Immediate child directories and their summaries. |
 | `GET /api/v1/snapshots/{id}/directory?path=...` | Recursive file/content counts, size completeness, maximum known mtime, redundancy histogram. |
 | `GET /api/v1/snapshots/{id}/directory/entries?path=...` | Immediate files/subdirectories; optional recursive file listing and replica filters. |
@@ -240,9 +236,9 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 - [x] Assert cleanup removes failed snapshot/observation/staging rows and import-owned orphans while preserving shared content and completed metadata. Verify recovery precedes catalog access/another import and that recovery failure prevents startup.
 - [ ] Extend cleanup assertions to derived directories and search entries when those indexes exist.
 - [x] Test cross-process catalog exclusion and OS lock release on abrupt process exit (`TestCatalogLockAcrossProcesses`). Test in-session query/disk-creation exclusion and second-import rejection (`TestImportBlocksCatalogQueriesAndSecondImport`).
-- [ ] **Partial:** server/import overlap and server startup recovery of seeded interrupted state are tested. A child-process interrupted-import/recovery test combining process exit with committed import batches remains; current recovery fixtures seed interrupted state directly.
+- [x] Test server/import overlap and server startup recovery of seeded interrupted state, plus child-process interrupted imports with committed batches, graceful signal cleanup, and abrupt-exit recovery.
 - [x] Exercise basic CLI argument validation, capture-time provenance, configurable database path, and successful human-readable output through `newCommand` (`cmd/coldcat/command_test.go`).
-- [ ] Complete stdout/stderr, progress, machine-readable output, elapsed-time, process signal, and exit-code contract tests.
+- [x] Complete stdout/stderr, progress, machine-readable output, elapsed-time, process signal, and exit-code contract tests.
 
 ### Milestone C — primary search → content → replicas workflow
 
@@ -256,25 +252,24 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 - [x] Test zero/one/two other-location counts and zero/one other-disk counts, historical-only zero counts, same-disk copies, and repeated historical observations (`TestSnapshotAndReplicaSemantics`).
 - [x] Add a content present on three current disks to exercise two other disks; implement and test content-list redundancy filters using both metrics, including same-disk copies and inclusive bounds.
 
-### Milestone D — directories and history
+### Milestone D — directories
 
 - [ ] Test root/nested browsing, segment boundaries (`foo` must not include `foobar`), wildcard characters in paths, recursive counts, duplicate-content bytes, and unknown-size completeness.
 - [ ] Test exact-tree equality despite root renaming/mtime changes; reject rearranged paths, missing files, and extra files.
 - [ ] Test filtered equality with differing excluded `.log` files, retained extra files, root/nested glob matches, allow/block precedence, escaped glob characters, different roots, and all files excluded. Verify filtered candidates are not incorrectly eliminated by whole-tree fingerprints.
 - [ ] Test per-disk coverage when source files are spread over unrelated directories and when no single disk has the full source set.
 - [ ] Test filtered source coverage, destination-name independence, and retained/excluded counts.
-- [ ] Test path-history timelines with unchanged/changed content, metadata-only changes, observed deletion/reappearance, and unknown source mtime. Current/history content counts and fixture changes are already covered, but timeline classification is pending.
 
 ### Milestone E — performance, recovery, and backend handoff
 
 - [ ] Agree a target catalog size and interactive latency budget; a suggested initial benchmark is one million observations, with results tracked for both cold and warm queries.
 - [ ] Benchmark streaming import memory/throughput, failure cleanup/recovery, fuzzy search recall/latency, replica filters, filtered/unfiltered directory queries, and pagination using representative name/path distributions.
-- [x] Check query plans for latest-snapshot selection, observation content/snapshot/path lookups, and path-history lookup foundations (`TestQueryIndexes`).
+- [x] Check query plans for latest-snapshot selection and observation content/snapshot/path lookups (`TestQueryIndexes`).
 - [x] Check exact hash lookup and content observation-page indexes; add focused 50,000-observation warm-query benchmarks for hash lookup and first/deep pages.
 - [x] Check content-list keyset and observation query indexes. Benchmark current/history first/deep pages, disk/directory membership and both redundancy metrics at 50,000 and 1,000,000 observations; document the catalog-wide cost of no-match bounds in `backend-foundation.md`. An agreed latency budget and cold-query measurements remain pending.
 - [ ] Check search query plans and remove full-catalog scans from the normal exact/substring lookup path; justify unavoidable heavier operations with measurements.
 - [x] Test application/import cancellation propagation and actionable catalog-lock errors; verify database-session recovery on reopen after seeded interruption or cleanup failure.
-- [ ] **Partial:** HTTP pagination is tested across unchanged reopen/restart and successful offline imports; failed imports preserve cursors, and server startup recovers seeded interrupted state before readiness. Combined child-process interrupted imports and pagination-after-recovery remain.
+- [x] Test HTTP pagination across unchanged reopen/restart and successful offline imports; failed imports preserve cursors, and server startup recovers seeded interrupted state before readiness. Child-process interrupted imports additionally verify application pagination after recovery and invalidation after subsequent publication.
 - [x] Run `go test ./...`, `go test -race ./...`, and `go vet ./...` with the configured Go 1.27.1 toolchain; all passed for the completed foundation. Packages/tests also cross-compiled for Windows amd64 and macOS arm64; runtime tests ran on Linux.
 - [ ] Run focused benchmarks. No `justfile` currently exists; adopt its commands if one is introduced.
 - [x] Document schema initialization, pre-0.1 reset policy, import publication/cleanup/recovery, locking, and query semantics in `doc/backend-foundation.md`.

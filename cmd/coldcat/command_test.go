@@ -94,7 +94,7 @@ func TestCommandDuplicateImport(t *testing.T) {
 		}
 
 		args = append([]string{"import", "--allow-repeat"}, args[1:]...)
-		if stdout, stderr, err := run(args...); err != nil || stderr != "" ||
+		if stdout, stderr, err := run(args...); err != nil || !strings.Contains(stderr, "publishing:") ||
 			!strings.Contains(stdout, "complete, 1 files, 1 contents") {
 			t.Fatalf("explicit repeat: stdout=%q stderr=%q err=%v", stdout, stderr, err)
 		}
