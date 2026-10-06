@@ -156,6 +156,16 @@ func New(a *app.App) http.Handler {
 	register("/api/v1/search", func(w http.ResponseWriter, r *http.Request) error {
 		return search(a, w, r)
 	})
+	register("/api/v1/snapshots/{id}/directory", func(w http.ResponseWriter, r *http.Request) error {
+		return getDirectory(a, w, r)
+	})
+	register("/api/v1/snapshots/{id}/directories", func(w http.ResponseWriter, r *http.Request) error {
+		return listDirectoryEntries(a, w, r, true)
+	})
+	register("/api/v1/snapshots/{id}/directory/entries",
+		func(w http.ResponseWriter, r *http.Request) error {
+			return listDirectoryEntries(a, w, r, false)
+		})
 	registerMethods("/api/v1/disks", "GET, HEAD, POST",
 		map[string]func(http.ResponseWriter, *http.Request) error{
 			"GET":  func(w http.ResponseWriter, r *http.Request) error { return listDisks(a, w, r) },

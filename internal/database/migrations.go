@@ -145,6 +145,6 @@ func migrateInitial(ctx context.Context, tx *Tx) error {
 		)
 	}
 
-	_, err := tx.ExecContext(ctx, diskSchema+inventorySchema+searchSchema)
+	_, err := tx.ExecContext(ctx, diskSchema+inventorySchema+searchSchema+directorySchema)
 	return err
 }

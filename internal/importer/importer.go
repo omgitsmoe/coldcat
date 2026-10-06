@@ -225,6 +225,10 @@ func ImportReader(
 		return result, err
 	}
 
+	if err = db.BuildDirectories(ctx, snapshotID); err != nil {
+		return result, fmt.Errorf("build directories: %w", err)
+	}
+
 	result, err = db.PublishImport(
 		ctx,
 		database.PublishImportRequest{

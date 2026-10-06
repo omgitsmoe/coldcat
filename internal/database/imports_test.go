@@ -79,8 +79,14 @@ func TestPublicationFailureRollsBackDigestAndEnrichment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := db.PublishImport(t.Context(), PublishImportRequest{SnapshotID: 1, SourceDigest: [32]byte{1}}); err == nil {
-		t.Fatal("publication succeeded")
+	if err := db.BuildDirectories(t.Context(), 1); err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.PublishImport(t.Context(), PublishImportRequest{
+		SnapshotID: 1, SourceDigest: [32]byte{1},
+	})
+	if err == nil || !strings.Contains(err.Error(), "publication failed") {
+		t.Fatalf("publication failure: %v", err)
 	}
 
 	var untouched bool

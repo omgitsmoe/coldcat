@@ -35,7 +35,11 @@ func ValidateContentFilters(f base.ContentFilters) error {
 }
 
 func validDirectory(path string) bool {
-	if strings.HasPrefix(path, "/") || strings.ContainsRune(path, 0) || len(path) > 1024 {
+	return len(path) <= 1024 && validDirectoryPath(path)
+}
+
+func validDirectoryPath(path string) bool {
+	if strings.HasPrefix(path, "/") || strings.ContainsRune(path, 0) {
 		return false
 	}
 	if len(path) > 1 && path[1] == ':' {

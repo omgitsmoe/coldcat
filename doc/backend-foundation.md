@@ -146,6 +146,140 @@ Application methods take contexts and return typed domain results; SQL remains i
 the database package. Snapshot results carry capture/import time and provenance.
 Unknown content sizes and observation mtimes are pointers with nil meaning unknown.
 
+## Directory indexes and browsing
+
+Directories are inferred from observation ancestors and identified by `(snapshot_id, path)`.
+The root is `""` and exists even in a zero-file inventory. Empty filesystem directories
+cannot be inferred. Paths preserve case and Unicode; `/` separates segments, while
+backslashes, SQL wildcard characters, and glob characters remain literal.
+
+`directory` stores parent relationships, recursive summaries, maximum reported mtime,
+and a versioned fingerprint. `directory_content` records each distinct descendant content
+and its occurrence count. `directory_file` associates observations with their immediate
+parent for indexed file pages. Parent, fingerprint, reverse-content, and snapshot/path
+lookups have query-plan tests.
+
+After observation batches finish, the database builds this index in a separate transaction
+while the snapshot is still importing. Recursive SQL enumerates ancestors and groups content
+membership; Go streams directory rows and fingerprint entries rather than retaining whole
+inventories or manifests. Fingerprints are built bottom-up. Observation batches remain
+bounded at 1,000; the derived-index transaction can be larger and its database/journal cost
+must be distinguished from streaming Go memory. Membership storage grows with file depth.
+
+Publication requires a successful directory-build marker, a root, completed fingerprints,
+and indexed file membership. Observation changes and staged-size mutations (including deletion
+while importing) invalidate the marker. Publication clears staging after marking complete,
+within the same transaction, so successful cleanup preserves the build prerequisite.
+Completed directory identity, counts, mtimes, and fingerprints are immutable;
+size aggregates remain enrichable. Failed imports delete directory rows before orphan-content
+cleanup. Snapshot ownership cascades remove membership, file-parent rows, and build markers.
+Reopening recovers abandoned directory indexes before application access.
+
+### Summaries and size enrichment
+
+File counts and known bytes count each descendant observation. Content counts and
+unique-content known bytes count each `(hash_type, hash)` once within that directory,
+including when shared across siblings. Unknown-size file/content counts distinguish incomplete
+subtotals from exact sizes. Known zero remains complete. The maximum known descendant mtime
+is null when no mtime is available; it does not establish a change date.
+
+Content sizes can become known through later inventories. Successful publication updates
+affected directory summaries across all snapshots in the same transaction as shared-content
+enrichment. Each new known size contributes `size × occurrences` to file bytes and `size`
+to unique-content bytes, removing the corresponding unknown counts. Failed publication
+rolls these changes back. Integer overflow in construction or enrichment rejects the import
+instead of rounding or silently returning an incomplete total.
+
+### Fingerprint version 1
+
+SHA-256 hashes a stream beginning with the length-prefixed UTF-8 domain
+`coldcat-directory-v1`. Immediate entries are sorted by binary path, then kind. Each entry
+encodes four length-prefixed fields: kind (`file` or `directory`), name relative to the parent,
+algorithm, and digest bytes. Lengths are unsigned 64-bit big-endian integers. Files encode
+their canonical content hash algorithm/digest; directories encode `directory-v1` and the
+already-computed child fingerprint. Root names, sizes, mtimes, and input-record order do not
+participate. Distinct file paths preserve multiplicity. File and inferred directory entries
+at the same path are distinguished by kind.
+
+These fingerprints are candidate indexes for the future exact-tree service. That service
+must verify canonical manifest equality before declaring replicas and build query-specific
+manifests for filtered comparisons.
+
+### HTTP and pagination
+
+The three directory routes operate on the requested complete snapshot:
+
+- `/api/v1/snapshots/{id}/directories?parent=...`: immediate child directories.
+- `/api/v1/snapshots/{id}/directory?path=...`: recursive summary and redundancy histogram.
+- `/api/v1/snapshots/{id}/directory/entries?path=...`: immediate files/directories;
+  `recursive=true` selects descendant files only.
+
+Omitted/empty `parent` or `path` selects root. Malformed paths return 400; absent directories
+and incomplete/missing snapshots return 404. No host-path normalization or wildcard expansion
+is applied. Entries sort by binary path and kind, with directory before file for equal paths.
+Pages default to 50 entries and are limited to 200. Cursors bind normalized filters, source
+snapshot/path, listing mode, replica metric/bounds, limit, sort version, and inventory revision.
+The normalized filter digest and stable observation/directory IDs keep cursors compact even
+for long imported paths. Sort paths are resolved from those IDs within the query transaction.
+Directory browsing accepts canonical paths at the lengths supported by importing, including
+long names and nested paths exceeding the separate search/content membership-filter limits.
+Unchanged restarts and failed-import recovery preserve cursors; successful imports invalidate
+them, including when enriching historical sizes.
+
+Replica information always uses the latest complete inventories catalog-wide, independently
+of source tree membership. The histogram groups descendant file occurrences by distinct current
+disks other than the source disk. File entries also expose other current locations, excluding
+the source `(disk_id, path)` only when currently occupied by the same content. Historical-only
+contents therefore report zero, not negative values. Responses include the source inventory,
+capture context, current status, revision, and `replica_scope=current`.
+
+Replica bounds filter file entries; immediate child directories remain navigation entries.
+The default metric is disks. Unfiltered file queries page before replica expansion. Filtered
+queries aggregate current replicas once per qualifying distinct content rather than once per
+file occurrence. Both forms use keyset seeking; subtree prefix bounds preserve segment
+boundaries and do not interpret SQL wildcards. OpenAPI describes the wire types and examples.
+
+Directory query/build and recovery benchmarks run at 50,000 and 1,000,000 observations:
+
+```sh
+go test ./internal/database -run '^$' \
+  -bench 'BenchmarkDirectory(Queries|Recovery|Enrichment)' -benchtime=1x -benchmem -v
+```
+
+The isolated directory benchmarks disable observation search-index triggers during fixture
+construction, distinguishing directory cost from existing FTS/short-posting costs. Query
+fixtures cover shallow-wide, eight-extra-level deep, and high-duplicate-content trees. Build
+time and added catalog bytes are logged; recovery includes catalog opening and deletion of
+an abandoned built inventory. These are warm, single-iteration measurements, not filesystem-cold
+latencies or a production latency guarantee. `BenchmarkSearchIndexedImport` exercises the
+full streaming import with both search and directory indexes.
+
+On Linux amd64 / Ryzen 5 9600X, the warm single-iteration measurements were:
+
+| Observations / shape | Directory build | Added index bytes | Root detail | Recursive first / deep page |
+| --- | --- | --- | --- | --- |
+| 50,000 / wide | 0.67 s | 6,238,208 | 11.9 ms | 1.3 / 1.8 ms |
+| 50,000 / deep | 2.28 s | 34,500,608 | 12.2 ms | 1.2 / 2.2 ms |
+| 50,000 / duplicate | 0.56 s | 4,673,536 | 4.2 ms | 1.2 / 2.0 ms |
+| 1,000,000 / wide | 14.52 s | 95,887,360 | 85.3 ms | 3.3 / 5.4 ms |
+| 1,000,000 / deep | 46.91 s | 383,746,048 | 86.3 ms | 3.1 / 5.3 ms |
+| 1,000,000 / duplicate | 13.54 s | 94,322,688 | 76.0 ms | 4.8 / 9.8 ms |
+
+Child-directory pages were 0.5–0.7 ms; immediate-file pages were 1.3–4.8 ms.
+Filtered nested file pages were 2.0–3.4 ms at 50,000 observations and 29.0–36.2 ms
+at one million. Directory-only recovery took 0.68 s / 16.65 s at those scales, including
+deletion of import-owned content and catalog opening. Root detail includes the dynamic
+redundancy histogram; stored size-summary lookup alone is cheaper. Numeric latency/storage
+budgets, filesystem-cold queries, and broader multi-disk distributions remain to be agreed
+or measured.
+
+Publishing one newly known content size across 50,000 / 1,000,000 historical file occurrences
+took about 6.0 / 6.0 ms with 100 source subdirectories, showing that enrichment follows
+content/directory memberships rather than individual observations. Full 50,000-file imports
+with search and directory indexes took 16.85 s; a late parse failure plus cleanup took 25.43 s.
+Progress-sampled Go heap was approximately 3.4–3.5 MiB; these samples are neither RSS nor
+a measurement of peak memory during the derived build.
+
 ## CLI
 
 ```sh

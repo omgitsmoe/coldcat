@@ -3,6 +3,86 @@
   "info": {"title": "Coldcat backend API", "version": "0.1.0", "description": "Content, observation and disk-management API. Imports run offline with the server stopped. GETs are read-only. IDs, counts and bytes are decimal strings. Only complete inventories are visible."},
   "servers": [{"url": "http://127.0.0.1:8080"}],
   "paths": {
+    "/api/v1/snapshots/{id}/directories": {
+      "get": {
+        "summary": "Browse immediate child directories in a complete snapshot",
+        "description": "Root is the empty path and exists even for a zero-file inventory. Directories are inferred from file paths. Paths are case-sensitive valid UTF-8 with / separators, no absolute paths, trailing separators, empty nonroot segments, or dot/parent-traversal segments. Long imported paths remain browsable; cursors use stable IDs and a filter digest. Backslashes and glob characters are literal. Missing directories and incomplete snapshots return 404. Sort by binary path and entry kind. Keep parameters and limit unchanged when following cursors. Successful imports invalidate cursors; unchanged restarts, recovery and failed imports preserve them. Unknown/repeated/empty parameters are rejected except parent.",
+        "parameters": [
+          {"$ref": "#/components/parameters/ID"},
+          {"name": "parent", "in": "query", "allowEmptyValue": true, "description": "Omitted or empty means root.", "schema": {"type": "string"}, "example": "docs"},
+          {"$ref": "#/components/parameters/DirectoryLimit"},
+          {"$ref": "#/components/parameters/DirectoryCursor"}
+        ],
+        "responses": {
+          "200": {"description": "Child-directory page", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DirectoryPage"}, "example": {
+            "snapshot": {"id": "1", "disk_id": "1", "state": "complete", "captured_at": "2026-10-01T12:00:00Z", "imported_at": "2026-10-06T12:00:00Z", "capture_provenance": "explicit", "input_path": "/inventories/source.cshd", "input_format": "cshd", "file_count": "3", "content_count": "2"},
+            "revision": "3", "is_current": true, "replica_scope": "current",
+            "filters": {"path": "", "directories_only": true, "recursive": false, "replica_metric": "disks", "other_replicas": null, "min_other_replicas": null, "max_other_replicas": null},
+            "items": [{"path": "docs", "kind": "directory", "file": null, "directory": {"path": "docs", "file_count": "3", "content_count": "2", "known_bytes": "8", "unknown_size_file_count": "1", "size_complete": false, "unique_content_known_bytes": "4", "unknown_size_content_count": "1", "unique_content_size_complete": false, "max_known_mtime": null}}], "next_cursor": null
+          }}}},
+          "400": {"$ref": "#/components/responses/Invalid"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"description": "Stale inventory cursor", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "405": {"description": "Only GET and HEAD are allowed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "500": {"$ref": "#/components/responses/Internal"},
+          "503": {"$ref": "#/components/responses/Unavailable"}
+        }
+      }
+    },
+    "/api/v1/snapshots/{id}/directory": {
+      "get": {
+        "summary": "Read recursive directory sizes and current redundancy",
+        "description": "Membership belongs to the requested complete snapshot, including historical snapshots. File bytes count repeated content at each path; unique-content bytes count each identity once. Unknown sizes are reported separately and known zero is complete. Sizes reflect successful shared-content enrichment from later imports. max_known_mtime is reported metadata, null when unavailable. The histogram weights descendant file occurrences by distinct current disks other than the source disk; repeated historical snapshots add no replicas. No inferred directory claims to represent unavailable empty filesystem directories or allocation sizes.",
+        "parameters": [
+          {"$ref": "#/components/parameters/ID"},
+          {"$ref": "#/components/parameters/DirectoryPath"}
+        ],
+        "responses": {
+          "200": {"description": "Recursive directory summary", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DirectoryDetail"}, "example": {
+            "snapshot": {"id": "1", "disk_id": "1", "state": "complete", "captured_at": "2026-10-01T12:00:00Z", "imported_at": "2026-10-06T12:00:00Z", "capture_provenance": "explicit", "input_path": "/inventories/source.cshd", "input_format": "cshd", "file_count": "3", "content_count": "2"},
+            "revision": "3", "is_current": true, "replica_scope": "current",
+            "directory": {"path": "", "file_count": "3", "content_count": "2", "known_bytes": "8", "unknown_size_file_count": "1", "size_complete": false, "unique_content_known_bytes": "4", "unknown_size_content_count": "1", "unique_content_size_complete": false, "max_known_mtime": null},
+            "redundancy_histogram": [{"other_disk_count": "0", "file_count": "1"}, {"other_disk_count": "2", "file_count": "2"}]
+          }}}},
+          "400": {"$ref": "#/components/responses/Invalid"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "405": {"description": "Only GET and HEAD are allowed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "500": {"$ref": "#/components/responses/Internal"},
+          "503": {"$ref": "#/components/responses/Unavailable"}
+        }
+      }
+    },
+    "/api/v1/snapshots/{id}/directory/entries": {
+      "get": {
+        "summary": "Page immediate files/directories or recursive files",
+        "description": "Binary path then kind ordering; directory precedes file at equal paths. recursive=true lists descendant files only. Replica bounds filter files against the whole current catalog; immediate child directories remain navigation entries. Historical source files remain selectable, with current other counts excluding their source disk/location only when present. Metric defaults to disks. Exact bounds cannot combine with range bounds. Preserve all filters and limit when following cursors. Source snapshot, revision, current status and applied filters are explicit. Paths follow the directory browsing contract. Missing directories return 404.",
+        "parameters": [
+          {"$ref": "#/components/parameters/ID"},
+          {"$ref": "#/components/parameters/DirectoryPath"},
+          {"name": "recursive", "in": "query", "schema": {"type": "boolean", "default": false}},
+          {"name": "replica_metric", "in": "query", "schema": {"type": "string", "enum": ["disks", "locations"], "default": "disks"}},
+          {"name": "other_replicas", "in": "query", "schema": {"$ref": "#/components/schemas/Decimal"}},
+          {"name": "min_other_replicas", "in": "query", "schema": {"$ref": "#/components/schemas/Decimal"}},
+          {"name": "max_other_replicas", "in": "query", "schema": {"$ref": "#/components/schemas/Decimal"}},
+          {"$ref": "#/components/parameters/DirectoryLimit"},
+          {"$ref": "#/components/parameters/DirectoryCursor"}
+        ],
+        "responses": {
+          "200": {"description": "Bounded directory entry page", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DirectoryPage"}, "example": {
+            "snapshot": {"id": "1", "disk_id": "1", "state": "complete", "captured_at": "2026-10-01T12:00:00Z", "imported_at": "2026-10-06T12:00:00Z", "capture_provenance": "explicit", "input_path": "/inventories/source.cshd", "input_format": "cshd", "file_count": "3", "content_count": "2"},
+            "revision": "3", "is_current": false, "replica_scope": "current",
+            "filters": {"path": "docs", "directories_only": false, "recursive": true, "replica_metric": "disks", "other_replicas": "0", "min_other_replicas": null, "max_other_replicas": null},
+            "items": [{"path": "docs/unknown", "kind": "file", "directory": null, "file": {"observation": {"id": "1", "snapshot_id": "1", "content_id": "1", "path": "docs/unknown", "mtime": null}, "hash": {"algorithm": "sha256", "hex": "abababababababababababababababababababababababababababababababab"}, "size": null, "other_location_count": "0", "other_disk_count": "0"}}], "next_cursor": null
+          }}}},
+          "400": {"$ref": "#/components/responses/Invalid"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"description": "Stale inventory cursor", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "405": {"description": "Only GET and HEAD are allowed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "500": {"$ref": "#/components/responses/Internal"},
+          "503": {"$ref": "#/components/responses/Unavailable"}
+        }
+      }
+    },
     "/api/v1/search": {
       "get": {
         "summary": "Search observations by filename or disk-relative path",
@@ -256,6 +336,9 @@
   },
   "components": {
     "parameters": {
+      "DirectoryPath": {"name": "path", "in": "query", "allowEmptyValue": true, "description": "Omitted or empty means root. Case-sensitive valid UTF-8 disk-relative directory with / separators; long imported directory paths are supported. No absolute paths, traversal or trailing separators; glob characters and backslashes are literal.", "schema": {"type": "string"}, "example": "docs"},
+      "DirectoryLimit": {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}},
+      "DirectoryCursor": {"name": "cursor", "in": "query", "description": "Opaque next_cursor; preserve filters and limit.", "schema": {"type": "string", "minLength": 1, "maxLength": 16384}},
       "ID": {"name": "id", "in": "path", "required": true, "schema": {"$ref": "#/components/schemas/ID"}},
       "Scope": {"name": "scope", "in": "query", "schema": {"type": "string", "enum": ["current", "history"], "default": "current"}}
     },
@@ -273,6 +356,71 @@
       "Internal": {"description": "Unexpected server failure", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "internal_error", "message": "internal server error"}}}}}
     },
     "schemas": {
+      "DirectorySummary": {
+        "type": "object", "required": ["path", "file_count", "content_count", "known_bytes", "unknown_size_file_count", "size_complete", "unique_content_known_bytes", "unknown_size_content_count", "unique_content_size_complete", "max_known_mtime"],
+        "properties": {
+          "path": {"type": "string"},
+          "file_count": {"$ref": "#/components/schemas/Decimal"},
+          "content_count": {"$ref": "#/components/schemas/Decimal"},
+          "known_bytes": {"$ref": "#/components/schemas/Decimal"},
+          "unknown_size_file_count": {"$ref": "#/components/schemas/Decimal"},
+          "size_complete": {"type": "boolean"},
+          "unique_content_known_bytes": {"$ref": "#/components/schemas/Decimal"},
+          "unknown_size_content_count": {"$ref": "#/components/schemas/Decimal"},
+          "unique_content_size_complete": {"type": "boolean"},
+          "max_known_mtime": {"type": ["string", "null"], "format": "date-time"}
+        }
+      },
+      "DirectoryDetail": {
+        "type": "object", "required": ["snapshot", "revision", "is_current", "replica_scope", "directory", "redundancy_histogram"],
+        "properties": {
+          "snapshot": {"$ref": "#/components/schemas/Snapshot"},
+          "revision": {"$ref": "#/components/schemas/Decimal"},
+          "is_current": {"type": "boolean"},
+          "replica_scope": {"type": "string", "const": "current"},
+          "directory": {"$ref": "#/components/schemas/DirectorySummary"},
+          "redundancy_histogram": {"type": "array", "items": {"type": "object", "required": ["other_disk_count", "file_count"], "properties": {
+            "other_disk_count": {"$ref": "#/components/schemas/Decimal"}, "file_count": {"$ref": "#/components/schemas/Decimal"}
+          }}}
+        }
+      },
+      "DirectoryPage": {
+        "type": "object", "required": ["snapshot", "revision", "is_current", "replica_scope", "filters", "items", "next_cursor"],
+        "properties": {
+          "snapshot": {"$ref": "#/components/schemas/Snapshot"},
+          "revision": {"$ref": "#/components/schemas/Decimal"},
+          "is_current": {"type": "boolean"},
+          "replica_scope": {"type": "string", "const": "current"},
+          "filters": {"type": "object", "required": ["path", "directories_only", "recursive", "replica_metric", "other_replicas", "min_other_replicas", "max_other_replicas"], "properties": {
+            "path": {"type": "string"}, "directories_only": {"type": "boolean"}, "recursive": {"type": "boolean"},
+            "replica_metric": {"type": "string", "enum": ["disks", "locations"]},
+            "other_replicas": {"type": ["string", "null"], "pattern": "^(0|[1-9][0-9]*)$"},
+            "min_other_replicas": {"type": ["string", "null"], "pattern": "^(0|[1-9][0-9]*)$"},
+            "max_other_replicas": {"type": ["string", "null"], "pattern": "^(0|[1-9][0-9]*)$"}
+          }},
+          "items": {"type": "array", "items": {"$ref": "#/components/schemas/DirectoryEntry"}},
+          "next_cursor": {"type": ["string", "null"]}
+        }
+      },
+      "DirectoryEntry": {
+        "type": "object", "required": ["path", "kind", "directory", "file"],
+        "properties": {
+          "path": {"type": "string"}, "kind": {"type": "string", "enum": ["directory", "file"]},
+          "directory": {"type": ["object", "null"], "required": ["path", "file_count", "content_count", "known_bytes", "unknown_size_file_count", "size_complete", "unique_content_known_bytes", "unknown_size_content_count", "unique_content_size_complete", "max_known_mtime"], "properties": {
+            "path": {"type": "string"}, "file_count": {"$ref": "#/components/schemas/Decimal"},
+            "content_count": {"$ref": "#/components/schemas/Decimal"}, "known_bytes": {"$ref": "#/components/schemas/Decimal"},
+            "unknown_size_file_count": {"$ref": "#/components/schemas/Decimal"}, "size_complete": {"type": "boolean"},
+            "unique_content_known_bytes": {"$ref": "#/components/schemas/Decimal"},
+            "unknown_size_content_count": {"$ref": "#/components/schemas/Decimal"},
+            "unique_content_size_complete": {"type": "boolean"}, "max_known_mtime": {"type": ["string", "null"], "format": "date-time"}
+          }},
+          "file": {"type": ["object", "null"], "required": ["observation", "hash", "size", "other_location_count", "other_disk_count"], "properties": {
+            "observation": {"$ref": "#/components/schemas/Observation"}, "hash": {"$ref": "#/components/schemas/Hash"},
+            "size": {"type": ["string", "null"], "pattern": "^(0|[1-9][0-9]*)$"},
+            "other_location_count": {"$ref": "#/components/schemas/Decimal"}, "other_disk_count": {"$ref": "#/components/schemas/Decimal"}
+          }}
+        }
+      },
       "CreateDisk": {
         "type": "object", "required": ["label", "capacity"], "additionalProperties": false,
         "properties": {

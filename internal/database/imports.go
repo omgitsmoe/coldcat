@@ -61,6 +61,10 @@ func (db *DB) CleanupImport(ctx context.Context, id int64) error {
 			return fmt.Errorf("%w: snapshot %d is not importing", ErrConflict, id)
 		}
 
+		if _, err := tx.ExecContext(ctx, "DELETE FROM directory WHERE snapshot_id=?", id); err != nil {
+			return err
+		}
+
 		if _, err := tx.ExecContext(ctx, "DELETE FROM observation WHERE snapshot_id=?", id); err != nil {
 			return err
 		}
@@ -127,6 +131,23 @@ func (db *DB) PublishImport(ctx context.Context, req PublishImportRequest) (base
 			return fmt.Errorf("%w: snapshot search index is incomplete", ErrConflict)
 		}
 
+		var directoriesBuilt bool
+		if err := tx.QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM directory_build WHERE snapshot_id=?)
+ AND EXISTS(SELECT 1 FROM directory WHERE snapshot_id=? AND path='')
+ AND NOT EXISTS(SELECT 1 FROM directory WHERE snapshot_id=?
+ AND (fingerprint_version IS NULL OR fingerprint IS NULL))
+ AND NOT EXISTS(SELECT 1 FROM observation o
+ LEFT JOIN directory_file f ON f.observation_id=o.id
+ WHERE o.snapshot_id=? AND (f.observation_id IS NULL OR f.snapshot_id!=o.snapshot_id
+ OR f.path!=o.path))`, id, id, id, id).
+			Scan(&directoriesBuilt); err != nil {
+			return err
+		}
+		if !directoriesBuilt {
+			return fmt.Errorf("%w: snapshot directory index is incomplete", ErrConflict)
+		}
+
 		if !req.AllowRepeat {
 			var existing base.SnapshotId
 			err := tx.QueryRowContext(ctx, `SELECT id FROM snapshot WHERE state='complete'
@@ -158,12 +179,12 @@ func (db *DB) PublishImport(ctx context.Context, req PublishImportRequest) (base
 			return fmt.Errorf("%w: conflicting known content sizes", ErrConflict)
 		}
 
-		if _, err := tx.ExecContext(ctx, `UPDATE content SET size=(SELECT size FROM pending_size WHERE snapshot_id=? AND content_id=content.id)
- WHERE size IS NULL AND id IN(SELECT content_id FROM pending_size WHERE snapshot_id=?)`, id, id); err != nil {
-			return err
+		if err := enrichDirectories(ctx, tx, id); err != nil {
+			return fmt.Errorf("enrich directories: %w", err)
 		}
 
-		if _, err := tx.ExecContext(ctx, "DELETE FROM pending_size WHERE snapshot_id=?", id); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE content SET size=(SELECT size FROM pending_size WHERE snapshot_id=? AND content_id=content.id)
+ WHERE size IS NULL AND id IN(SELECT content_id FROM pending_size WHERE snapshot_id=?)`, id, id); err != nil {
 			return err
 		}
 
@@ -181,6 +202,11 @@ func (db *DB) PublishImport(ctx context.Context, req PublishImportRequest) (base
 			id,
 		)
 		if err != nil {
+			return err
+		}
+
+		// Staging deletion invalidates unfinished builds; clear it only after marking complete.
+		if _, err := tx.ExecContext(ctx, "DELETE FROM pending_size WHERE snapshot_id=?", id); err != nil {
 			return err
 		}
 
