@@ -12,6 +12,35 @@
         }
       }
     },
+    "/api/v1/contents": {
+      "get": {
+        "summary": "List distinct contents with current redundancy filters",
+        "description": "Ordered by content ID ascending. Disk/directory filters select membership; counts remain catalog-wide. Current scope includes only currently present content. History includes contents from all complete inventories. Replica bounds require current scope; exact bounds cannot be combined with range bounds. Keep normalized filters and limit unchanged when following a cursor. Successful offline imports invalidate cursors; unchanged restarts, failed imports and recovery preserve them. Unknown, repeated and empty parameters are rejected except directory, whose empty value means root. Missing disks return 404; missing directories return an empty page.",
+        "parameters": [
+          {"$ref": "#/components/parameters/Scope"},
+          {"name": "disk_id", "in": "query", "schema": {"$ref": "#/components/schemas/ID"}},
+          {"name": "directory", "in": "query", "description": "Requires disk_id. Case-sensitive disk-relative directory, with / separators, no leading/trailing slash or . or .. segments. Maximum 1024 UTF-8 bytes. Descendant segment boundaries and literal wildcard characters are preserved. Empty means root.", "schema": {"type": "string"}, "allowEmptyValue": true},
+          {"name": "replica_metric", "in": "query", "schema": {"type": "string", "enum": ["disks", "locations"], "default": "disks"}},
+          {"name": "other_replicas", "in": "query", "description": "Exact current count minus one; cannot combine with min/max bounds.", "schema": {"$ref": "#/components/schemas/Decimal"}},
+          {"name": "min_other_replicas", "in": "query", "description": "Inclusive minimum current count minus one.", "schema": {"$ref": "#/components/schemas/Decimal"}},
+          {"name": "max_other_replicas", "in": "query", "description": "Inclusive maximum current count minus one; must be at least the minimum.", "schema": {"$ref": "#/components/schemas/Decimal"}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}},
+          {"name": "cursor", "in": "query", "schema": {"type": "string", "minLength": 1, "maxLength": 16384}, "description": "Opaque next_cursor from the preceding page"}
+        ],
+        "responses": {
+          "200": {"description": "Content page with applied filters and catalog revision", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContentPage"}, "examples": {
+            "twoOtherDisks": {"value": {"scope": "current", "revision": "3", "filters": {"disk_id": null, "directory": "", "replica_metric": "disks", "other_replicas": "2", "min_other_replicas": null, "max_other_replicas": null}, "items": [{"id": "1", "hash": {"algorithm": "sha256", "hex": "ab"}, "size": "0", "scope": "current", "location_count": "4", "disk_count": "3", "observation_count": "4", "current_location_count": "4", "current_disk_count": "3"}], "next_cursor": null}},
+            "empty": {"value": {"scope": "current", "revision": "0", "filters": {"disk_id": null, "directory": "", "replica_metric": "disks", "other_replicas": null, "min_other_replicas": null, "max_other_replicas": null}, "items": [], "next_cursor": null}}
+          }}}},
+          "400": {"$ref": "#/components/responses/Invalid"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "405": {"description": "Only GET and HEAD are allowed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "409": {"description": "Inventory revision changed; restart pagination", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "stale_cursor", "message": "cursor belongs to a different inventory revision"}}}}},
+          "500": {"$ref": "#/components/responses/Internal"},
+          "503": {"$ref": "#/components/responses/Unavailable"}
+        }
+      }
+    },
     "/api/v1/contents/lookup": {
       "get": {
         "summary": "Look up an exact algorithm/hash identity",
@@ -134,6 +163,24 @@
       "Internal": {"description": "Unexpected server failure", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "internal_error", "message": "internal server error"}}}}}
     },
     "schemas": {
+      "Decimal": {"type": "string", "pattern": "^(0|[1-9][0-9]*)$", "description": "Nonnegative signed 64-bit integer as decimal text"},
+      "ContentPage": {
+        "type": "object", "required": ["scope", "revision", "filters", "items", "next_cursor"],
+        "properties": {
+          "scope": {"type": "string", "enum": ["current", "history"]},
+          "revision": {"$ref": "#/components/schemas/Decimal"},
+          "filters": {"type": "object", "required": ["disk_id", "directory", "replica_metric", "other_replicas", "min_other_replicas", "max_other_replicas"], "properties": {
+            "disk_id": {"type": ["string", "null"], "pattern": "^[1-9][0-9]*$"},
+            "directory": {"type": "string"},
+            "replica_metric": {"type": "string", "enum": ["disks", "locations"]},
+            "other_replicas": {"type": ["string", "null"], "pattern": "^[0-9]+$"},
+            "min_other_replicas": {"type": ["string", "null"], "pattern": "^[0-9]+$"},
+            "max_other_replicas": {"type": ["string", "null"], "pattern": "^[0-9]+$"}
+          }},
+          "items": {"type": "array", "items": {"$ref": "#/components/schemas/Content"}},
+          "next_cursor": {"type": ["string", "null"]}
+        }
+      },
       "SnapshotPage": {
         "type": "object", "required": ["disk_id", "revision", "items", "next_cursor"],
         "properties": {

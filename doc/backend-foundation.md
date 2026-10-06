@@ -133,8 +133,8 @@ holds ownership until requests have drained and the database closes. Stop the se
 before importing. `serve` defaults to `127.0.0.1:8080`; startup errors fail the command,
 and SIGINT/SIGTERM request graceful shutdown with a ten-second drain deadline.
 
-`internal/httpapi` implements readiness, exact hash lookup, content detail, content
-observation pages, observation detail, and complete snapshot detail. See
+`internal/httpapi` implements readiness, exact hash lookup, content lists/detail,
+content observation pages, disk snapshot pages, observation detail, and complete snapshot detail. See
 [openapi.json](openapi.json) for the implemented wire contract. IDs, byte counts and
 aggregate counts are decimal strings; timestamps are UTC RFC3339 with optional
 fractional seconds, and unknown sizes/mtimes are null. CORS is not enabled.
@@ -169,6 +169,61 @@ validation remains follow-on work.
 
 ## Verification and follow-on work
 
+### Content lists and redundancy
+
+`GET /api/v1/contents` lists each eligible content once, ordered by content ID
+ascending. Scope defaults to current; history includes contents observed in any
+complete inventory. Optional `disk_id` and `directory` select membership while
+all summary counts remain catalog-wide, matching content detail for the same scope.
+Directories require a disk selector over HTTP. Root is empty (or omit the directory
+parameter); non-root paths use case-sensitive `/` segments without absolute,
+drive-qualified, empty, dot or parent segments. Directory paths are bounded to
+1024 UTF-8 bytes. Wildcard characters and backslashes are literal.
+
+`replica_metric=disks|locations` defaults to disks. `other_replicas` selects an exact
+count; `min_other_replicas` and `max_other_replicas` provide inclusive bounds.
+Counts are the corresponding current catalog count minus one. Bounds must be
+nonnegative signed 64-bit integers, cannot mix exact with range selection, and
+require current scope. Historical-only content is excluded from current lists;
+unfiltered history lists expose zero current counts for that content.
+
+Content pages use the same 50-default/200-maximum limits and revision lifecycle as
+observation pages. Cursors bind normalized filters, page size, endpoint/sort version,
+revision and last content ID. Changed filters or invalid anchors return 400;
+changed inventory revisions return 409. Empty lists serialize as `[]` and the last
+page has `next_cursor: null`. Applied filters are included in every page.
+
+```sh
+curl 'http://127.0.0.1:8080/api/v1/contents?other_replicas=0'
+curl 'http://127.0.0.1:8080/api/v1/contents?replica_metric=locations&min_other_replicas=2'
+curl 'http://127.0.0.1:8080/api/v1/contents?disk_id=1&directory=photos'
+```
+
+The query seeks content IDs and uses indexed, correlated observation lookups for
+membership and replica predicates. Historical summary fields are computed only
+for the bounded page. No new storage or derived-import prerequisites are needed.
+First/deep-page query-plan tests check content keyset seeks, observation indexes
+and latest-snapshot selection across both scopes and metrics.
+
+The warm benchmark suite now includes 50,000 and 1,000,000 observations with four
+locations per content and one/two/three-disk distributions. On Linux amd64 / Ryzen
+5 9600X, the million-observation run measured approximately:
+
+| Query | Warm time/op |
+| --- | ---: |
+| First content page | 0.79 ms |
+| Deep content page (including anchor validation) | 0.94 ms |
+| History content page | 0.96 ms |
+| Disk/directory content page | 0.90 ms |
+| Nonselective disk-replica lower bound | 0.90 ms |
+| Location-replica bound with no matches | 751 ms |
+
+A no-match replica filter must check all eligible contents, so it scales with
+catalog size despite bounded result memory. The 50,000-observation equivalent
+measured 35 ms. These are warm focused measurements, not an agreed interactive
+latency gate; cold measurements and broader real-world replica distributions
+remain performance follow-on work.
+
 Run `go test ./...`, `go test -race ./...`, and `go vet ./...` with the configured
 Go toolchain. Tests use temporary catalogs and cover migration rollback/reopen,
 cross-process locking, recovery failure, multi-batch import cleanup, metadata
@@ -186,7 +241,7 @@ one high-replica content, measured warm hash lookup plus its summary counts at
 17.8 ms/op, first observation pages at 0.226 ms/op, and deep pages at 0.254 ms/op.
 These are focused query measurements, not the pending catalog-wide latency gate.
 
-This foundation precedes source-digest duplicate detection, full CLI progress and
+This foundation precedes full CLI progress and
 machine-readable contracts, directory-derived publication data, search, the
 remaining HTTP routes, and directory/history endpoints. Short ADRs for catalog ownership and
 snapshot/replica semantics remain proposed pending approval.

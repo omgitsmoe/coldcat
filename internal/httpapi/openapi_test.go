@@ -214,3 +214,28 @@ func TestSnapshotListOpenAPIContract(t *testing.T) {
 		t.Fatal("snapshot list response must reference SnapshotPage")
 	}
 }
+
+func TestContentListOpenAPIContract(t *testing.T) {
+	document := openAPIDocument(t)
+	operation := document["paths"].(map[string]any)["/api/v1/contents"].(map[string]any)["get"].(map[string]any)
+	var names []string
+	for _, item := range operation["parameters"].([]any) {
+		parameter := item.(map[string]any)
+		if ref, ok := parameter["$ref"].(string); ok {
+			parameter = resolveReference(t, document, ref)
+		}
+		names = append(names, parameter["name"].(string))
+	}
+	if !reflect.DeepEqual(names, []string{
+		"scope", "disk_id", "directory", "replica_metric", "other_replicas",
+		"min_other_replicas", "max_other_replicas", "limit", "cursor",
+	}) {
+		t.Fatalf("content parameters: %v", names)
+	}
+	responses := operation["responses"].(map[string]any)
+	for _, status := range []string{"200", "400", "404", "405", "409", "500", "503"} {
+		if _, ok := responses[status]; !ok {
+			t.Fatalf("missing response %s", status)
+		}
+	}
+}

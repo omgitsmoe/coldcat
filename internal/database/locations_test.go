@@ -77,6 +77,7 @@ INSERT INTO import_content(snapshot_id,content_id) VALUES(100,100);`); err != ni
 }
 
 func BenchmarkContentQueries(b *testing.B) {
+	b.Run("content_lists", benchmarkContentLists)
 	db, err := Open(filepath.Join(b.TempDir(), "catalog.sqlite"))
 	if err != nil {
 		b.Fatal(err)

@@ -64,6 +64,10 @@ func writeError(w http.ResponseWriter, err error) {
 }
 
 func query(r *http.Request, allowed ...string) (url.Values, error) {
+	return queryAllowEmpty(r, "", allowed...)
+}
+
+func queryAllowEmpty(r *http.Request, empty string, allowed ...string) (url.Values, error) {
 	values, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
 		return nil, fmt.Errorf("%w: malformed query", database.ErrValidation)
@@ -78,7 +82,7 @@ func query(r *http.Request, allowed ...string) (url.Values, error) {
 			}
 		}
 
-		if !found || len(items) != 1 || items[0] == "" {
+		if !found || len(items) != 1 || (items[0] == "" && key != empty) {
 			return nil, fmt.Errorf(
 				"%w: unknown, repeated, or empty parameter %q",
 				database.ErrValidation,
@@ -155,6 +159,9 @@ func New(a *app.App) http.Handler {
 
 		writeJSON(w, 200, map[string]string{"status": "ready"})
 		return nil
+	})
+	register("/api/v1/contents", func(w http.ResponseWriter, r *http.Request) error {
+		return listContents(a, w, r)
 	})
 	register("/api/v1/contents/lookup", func(w http.ResponseWriter, r *http.Request) error {
 		values, err := query(r, "hash_type", "hash", "scope")

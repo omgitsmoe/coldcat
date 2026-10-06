@@ -89,7 +89,8 @@ func TestContentWorkflow(t *testing.T) {
 			}
 
 			route := strings.Split(path, "?")[0]
-			if route != "/healthz" && route != "/api/v1/contents/lookup" {
+			if route != "/healthz" && route != "/api/v1/contents/lookup" &&
+				route != "/api/v1/contents" {
 				parts := strings.Split(route, "/")
 				parts[4] = "{id}"
 				route = strings.Join(parts, "/")
@@ -107,6 +108,12 @@ func TestContentWorkflow(t *testing.T) {
 	}
 
 	var content contentDTO
+	var contents contentPageDTO
+	get("/api/v1/contents?other_replicas=2", 200, &contents)
+	if len(contents.Items) != 1 || contents.Items[0].DiskCount != "3" {
+		t.Fatalf("redundancy list: %+v", contents)
+	}
+	get("/api/v1/contents/"+contents.Items[0].ID, 200, &content)
 	get("/api/v1/contents/lookup?hash_type=sha256&hash=AB", 200, &content)
 	if content.Hash.Hex != "ab" || content.Size == nil || *content.Size != "0" ||
 		content.LocationCount != "4" ||
