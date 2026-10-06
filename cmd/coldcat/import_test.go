@@ -31,7 +31,7 @@ func importFixture(t *testing.T, n int) (string, string) {
 	file := filepath.Join(t.TempDir(), "inventory.cshd")
 	var input strings.Builder
 	for i := range n {
-		fmt.Fprintf(&input, ",sha256,ab file-%d\n", i)
+		fmt.Fprintf(&input, ",sha256,"+fixtureSHA256AB+" file-%d\n", i)
 	}
 	if err := os.WriteFile(file, []byte(input.String()), 0600); err != nil {
 		t.Fatal(err)

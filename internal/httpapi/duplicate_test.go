@@ -28,7 +28,8 @@ func TestDuplicateImportPreservesCursorAcrossReopen(t *testing.T) {
 	}
 
 	file := filepath.Join(t.TempDir(), "inventory.cshd")
-	if err := os.WriteFile(file, []byte(",sha256,ab a\n,sha256,ab b\n"), 0o600); err != nil {
+	input := ",sha256," + fixtureSHA256AB + " a\n,sha256," + fixtureSHA256AB + " b\n"
+	if err := os.WriteFile(file, []byte(input), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

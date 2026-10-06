@@ -9,6 +9,14 @@ type HashType struct {
 	crypto.Hash
 }
 
+func (h HashType) DigestSize() (int, error) {
+	if _, err := h.ToIdentifier(); err != nil {
+		return 0, err
+	}
+
+	return h.Size(), nil
+}
+
 func (h HashType) ToIdentifier() (string, error) {
 	switch h.Hash {
 	case crypto.MD4:

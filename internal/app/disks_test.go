@@ -147,8 +147,9 @@ func TestDiskInventorySummaries(t *testing.T) {
 		}
 		return s
 	}
-	input := "# version 1\n,10,sha256,ab one\n,10,sha256,ab copy\n" +
-		",0,sha256,cd empty\n,,sha256,ef unknown\n"
+	input := "# version 1\n,10,sha256," + fixtureSHA256AB + " one\n" +
+		",10,sha256," + fixtureSHA256AB + " copy\n" +
+		",0,sha256," + fixtureSHA256CD + " empty\n,,sha256," + fixtureSHA256EF + " unknown\n"
 	importAt(30, input)
 	importAt(10, "")
 	latest := importAt(30, input)
@@ -248,7 +249,7 @@ func TestDiskPaginationAndCursorLifetime(t *testing.T) {
 		t.Fatalf("restart: %v", err)
 	}
 	file := filepath.Join(t.TempDir(), "inventory.cshd")
-	if err := os.WriteFile(file, []byte(",sha256,ab file\ninvalid\n"), 0600); err != nil {
+	if err := os.WriteFile(file, []byte(",sha256,"+fixtureSHA256AB+" file\ninvalid\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := a.Import(ctx, ImportRequest{DiskID: 1, Path: file,

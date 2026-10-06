@@ -39,9 +39,9 @@ func TestContentWorkflow(t *testing.T) {
 			firstDisk = disk
 		}
 
-		input := "# version 1\n,0,sha256,ab zéro/a\n"
+		input := "# version 1\n,0,sha256," + fixtureSHA256AB + " zéro/a\n"
 		if i == 0 {
-			input += ",0,sha256,ab backup/a\n,,md5,ab unrelated\n"
+			input += ",0,sha256," + fixtureSHA256AB + " backup/a\n,,md5," + fixtureMD5AB + " unrelated\n"
 		}
 
 		file := filepath.Join(t.TempDir(), "fixture.cshd")
@@ -114,8 +114,8 @@ func TestContentWorkflow(t *testing.T) {
 		t.Fatalf("redundancy list: %+v", contents)
 	}
 	get("/api/v1/contents/"+contents.Items[0].ID, 200, &content)
-	get("/api/v1/contents/lookup?hash_type=sha256&hash=AB", 200, &content)
-	if content.Hash.Hex != "ab" || content.Size == nil || *content.Size != "0" ||
+	get("/api/v1/contents/lookup?hash_type=sha256&hash="+strings.ToUpper(fixtureSHA256AB), 200, &content)
+	if content.Hash.Hex != fixtureSHA256AB || content.Size == nil || *content.Size != "0" ||
 		content.LocationCount != "4" ||
 		content.DiskCount != "3" ||
 		content.Scope != "current" {
@@ -174,7 +174,7 @@ func TestContentWorkflow(t *testing.T) {
 	}
 
 	var unknown contentDTO
-	get("/api/v1/contents/lookup?hash_type=md5&hash=ab", 200, &unknown)
+	get("/api/v1/contents/lookup?hash_type=md5&hash="+fixtureMD5AB, 200, &unknown)
 	if unknown.Size != nil || unknown.ID == content.ID {
 		t.Fatalf("unknown size/algorithm identity: %+v", unknown)
 	}
@@ -281,7 +281,8 @@ func TestHTTPPaginationAfterRestartAndImports(t *testing.T) {
 	}
 
 	file := filepath.Join(t.TempDir(), "fixture.cshd")
-	if err := os.WriteFile(file, []byte(",sha256,ab a\n,sha256,ab b\n"), 0600); err != nil {
+	input := ",sha256," + fixtureSHA256AB + " a\n,sha256," + fixtureSHA256AB + " b\n"
+	if err := os.WriteFile(file, []byte(input), 0600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -334,7 +335,7 @@ func TestHTTPPaginationAfterRestartAndImports(t *testing.T) {
 	var mismatch errorDTO
 	request(route+"&scope=history", 400, &mismatch)
 	server.Close()
-	if err := os.WriteFile(file, []byte(",sha256,ab a\n"), 0600); err != nil {
+	if err := os.WriteFile(file, []byte(",sha256,"+fixtureSHA256AB+" a\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 

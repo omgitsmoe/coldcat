@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,8 +49,11 @@ func TestContentLocationsAndCursorLifetime(t *testing.T) {
 
 		return s
 	}
-	first := importFiles(",sha256,ab zéro/a\n,sha256,ab backup/a\n,sha256,cd gone\n", 10)
-	content, err := a.LookupContent(ctx, LookupContentRequest{HashType: "sha256", Hash: "AB"})
+	first := importFiles(",sha256,"+fixtureSHA256AB+" zéro/a\n"+
+		",sha256,"+fixtureSHA256AB+" backup/a\n,sha256,"+fixtureSHA256CD+" gone\n", 10)
+	content, err := a.LookupContent(ctx, LookupContentRequest{
+		HashType: "sha256", Hash: strings.ToUpper(fixtureSHA256AB),
+	})
 	if err != nil || content.LocationCount != 2 {
 		t.Fatalf("lookup: %+v %v", content, err)
 	}
@@ -88,13 +92,21 @@ func TestContentLocationsAndCursorLifetime(t *testing.T) {
 	}
 
 	file := filepath.Join(t.TempDir(), "bad.cshd")
-	os.WriteFile(file, []byte(",sha256,ab temporary\ninvalid\n"), 0600)
-	if _, err := a.Import(ctx, ImportRequest{DiskID: disk, Path: file, CapturedAt: time.Unix(20, 0)}); err == nil {
-		t.Fatal("accepted failed import")
-	}
+	for _, invalid := range []string{"invalid\n", ",sha256,ab invalid-hash\n"} {
+		input := ",sha256," + fixtureSHA256AB + " temporary\n" + invalid
+		if err := os.WriteFile(file, []byte(input), 0600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := a.Import(ctx, ImportRequest{
+			DiskID: disk, Path: file, CapturedAt: time.Unix(20, 0),
+		})
+		if !errors.Is(err, database.ErrValidation) {
+			t.Fatalf("invalid import: %v", err)
+		}
 
-	if _, err := a.ListContentObservations(ctx, req); err != nil {
-		t.Fatalf("failed import invalidated cursor: %v", err)
+		if _, err := a.ListContentObservations(ctx, req); err != nil {
+			t.Fatalf("failed import invalidated cursor: %v", err)
+		}
 	}
 
 	importFiles("", 20)
@@ -119,7 +131,7 @@ func TestContentLocationsAndCursorLifetime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	importFiles(",sha256,ab older\n", 5)
+	importFiles(",sha256,"+fixtureSHA256AB+" older\n", 5)
 	updated, err := a.GetCatalogState(ctx)
 	if err != nil || updated.Revision <= state.Revision {
 		t.Fatalf("older import revision: %+v %v", updated, err)

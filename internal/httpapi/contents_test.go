@@ -41,7 +41,8 @@ func TestContentListHTTPContract(t *testing.T) {
 			t.Fatalf("import: %v", err)
 		}
 	}
-	importFiles("# version 1\n,,sha256,ab foo/a\n,,sha256,ab foo/copy\n,0,md5,ab foobar/b\n", 10, true)
+	importFiles("# version 1\n,,sha256,"+fixtureSHA256AB+" foo/a\n"+
+		",,sha256,"+fixtureSHA256AB+" foo/copy\n,0,md5,"+fixtureMD5AB+" foobar/b\n", 10, true)
 	handler := New(a)
 	document := openAPIDocument(t)
 	operation := document["paths"].(map[string]any)["/api/v1/contents"].(map[string]any)["get"].(map[string]any)
@@ -129,7 +130,7 @@ func TestContentListHTTPContract(t *testing.T) {
 			t.Fatalf("method: %d", r.Code)
 		}
 	}
-	importFiles(",sha256,cd failed\ninvalid\n", 20, false)
+	importFiles(",sha256,"+fixtureSHA256CD+" failed\ninvalid\n", 20, false)
 	db.Close()
 	db, err = database.Open(path)
 	if err != nil {

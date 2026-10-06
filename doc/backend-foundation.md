@@ -75,6 +75,15 @@ the existing duplicate-import diagnostic to identify the completed inventory.
 
 ### Publication and cleanup
 
+Import records require a supported algorithm and its exact decoded digest length:
+MD4/MD5 use 16 bytes, SHA-1 uses 20, SHA3-224 uses 28, SHA-256/SHA3-256 use 32,
+SHA-384/SHA3-384 use 48, and SHA-512/SHA3-512 use 64. Hexadecimal spelling is
+case-insensitive; leading zero bytes are preserved. Parsing and batch insertion
+share this validation. Wrong-length records fail with line/path context and
+expected/actual byte counts, triggering normal failed-import cleanup even after
+earlier batches committed. Digest validation does not require a linked hashing
+implementation because imports consume recorded hashes rather than computing them.
+
 Each input represents a complete inventory of one disk. Imports commit bounded
 batches of 1,000 records while their snapshot is internally `importing`.
 Known sizes are staged, including enrichment of existing content. Publication
@@ -215,7 +224,7 @@ aggregate counts are decimal strings; timestamps are UTC RFC3339 with optional
 fractional seconds, and unknown sizes/mtimes are null. CORS is not enabled.
 
 ```sh
-curl 'http://127.0.0.1:8080/api/v1/contents/lookup?hash_type=sha256&hash=ab'
+curl 'http://127.0.0.1:8080/api/v1/contents/lookup?hash_type=sha256&hash=00000000000000000000000000000000000000000000000000000000000000ab'
 curl 'http://127.0.0.1:8080/api/v1/contents/1/observations?scope=current&limit=50'
 ```
 
@@ -238,9 +247,10 @@ catalog; detecting reuse against another/recreated database is not implemented.
 The revision is derived rather than stored: no catalog identity table or mutation
 counter is needed for these read-only endpoints. Cursor revision validation and
 page retrieval hold the same application read gate, preventing an in-session
-import from publishing between them. Hash lookup uses the importer's supported
-algorithms and accepts its current hash lengths; algorithm-specific length
-validation remains follow-on work.
+import from publishing between them. Hash lookup accepts supported algorithms and
+nonempty decoded hexadecimal identities, including abbreviated identities in
+existing catalogs. Exact algorithm-specific digest lengths are enforced on imports;
+lookup validation and existing catalog rows are unchanged.
 
 ## Verification and follow-on work
 

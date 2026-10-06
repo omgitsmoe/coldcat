@@ -29,7 +29,7 @@ Completed tasks use `[x]`; unfinished tasks use `[ ]`. **Partial** identifies a 
 | Milestone | Status |
 | --- | --- |
 | A — fixtures, semantics, migration safety | Core schema and semantic tests complete; distributed partial-copy fixture remains. |
-| B — reliable streaming imports and CLI | Cleanup, recovery, locking, duplicate-input detection, CLI output/progress/signal contracts, and process interruption tests complete; hash-length validation and import measurements remain. |
+| B — reliable streaming imports and CLI | Cleanup, recovery, locking, duplicate-input detection, algorithm-specific hash-length validation, CLI output/progress/signal contracts, and process interruption tests complete; import measurements remain. |
 | C — primary workflow | Disk management, content/hash lookup, paginated disk/content lists with redundancy/membership filters, observations and disk snapshots, snapshot/detail HTTP routes, and replica-count tests complete; search and remaining HTTP routes remain. |
 | D — directories | Directory-shaped fixtures exist; directory services/comparisons remain. |
 | E — performance and handoff | Foundational checks and restart/recovery pagination tests complete; remaining performance measurements and the backend handoff gate remain. |
@@ -129,7 +129,7 @@ Use the existing application layer as the shared backend:
 1. **Done:** acquire exclusive catalog access, recover abandoned imports, and validate disk, format, explicit inventory time, and input path.
 2. **Done:** create an `importing` snapshot.
 3. **Partial:** stream records in bounded batches of 1,000 with typed progress and throttled CLI stderr reporting. Measured memory bounds remain.
-4. **Done for current validation:** validate paths/metadata/hash encoding, deduplicate content, and reject duplicate snapshot paths. Algorithm-specific hash-length validation remains.
+4. **Done:** validate paths/metadata/hash encoding and algorithm-specific digest lengths, deduplicate content, and reject duplicate snapshot paths.
 5. **Done:** return scanner/read errors and cancellation, with line/path context in record failures.
 6. **Pending:** build directory aggregates/fingerprints and search indexes.
 7. **Partial:** atomically publish the snapshot and staged sizes after parsing and all current-schema writes succeed. Add directory/search build prerequisites when those services exist.
@@ -232,7 +232,7 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 - [x] Test successful multi-batch imports, late parse failure, injected reader errors, scanner token failure, cancellation, simulated interrupted-import state, and cleanup failure (`internal/importer`, `TestRecoveryIsRequiredBeforeUse`).
 - [x] Test semantic duplicate-input detection, explicit repeats, multi-batch cleanup, metadata enrichment independence, reopen/recovery, CLI exit/output contracts, and cursor preservation/invalidation.
 - [x] Test malformed/unsupported versions, invalid paths/hash encoding, numeric overflow, conflicting sizes, and duplicate paths across batch boundaries.
-- [ ] Validate and test algorithm-specific hash lengths; current fixtures intentionally use short hex identities.
+- [x] Validate and test algorithm-specific hash lengths in parsing and batch insertion. Import-backed fixtures use full-length identities; tests cover late-failure cleanup, metadata/cursor preservation, and CLI errors/nonzero exits.
 - [x] Assert cleanup removes failed snapshot/observation/staging rows and import-owned orphans while preserving shared content and completed metadata. Verify recovery precedes catalog access/another import and that recovery failure prevents startup.
 - [ ] Extend cleanup assertions to derived directories and search entries when those indexes exist.
 - [x] Test cross-process catalog exclusion and OS lock release on abrupt process exit (`TestCatalogLockAcrossProcesses`). Test in-session query/disk-creation exclusion and second-import rejection (`TestImportBlocksCatalogQueriesAndSecondImport`).

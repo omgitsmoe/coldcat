@@ -25,11 +25,11 @@ func TestParse(t *testing.T) {
 	}{
 		{
 			name: "valid input version 0",
-			input: `1673815645.7979772,sha512,deadbeef bar foo/bar/baz xer/file.txt
+			input: `1673815645.7979772,sha512,` + fixtureSHA512DEADBEEF + ` bar foo/bar/baz xer/file.txt
 # comments
 # supported
-,md5,ffffff foo/bar
-,sha256,ababab xer/foo.bin`,
+,md5,` + fixtureMD5FFFFFF + ` foo/bar
+,sha256,` + fixtureSHA256ABABAB + ` xer/foo.bin`,
 			expected: []File{
 				{
 					Name:               "file.txt",
@@ -37,7 +37,7 @@ func TestParse(t *testing.T) {
 					MTime:              time.Unix(1673815645, 797977200),
 					SizeInBytes:        0,
 					HashType:           base.HashType{Hash: crypto.SHA512},
-					Hash:               []byte{0xde, 0xad, 0xbe, 0xef},
+					Hash:               fixtureHashBytes(t, fixtureSHA512DEADBEEF),
 				},
 				{
 					Name:               "bar",
@@ -45,7 +45,7 @@ func TestParse(t *testing.T) {
 					MTime:              time.Time{},
 					SizeInBytes:        0,
 					HashType:           base.HashType{Hash: crypto.MD5},
-					Hash:               []byte{0xff, 0xff, 0xff},
+					Hash:               fixtureHashBytes(t, fixtureMD5FFFFFF),
 				},
 				{
 					Name:               "foo.bin",
@@ -53,7 +53,7 @@ func TestParse(t *testing.T) {
 					MTime:              time.Time{},
 					SizeInBytes:        0,
 					HashType:           base.HashType{Hash: crypto.SHA256},
-					Hash:               []byte{0xab, 0xab, 0xab},
+					Hash:               fixtureHashBytes(t, fixtureSHA256ABABAB),
 				},
 			},
 		},
@@ -61,10 +61,10 @@ func TestParse(t *testing.T) {
 			name: "valid input version 1",
 			input: `# version 1
 # comments
-1673815645.7979772,1337,sha512,deadbeef bar foo/bar/baz xer/file.txt
+1673815645.7979772,1337,sha512,` + fixtureSHA512DEADBEEF + ` bar foo/bar/baz xer/file.txt
 # supported
-,,md5,ffffff foo/bar
-,42069,sha256,ababab xer/foo.bin`,
+,,md5,` + fixtureMD5FFFFFF + ` foo/bar
+,42069,sha256,` + fixtureSHA256ABABAB + ` xer/foo.bin`,
 			expected: []File{
 				{
 					Name:               "file.txt",
@@ -72,7 +72,7 @@ func TestParse(t *testing.T) {
 					MTime:              time.Unix(1673815645, 797977200),
 					SizeInBytes:        1337,
 					HashType:           base.HashType{Hash: crypto.SHA512},
-					Hash:               []byte{0xde, 0xad, 0xbe, 0xef},
+					Hash:               fixtureHashBytes(t, fixtureSHA512DEADBEEF),
 				},
 				{
 					Name:               "bar",
@@ -80,7 +80,7 @@ func TestParse(t *testing.T) {
 					MTime:              time.Time{},
 					SizeInBytes:        0,
 					HashType:           base.HashType{Hash: crypto.MD5},
-					Hash:               []byte{0xff, 0xff, 0xff},
+					Hash:               fixtureHashBytes(t, fixtureMD5FFFFFF),
 				},
 				{
 					Name:               "foo.bin",
@@ -88,7 +88,7 @@ func TestParse(t *testing.T) {
 					MTime:              time.Time{},
 					SizeInBytes:        42069,
 					HashType:           base.HashType{Hash: crypto.SHA256},
-					Hash:               []byte{0xab, 0xab, 0xab},
+					Hash:               fixtureHashBytes(t, fixtureSHA256ABABAB),
 				},
 			},
 		},
@@ -96,8 +96,8 @@ func TestParse(t *testing.T) {
 			// Dedup used to be HashCollection's job; Parse now reports
 			// duplicates to the callback as-is.
 			name: "duplicate path version 0",
-			input: `,md5,ffffff foo/bar
-,sha256,ababab foo/bar`,
+			input: `,md5,` + fixtureMD5FFFFFF + ` foo/bar
+,sha256,` + fixtureSHA256ABABAB + ` foo/bar`,
 			expected: []File{
 				{
 					Name:               "bar",
@@ -105,7 +105,7 @@ func TestParse(t *testing.T) {
 					MTime:              time.Time{},
 					SizeInBytes:        0,
 					HashType:           base.HashType{Hash: crypto.MD5},
-					Hash:               []byte{0xff, 0xff, 0xff},
+					Hash:               fixtureHashBytes(t, fixtureMD5FFFFFF),
 				},
 				{
 					Name:               "bar",
@@ -113,15 +113,15 @@ func TestParse(t *testing.T) {
 					MTime:              time.Time{},
 					SizeInBytes:        0,
 					HashType:           base.HashType{Hash: crypto.SHA256},
-					Hash:               []byte{0xab, 0xab, 0xab},
+					Hash:               fixtureHashBytes(t, fixtureSHA256ABABAB),
 				},
 			},
 		},
 		{
 			name: "duplicate path version 1",
 			input: `# version 1
-,,md5,ffffff foo/bar
-,,sha256,ababab foo/bar`,
+,,md5,` + fixtureMD5FFFFFF + ` foo/bar
+,,sha256,` + fixtureSHA256ABABAB + ` foo/bar`,
 			expected: []File{
 				{
 					Name:               "bar",
@@ -129,7 +129,7 @@ func TestParse(t *testing.T) {
 					MTime:              time.Time{},
 					SizeInBytes:        0,
 					HashType:           base.HashType{Hash: crypto.MD5},
-					Hash:               []byte{0xff, 0xff, 0xff},
+					Hash:               fixtureHashBytes(t, fixtureMD5FFFFFF),
 				},
 				{
 					Name:               "bar",
@@ -137,7 +137,7 @@ func TestParse(t *testing.T) {
 					MTime:              time.Time{},
 					SizeInBytes:        0,
 					HashType:           base.HashType{Hash: crypto.SHA256},
-					Hash:               []byte{0xab, 0xab, 0xab},
+					Hash:               fixtureHashBytes(t, fixtureSHA256ABABAB),
 				},
 			},
 		},
@@ -154,7 +154,7 @@ func TestParse(t *testing.T) {
 		},
 		{
 			name:         "callback error aborts the parse",
-			input:        ",md5,ffffff foo/bar\n,sha256,ababab foo/bar",
+			input:        ",md5," + fixtureMD5FFFFFF + " foo/bar\n,sha256," + fixtureSHA256ABABAB + " foo/bar",
 			failCallback: true,
 			wantErrIs:    errCallback,
 		},
@@ -199,56 +199,56 @@ func TestParseLine(t *testing.T) {
 		{
 			name:    "full valid line version 0",
 			version: 0,
-			line:    "1673815645.7979772,sha512,deadbeef foo/bar/baz xer/file.txt",
+			line:    "1673815645.7979772,sha512," + fixtureSHA512DEADBEEF + " foo/bar/baz xer/file.txt",
 			expectedFile: File{
 				Name:               "file.txt",
 				PathRelativeToRoot: "foo/bar/baz xer/",
 				SizeInBytes:        0,
 				MTime:              time.Unix(1673815645, 797977200),
 				HashType:           base.HashType{Hash: crypto.SHA512},
-				Hash:               []byte{0xde, 0xad, 0xbe, 0xef},
+				Hash:               fixtureHashBytes(t, fixtureSHA512DEADBEEF),
 			},
 			wantErr: false,
 		},
 		{
 			name:    "valid line with empty fields version 0",
 			version: 0,
-			line:    ",sha512,deadbeef foo/bar/baz xer/file.txt",
+			line:    ",sha512," + fixtureSHA512DEADBEEF + " foo/bar/baz xer/file.txt",
 			expectedFile: File{
 				Name:               "file.txt",
 				PathRelativeToRoot: "foo/bar/baz xer/",
 				SizeInBytes:        0,
 				MTime:              time.Time{},
 				HashType:           base.HashType{Hash: crypto.SHA512},
-				Hash:               []byte{0xde, 0xad, 0xbe, 0xef},
+				Hash:               fixtureHashBytes(t, fixtureSHA512DEADBEEF),
 			},
 			wantErr: false,
 		},
 		{
 			name:    "full valid line version 1",
 			version: 1,
-			line:    "1673815645.7979772,1337,sha512,deadbeef foo/bar/baz xer/file.txt",
+			line:    "1673815645.7979772,1337,sha512," + fixtureSHA512DEADBEEF + " foo/bar/baz xer/file.txt",
 			expectedFile: File{
 				Name:               "file.txt",
 				PathRelativeToRoot: "foo/bar/baz xer/",
 				SizeInBytes:        1337,
 				MTime:              time.Unix(1673815645, 797977200),
 				HashType:           base.HashType{Hash: crypto.SHA512},
-				Hash:               []byte{0xde, 0xad, 0xbe, 0xef},
+				Hash:               fixtureHashBytes(t, fixtureSHA512DEADBEEF),
 			},
 			wantErr: false,
 		},
 		{
 			name:    "valid line with empty fields version 1",
 			version: 1,
-			line:    ",,sha512,deadbeef foo/bar/baz xer/file.txt",
+			line:    ",,sha512," + fixtureSHA512DEADBEEF + " foo/bar/baz xer/file.txt",
 			expectedFile: File{
 				Name:               "file.txt",
 				PathRelativeToRoot: "foo/bar/baz xer/",
 				SizeInBytes:        0,
 				MTime:              time.Time{},
 				HashType:           base.HashType{Hash: crypto.SHA512},
-				Hash:               []byte{0xde, 0xad, 0xbe, 0xef},
+				Hash:               fixtureHashBytes(t, fixtureSHA512DEADBEEF),
 			},
 			wantErr: false,
 		},
@@ -269,21 +269,21 @@ func TestParseLine(t *testing.T) {
 		{
 			name:         "invalid line version 1: invalid missing space",
 			version:      1,
-			line:         "1673815645.7979772,1337,sha512,ffffffffabcd",
+			line:         "1673815645.7979772,1337,sha512," + fixtureSHA512DEADBEEF,
 			expectedFile: File{},
 			wantErr:      true,
 		},
 		{
 			name:         "invalid line version 1: not enough fields",
 			version:      1,
-			line:         "1673815645.7979772,sha512,ffff foo/bar/baz xer/file.txt",
+			line:         "1673815645.7979772,sha512," + fixtureSHA512DEADBEEF + " foo/bar/baz xer/file.txt",
 			expectedFile: File{},
 			wantErr:      true,
 		},
 		{
 			name:         "invalid line version 0: not enough fields",
 			version:      0,
-			line:         "sha512,ffff foo/bar/baz xer/file.txt",
+			line:         "sha512," + fixtureSHA512DEADBEEF + " foo/bar/baz xer/file.txt",
 			expectedFile: File{},
 			wantErr:      true,
 		},

@@ -73,7 +73,7 @@ func TestDuplicateIdentityBoundaries(t *testing.T) {
 		t.Run(change, func(t *testing.T) {
 			db, _, disk := testDB(t)
 			req := request(disk)
-			input := ",sha256,ab first\n,sha256,cd second\n"
+			input := ",sha256," + fixtureSHA256AB + " first\n,sha256," + fixtureSHA256CD + " second\n"
 			_, err := ImportReader(t.Context(), db, req, strings.NewReader(input))
 			assertNoErr(t, err)
 			switch change {
@@ -84,11 +84,12 @@ func TestDuplicateIdentityBoundaries(t *testing.T) {
 			case "capture time":
 				req.CapturedAt = req.CapturedAt.Add(time.Nanosecond)
 			case "metadata":
-				input = "# version 1\n,0,sha256,ab first\n,,sha256,cd second\n"
+				input = "# version 1\n,0,sha256," + fixtureSHA256AB +
+					" first\n,,sha256," + fixtureSHA256CD + " second\n"
 			case "path":
-				input = ",sha256,ab renamed\n,sha256,cd second\n"
+				input = ",sha256," + fixtureSHA256AB + " renamed\n,sha256," + fixtureSHA256CD + " second\n"
 			case "order":
-				input = ",sha256,cd second\n,sha256,ab first\n"
+				input = ",sha256," + fixtureSHA256CD + " second\n,sha256," + fixtureSHA256AB + " first\n"
 			}
 
 			_, err = ImportReader(t.Context(), db, req, strings.NewReader(input))
@@ -100,7 +101,7 @@ func TestDuplicateIdentityBoundaries(t *testing.T) {
 func TestDigestDoesNotDependOnSharedContentEnrichment(t *testing.T) {
 	db, raw, disk := testDB(t)
 	req := request(disk)
-	input := ",sha256,ab file\n"
+	input := ",sha256," + fixtureSHA256AB + " file\n"
 	first, err := ImportReader(t.Context(), db, req, strings.NewReader(input))
 	assertNoErr(t, err)
 	later := req
@@ -109,7 +110,7 @@ func TestDigestDoesNotDependOnSharedContentEnrichment(t *testing.T) {
 		t.Context(),
 		db,
 		later,
-		strings.NewReader("# version 1\n,5,sha256,ab file\n"),
+		strings.NewReader("# version 1\n,5,sha256,"+fixtureSHA256AB+" file\n"),
 	)
 	assertNoErr(t, err)
 	_, err = ImportReader(t.Context(), db, req, strings.NewReader(input))

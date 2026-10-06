@@ -45,16 +45,22 @@ func TestContentListsAndRedundancy(t *testing.T) {
 			t.Fatalf("import: %v", err)
 		}
 	}
-	importFiles(disks[0], 10, ",sha256,ee foo/gone\n,sha256,dd old\n", true)
-	files := "# version 1\n,,sha256,aa foo/a\n,,sha256,bb foo/b\n" +
-		",,sha256,bb backup/b\n,,sha256,cc foo/nested/c\n,0,sha256,dd foo/d\n" +
-		",0,sha256,dd backup/d\n,,md5,aa foobar/other\n" +
-		",,sha256,ff foo%_/é\\name\n"
+	importFiles(disks[0], 10,
+		",sha256,"+fixtureSHA256EE+" foo/gone\n,sha256,"+fixtureSHA256DD+" old\n", true)
+	files := "# version 1\n,,sha256," + fixtureSHA256AA + " foo/a\n" +
+		",,sha256," + fixtureSHA256BB + " foo/b\n" +
+		",,sha256," + fixtureSHA256BB + " backup/b\n" +
+		",,sha256," + fixtureSHA256CC + " foo/nested/c\n" +
+		",0,sha256," + fixtureSHA256DD + " foo/d\n" +
+		",0,sha256," + fixtureSHA256DD + " backup/d\n" +
+		",,md5," + fixtureMD5AA + " foobar/other\n" +
+		",,sha256," + fixtureSHA256FF + " foo%_/é\\name\n"
 	importFiles(disks[0], 20, files, true)
-	importFiles(disks[1], 20, ",sha256,cc elsewhere/c\n,sha256,dd elsewhere/d\n", true)
-	importFiles(disks[2], 20, ",sha256,dd other/d\n", true)
-	importFiles(disks[0], 15, ",sha256,ee foo/older\n", true)
-	importFiles(disks[0], 20, files+",,sha256,aa second/a\n", true)
+	importFiles(disks[1], 20,
+		",sha256,"+fixtureSHA256CC+" elsewhere/c\n,sha256,"+fixtureSHA256DD+" elsewhere/d\n", true)
+	importFiles(disks[2], 20, ",sha256,"+fixtureSHA256DD+" other/d\n", true)
+	importFiles(disks[0], 15, ",sha256,"+fixtureSHA256EE+" foo/older\n", true)
+	importFiles(disks[0], 20, files+",,sha256,"+fixtureSHA256AA+" second/a\n", true)
 	list := func(f base.ContentFilters) base.ContentPage {
 		t.Helper()
 		page, err := a.ListContents(t.Context(), ListContentsRequest{Filters: f})
@@ -78,7 +84,7 @@ func TestContentListsAndRedundancy(t *testing.T) {
 		t.Fatalf("history: %+v", history)
 	}
 	for _, item := range history.Items {
-		if item.Content.Hash[0] == 0xee && item.CurrentLocationCount != 0 {
+		if item.Content.Hash[len(item.Content.Hash)-1] == 0xee && item.CurrentLocationCount != 0 {
 			t.Fatal("historical-only content has current locations")
 		}
 	}
@@ -187,7 +193,7 @@ func TestContentListsAndRedundancy(t *testing.T) {
 			t.Fatalf("malformed cursor accepted: %v", err)
 		}
 	}
-	importFiles(disks[0], 30, ",sha256,12 failed\ninvalid\n", false)
+	importFiles(disks[0], 30, ",sha256,"+fixtureSHA25612+" failed\ninvalid\n", false)
 	raw, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
@@ -225,7 +231,7 @@ func TestContentListsAndRedundancy(t *testing.T) {
 	if len(seen) != 6 {
 		t.Fatalf("pagination: %v", seen)
 	}
-	importFiles(disks[0], 5, ",sha256,13 older-only\n", true)
+	importFiles(disks[0], 5, ",sha256,"+fixtureSHA25613+" older-only\n", true)
 	req.Cursor = first.NextCursor
 	if _, err := a.ListContents(t.Context(), req); !errors.Is(err, database.ErrStaleCursor) {
 		t.Fatalf("older import did not invalidate cursor: %v", err)

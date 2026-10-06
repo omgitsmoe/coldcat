@@ -50,9 +50,9 @@ func manyFiles(n int, known bool) string {
 
 	for i := range n {
 		if known {
-			fmt.Fprintf(&input, ",4,sha256,%08x tree/file-%d\n", i, i)
+			fmt.Fprintf(&input, ",4,sha256,%064x tree/file-%d\n", i, i)
 		} else {
-			fmt.Fprintf(&input, ",sha256,%08x tree/file-%d\n", i, i)
+			fmt.Fprintf(&input, ",sha256,%064x tree/file-%d\n", i, i)
 		}
 	}
 
@@ -91,13 +91,15 @@ func TestImportFailuresCleanEveryCommittedBatch(t *testing.T) {
 		"duplicate across batches": manyFiles(
 			1001,
 			true,
-		) + ",4,sha256,00000000 tree/file-0\n",
-		"conflicting size across batches": manyFiles(1001, true) + ",9,sha256,00000000 other\n",
-		"conflicting size within batch":   "# version 1\n,4,sha256,ab a\n,5,sha256,ab b\n",
-		"unsupported version":             "# version 2\n",
-		"absolute path":                   ",sha256,ab /absolute\n",
-		"parent traversal":                ",sha256,ab foo/../bar\n",
-		"overflow":                        "# version 1\n,9223372036854775808,sha256,ab a\n",
+		) + ",4,sha256," + fixtureSHA25600000000 + " tree/file-0\n",
+		"conflicting size across batches": manyFiles(1001, true) +
+			",9,sha256," + fixtureSHA25600000000 + " other\n",
+		"conflicting size within batch": "# version 1\n,4,sha256," + fixtureSHA256AB +
+			" a\n,5,sha256," + fixtureSHA256AB + " b\n",
+		"unsupported version": "# version 2\n",
+		"absolute path":       ",sha256," + fixtureSHA256AB + " /absolute\n",
+		"parent traversal":    ",sha256," + fixtureSHA256AB + " foo/../bar\n",
+		"overflow":            "# version 1\n,9223372036854775808,sha256," + fixtureSHA256AB + " a\n",
 	}
 	for name, input := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -157,7 +159,7 @@ func TestFailedEnrichmentPreservesCompletedContent(t *testing.T) {
 		t.Context(),
 		db,
 		request(disk),
-		strings.NewReader(",sha256,00000000 original\n"),
+		strings.NewReader(",sha256,"+fixtureSHA25600000000+" original\n"),
 	)
 	assertNoErr(t, err)
 	_, err = ImportReader(
@@ -182,7 +184,7 @@ func TestFailedEnrichmentPreservesCompletedContent(t *testing.T) {
 		t.Context(),
 		db,
 		request(disk),
-		strings.NewReader("# version 1\n,0,sha256,00000000 empty\n"),
+		strings.NewReader("# version 1\n,0,sha256,"+fixtureSHA25600000000+" empty\n"),
 	)
 	assertNoErr(t, err)
 	assertNoErr(t, raw.QueryRow("SELECT size FROM content").Scan(&size))
@@ -194,7 +196,7 @@ func TestFailedEnrichmentPreservesCompletedContent(t *testing.T) {
 		t.Context(),
 		db,
 		request(disk),
-		strings.NewReader("# version 1\n,1,sha256,00000000 conflict\n"),
+		strings.NewReader("# version 1\n,1,sha256,"+fixtureSHA25600000000+" conflict\n"),
 	)
 	if !errors.Is(err, database.ErrConflict) {
 		t.Fatal(err)
@@ -233,7 +235,7 @@ func TestCleanupFailurePoisonsQueriesUntilRecovery(t *testing.T) {
 
 	assertEqual(t, count(t, raw, "snapshot"), 1)
 	assertNoErr(t, execSQL(raw, "DROP TRIGGER fail_cleanup"))
-	_, err = ImportReader(t.Context(), db, request(disk), strings.NewReader(",sha256,ab valid\n"))
+	_, err = ImportReader(t.Context(), db, request(disk), strings.NewReader(",sha256,"+fixtureSHA256AB+" valid\n"))
 	assertNoErr(t, err)
 	assertEqual(t, count(t, raw, "snapshot"), 1)
 	assertEqual(t, count(t, raw, "content"), 1)
@@ -258,7 +260,7 @@ func (r *probeReader) Read(p []byte) (int, error) {
 
 func TestImportBlocksCatalogQueriesAndSecondImport(t *testing.T) {
 	db, _, disk := testDB(t)
-	reader := &probeReader{reader: strings.NewReader(",sha256,ab a\n"), probe: func() {
+	reader := &probeReader{reader: strings.NewReader(",sha256," + fixtureSHA256AB + " a\n"), probe: func() {
 		if _, err := db.LatestCompleteSnapshot(t.Context(), disk); !errors.Is(
 			err,
 			database.ErrBusy,
@@ -292,7 +294,9 @@ func TestImportMetadataAndHashIdentity(t *testing.T) {
 		db,
 		request(disk),
 		strings.NewReader(
-			"# version 1\n,,sha256,ab unknown\n,0,sha256,cd empty\n1,4,md5,ab known\n,4,md5,ab copy\n",
+			"# version 1\n,,sha256,"+fixtureSHA256AB+" unknown\n"+
+				",0,sha256,"+fixtureSHA256CD+" empty\n"+
+				"1,4,md5,"+fixtureMD5AB+" known\n,4,md5,"+fixtureMD5AB+" copy\n",
 		),
 	)
 	assertNoErr(t, err)
@@ -323,7 +327,7 @@ func TestImportMetadataAndHashIdentity(t *testing.T) {
 func TestImportPathAndCaptureValidation(t *testing.T) {
 	db, _, disk := testDB(t)
 	path := filepath.Join(t.TempDir(), "checksums.cshd")
-	assertNoErr(t, os.WriteFile(path, []byte(",sha256,ab foo/bar\n"), 0o600))
+	assertNoErr(t, os.WriteFile(path, []byte(",sha256,"+fixtureSHA256AB+" foo/bar\n"), 0o600))
 	_, err := Import(t.Context(), db, Request{DiskID: disk, Path: path})
 	if !errors.Is(err, database.ErrValidation) {
 		t.Fatal(err)

@@ -51,7 +51,7 @@ func TestGroupedDiskAndSnapshotCommands(t *testing.T) {
 		t.Fatalf("empty snapshots: %q %q %v", stdout, stderr, err)
 	}
 	file := filepath.Join(t.TempDir(), "inventory.cshd")
-	if err := os.WriteFile(file, []byte(",sha256,ab file\n"), 0600); err != nil {
+	if err := os.WriteFile(file, []byte(",sha256,"+fixtureSHA256AB+" file\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := run("import", "--disk-id", "1", "--captured-at",

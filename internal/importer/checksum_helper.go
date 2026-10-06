@@ -167,7 +167,7 @@ func parseLine(line string, version int) (File, error) {
 	}
 
 	if err := validateFile(file); err != nil {
-		return File{}, err
+		return File{}, fmt.Errorf("path %q: %w", file.path(), err)
 	}
 
 	return file, nil

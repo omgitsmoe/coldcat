@@ -381,8 +381,16 @@ func validateFile(file File) error {
 		return fmt.Errorf("%w: size overflows signed 64-bit storage", database.ErrValidation)
 	}
 
-	if len(file.Hash) == 0 {
-		return fmt.Errorf("%w: empty hash", database.ErrValidation)
+	expected, err := file.HashType.DigestSize()
+	if err != nil {
+		return fmt.Errorf("%w: %w", database.ErrValidation, err)
+	}
+
+	if len(file.Hash) != expected {
+		return fmt.Errorf(
+			"%w: %s hash must be %d bytes, got %d",
+			database.ErrValidation, file.HashType.Hash.String(), expected, len(file.Hash),
+		)
 	}
 
 	if file.MTimeKnown && (file.MTime.UTC().Year() < 1 || file.MTime.UTC().Year() > 9999) {

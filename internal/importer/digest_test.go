@@ -17,10 +17,11 @@ func TestSemanticDigest(t *testing.T) {
 		assertNoErr(t, ParseCshd(strings.NewReader(input), d.add))
 		return d.sum()
 	}
-	original := digest(",sha256,ab dir/file\n,sha256,cd second\n")
+	original := digest(",sha256," + fixtureSHA256AB + " dir/file\n,sha256," + fixtureSHA256CD + " second\n")
 	for _, input := range []string{
-		"# comment\r\n# version 0\r\n,sha256,AB dir/file\r\n,sha256,cd second",
-		"# version 1\n,,sha256,ab dir/file\n,,sha256,cd second\n",
+		"# comment\r\n# version 0\r\n,sha256," + strings.ToUpper(fixtureSHA256AB) +
+			" dir/file\r\n,sha256," + fixtureSHA256CD + " second",
+		"# version 1\n,,sha256," + fixtureSHA256AB + " dir/file\n,,sha256," + fixtureSHA256CD + " second\n",
 	} {
 		if got := digest(input); got != original {
 			t.Fatalf("equivalent records have different digest: %q", input)
@@ -28,13 +29,14 @@ func TestSemanticDigest(t *testing.T) {
 	}
 
 	for name, input := range map[string]string{
-		"order":        ",sha256,cd second\n,sha256,ab dir/file\n",
-		"path":         ",sha256,ab dir/other\n,sha256,cd second\n",
-		"hash":         ",sha256,ac dir/file\n,sha256,cd second\n",
-		"algorithm":    ",sha1,ab dir/file\n,sha256,cd second\n",
-		"known zero":   "# version 1\n,0,sha256,ab dir/file\n,,sha256,cd second\n",
-		"known mtime":  "0,sha256,ab dir/file\n,sha256,cd second\n",
-		"multiplicity": ",sha256,ab dir/file\n",
+		"order":     ",sha256," + fixtureSHA256CD + " second\n,sha256," + fixtureSHA256AB + " dir/file\n",
+		"path":      ",sha256," + fixtureSHA256AB + " dir/other\n,sha256," + fixtureSHA256CD + " second\n",
+		"hash":      ",sha256," + fixtureSHA256AC + " dir/file\n,sha256," + fixtureSHA256CD + " second\n",
+		"algorithm": ",sha3_256," + fixtureSHA256AB + " dir/file\n,sha256," + fixtureSHA256CD + " second\n",
+		"known zero": "# version 1\n,0,sha256," + fixtureSHA256AB +
+			" dir/file\n,,sha256," + fixtureSHA256CD + " second\n",
+		"known mtime":  "0,sha256," + fixtureSHA256AB + " dir/file\n,sha256," + fixtureSHA256CD + " second\n",
+		"multiplicity": ",sha256," + fixtureSHA256AB + " dir/file\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			if digest(input) == original {
@@ -43,7 +45,8 @@ func TestSemanticDigest(t *testing.T) {
 		})
 	}
 
-	if digest("1,sha256,ab file\n") != digest("1.000000000,sha256,ab file") {
+	if digest("1,sha256,"+fixtureSHA256AB+" file\n") !=
+		digest("1.000000000,sha256,"+fixtureSHA256AB+" file") {
 		t.Fatal("equivalent timestamps differ")
 	}
 }

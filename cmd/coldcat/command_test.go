@@ -17,7 +17,7 @@ import (
 func TestCommandCaptureTimeAndDatabasePath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "custom.sqlite")
 	file := filepath.Join(t.TempDir(), "inventory.cshd")
-	if err := os.WriteFile(file, []byte(",sha256,ab file\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte(",sha256,"+fixtureSHA256AB+" file\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -60,7 +60,7 @@ func TestCommandCaptureTimeAndDatabasePath(t *testing.T) {
 func TestCommandDuplicateImport(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "catalog.sqlite")
 	file := filepath.Join(t.TempDir(), "inventory.cshd")
-	if err := os.WriteFile(file, []byte(",sha256,ab file\n"), 0o600); err != nil {
+	if err := os.WriteFile(file, []byte(",sha256,"+fixtureSHA256AB+" file\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

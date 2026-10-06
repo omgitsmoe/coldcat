@@ -128,7 +128,7 @@ func TestHTTPDiskManagement(t *testing.T) {
 	server = httptest.NewServer(New(a))
 	request("GET", continuation, "", "", 200, "DiskPage", nil)
 	file := filepath.Join(t.TempDir(), "inventory.cshd")
-	if err := os.WriteFile(file, []byte(",sha256,ab bad\ninvalid\n"), 0600); err != nil {
+	if err := os.WriteFile(file, []byte(",sha256,"+fixtureSHA256AB+" bad\ninvalid\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := a.ImportByLabel(ctx, "renamed", app.ImportRequest{
@@ -137,8 +137,9 @@ func TestHTTPDiskManagement(t *testing.T) {
 		t.Fatal("accepted invalid input")
 	}
 	request("GET", continuation, "", "", 200, "DiskPage", nil)
-	input := "# version 1\n,10,sha256,ab a\n,10,sha256,ab copy\n" +
-		",0,sha256,cd empty\n,,sha256,ef unknown\n"
+	input := "# version 1\n,10,sha256," + fixtureSHA256AB + " a\n" +
+		",10,sha256," + fixtureSHA256AB + " copy\n" +
+		",0,sha256," + fixtureSHA256CD + " empty\n,,sha256," + fixtureSHA256EF + " unknown\n"
 	if err := os.WriteFile(file, []byte(input), 0600); err != nil {
 		t.Fatal(err)
 	}

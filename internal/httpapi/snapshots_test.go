@@ -36,7 +36,8 @@ func TestHTTPSnapshotListing(t *testing.T) {
 		t.Fatal(err)
 	}
 	file := filepath.Join(t.TempDir(), "fixture.cshd")
-	if err := os.WriteFile(file, []byte("# version 1\n,0,sha256,ab empty\n"), 0600); err != nil {
+	input := "# version 1\n,0,sha256," + fixtureSHA256AB + " empty\n"
+	if err := os.WriteFile(file, []byte(input), 0600); err != nil {
 		t.Fatal(err)
 	}
 	var imported []base.Snapshot
@@ -184,7 +185,7 @@ func TestHTTPSnapshotListing(t *testing.T) {
 		t.Fatalf("restart: %+v", next)
 	}
 	server.Close()
-	if err := os.WriteFile(file, []byte(",sha256,ab temporary\ninvalid\n"), 0600); err != nil {
+	if err := os.WriteFile(file, []byte(",sha256,"+fixtureSHA256AB+" temporary\ninvalid\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := a.Import(ctx, app.ImportRequest{

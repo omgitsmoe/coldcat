@@ -45,7 +45,7 @@ func TestProgressFailuresCleanImports(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			db, raw, disk := testDB(t)
 			_, err := ImportReader(t.Context(), db, request(disk),
-				strings.NewReader(",sha256,00000000 baseline\n"))
+				strings.NewReader(",sha256,"+fixtureSHA25600000000+" baseline\n"))
 			assertNoErr(t, err)
 
 			ctx, cancel := context.WithCancel(t.Context())
@@ -68,7 +68,7 @@ func TestProgressFailuresCleanImports(t *testing.T) {
 				input += "broken\n"
 			}
 			if mode == "rollback" {
-				input = manyFiles(999, true) + ",4,sha256,00000000 tree/file-0\n"
+				input = manyFiles(999, true) + ",4,sha256," + fixtureSHA25600000000 + " tree/file-0\n"
 			}
 			_, err = ImportReader(ctx, db, req, strings.NewReader(input))
 			assertErr(t, err)

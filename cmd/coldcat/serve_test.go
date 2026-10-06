@@ -127,7 +127,7 @@ INSERT INTO import_content(snapshot_id,content_id) VALUES(1,1);`); err != nil {
 			}
 
 			file := filepath.Join(t.TempDir(), "inventory.cshd")
-			if err := os.WriteFile(file, []byte(",sha256,ab file\n"), 0600); err != nil {
+			if err := os.WriteFile(file, []byte(",sha256,"+fixtureSHA256AB+" file\n"), 0600); err != nil {
 				t.Fatal(err)
 			}
 

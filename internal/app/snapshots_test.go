@@ -34,7 +34,7 @@ func TestDiskSnapshotsAndCursorLifetime(t *testing.T) {
 		t.Fatal(err)
 	}
 	file := filepath.Join(t.TempDir(), "fixture.cshd")
-	if err := os.WriteFile(file, []byte(",sha256,ab a\n"), 0600); err != nil {
+	if err := os.WriteFile(file, []byte(",sha256,"+fixtureSHA256AB+" a\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	importAt := func(id base.DiskId, seconds int64) base.Snapshot {
@@ -101,7 +101,7 @@ func TestDiskSnapshotsAndCursorLifetime(t *testing.T) {
 	if _, err := a.ListDiskSnapshots(ctx, req); err != nil {
 		t.Fatalf("restart: %v", err)
 	}
-	if err := os.WriteFile(file, []byte(",sha256,ab temporary\ninvalid\n"), 0600); err != nil {
+	if err := os.WriteFile(file, []byte(",sha256,"+fixtureSHA256AB+" temporary\ninvalid\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := a.Import(ctx, ImportRequest{DiskID: disk, Path: file,

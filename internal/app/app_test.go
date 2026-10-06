@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,15 +50,20 @@ func TestSnapshotAndReplicaSemantics(t *testing.T) {
 	old := importFixture(
 		disks[0],
 		t1,
-		",sha256,ab photos/x.jpg\n,sha256,ab backup/x.jpg\n,sha256,cd removed\n,sha256,ee changed\n",
+		",sha256,"+fixtureSHA256AB+" photos/x.jpg\n"+
+			",sha256,"+fixtureSHA256AB+" backup/x.jpg\n"+
+			",sha256,"+fixtureSHA256CD+" removed\n"+
+			",sha256,"+fixtureSHA256EE+" changed\n",
 	)
 	newest := importFixture(
 		disks[0],
 		t1.Add(48*time.Hour),
-		",sha256,ab photos/x.jpg\n,sha256,ab backup/x.jpg\n,sha256,ff changed\n",
+		",sha256,"+fixtureSHA256AB+" photos/x.jpg\n"+
+			",sha256,"+fixtureSHA256AB+" backup/x.jpg\n"+
+			",sha256,"+fixtureSHA256FF+" changed\n",
 	)
-	importFixture(disks[1], t1.Add(24*time.Hour), ",sha256,ab copies/x.jpg\n")
-	importFixture(disks[0], t1.Add(24*time.Hour), ",sha256,ab older-only.jpg\n")
+	importFixture(disks[1], t1.Add(24*time.Hour), ",sha256,"+fixtureSHA256AB+" copies/x.jpg\n")
+	importFixture(disks[0], t1.Add(24*time.Hour), ",sha256,"+fixtureSHA256AB+" older-only.jpg\n")
 	latest, err := a.LatestCompleteSnapshot(ctx, disks[0])
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +76,9 @@ func TestSnapshotAndReplicaSemantics(t *testing.T) {
 	tied := importFixture(
 		disks[0],
 		newest.CapturedAt,
-		",sha256,ab photos/x.jpg\n1,sha256,ab backup/x.jpg\n,sha256,ff changed\n",
+		",sha256,"+fixtureSHA256AB+" photos/x.jpg\n"+
+			"1,sha256,"+fixtureSHA256AB+" backup/x.jpg\n"+
+			",sha256,"+fixtureSHA256FF+" changed\n",
 	)
 	latest, err = a.LatestCompleteSnapshot(ctx, disks[0])
 	if err != nil {
@@ -81,7 +89,7 @@ func TestSnapshotAndReplicaSemantics(t *testing.T) {
 		t.Fatal("snapshot ID tie-break failed")
 	}
 
-	importFixture(disks[2], t1, ",md5,ab unrelated\n")
+	importFixture(disks[2], t1, ",md5,"+fixtureMD5AB+" unrelated\n")
 	raw, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
@@ -89,11 +97,13 @@ func TestSnapshotAndReplicaSemantics(t *testing.T) {
 	defer raw.Close()
 
 	var x, removed base.ContentId
-	if err := raw.QueryRow("SELECT id FROM content WHERE hash_type='sha256' AND hash=X'AB'").Scan(&x); err != nil {
+	if err := raw.QueryRow("SELECT id FROM content WHERE hash_type='sha256' AND hex(hash)=?",
+		strings.ToUpper(fixtureSHA256AB)).Scan(&x); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := raw.QueryRow("SELECT id FROM content WHERE hash=X'CD'").Scan(&removed); err != nil {
+	if err := raw.QueryRow("SELECT id FROM content WHERE hex(hash)=?",
+		strings.ToUpper(fixtureSHA256CD)).Scan(&removed); err != nil {
 		t.Fatal(err)
 	}
 
@@ -232,9 +242,19 @@ func TestDirectoryShapedFixtureAndMetadata(t *testing.T) {
 	defer db.Close()
 	a := New(db)
 	for i, input := range []string{
-		"# version 1\n1,0,sha256,ab source/empty\n,,sha256,cd source/nested/unknown\n,4,sha256,ef source/data\n",
-		"# version 1\n2,0,sha256,ab renamed/empty\n,,sha256,cd renamed/nested/unknown\n,4,sha256,ef renamed/data\n,4,sha256,ef extra/data\n,0,sha256,ab extra/empty\n,,sha256,cd extra/nested/unknown\n,1,sha256,aa extra/additional\n",
-		"# version 1\n,0,sha256,ab rearranged/nested/empty\n,,sha256,cd partial/unknown\n,4,sha256,ef elsewhere/data\n",
+		"# version 1\n1,0,sha256," + fixtureSHA256AB + " source/empty\n" +
+			",,sha256," + fixtureSHA256CD + " source/nested/unknown\n" +
+			",4,sha256," + fixtureSHA256EF + " source/data\n",
+		"# version 1\n2,0,sha256," + fixtureSHA256AB + " renamed/empty\n" +
+			",,sha256," + fixtureSHA256CD + " renamed/nested/unknown\n" +
+			",4,sha256," + fixtureSHA256EF + " renamed/data\n" +
+			",4,sha256," + fixtureSHA256EF + " extra/data\n" +
+			",0,sha256," + fixtureSHA256AB + " extra/empty\n" +
+			",,sha256," + fixtureSHA256CD + " extra/nested/unknown\n" +
+			",1,sha256," + fixtureSHA256AA + " extra/additional\n",
+		"# version 1\n,0,sha256," + fixtureSHA256AB + " rearranged/nested/empty\n" +
+			",,sha256," + fixtureSHA256CD + " partial/unknown\n" +
+			",4,sha256," + fixtureSHA256EF + " elsewhere/data\n",
 	} {
 		disk, err := a.CreateDisk(t.Context(), fmt.Sprint(i), "", "", 100)
 		if err != nil {

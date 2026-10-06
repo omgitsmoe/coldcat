@@ -67,7 +67,7 @@ func TestInterruptedImportRecoveryAndCursor(t *testing.T) {
 			}
 			a := app.New(db)
 			content, err := a.LookupContent(t.Context(), app.LookupContentRequest{
-				HashType: "sha256", Hash: "ab",
+				HashType: "sha256", Hash: fixtureSHA256AB,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -85,9 +85,9 @@ func TestInterruptedImportRecoveryAndCursor(t *testing.T) {
 			db.Close()
 
 			var input strings.Builder
-			input.WriteString("# version 1\n,4,sha256,ab shared\n")
+			input.WriteString("# version 1\n,4,sha256," + fixtureSHA256AB + " shared\n")
 			for i := range 1000 {
-				fmt.Fprintf(&input, ",4,sha256,%08x new/file-%d\n", i, i)
+				fmt.Fprintf(&input, ",4,sha256,%064x new/file-%d\n", i+256, i)
 			}
 			if err := os.WriteFile(file, []byte(input.String()), 0600); err != nil {
 				t.Fatal(err)
@@ -182,7 +182,7 @@ func TestInterruptedImportRecoveryAndCursor(t *testing.T) {
 				t.Fatalf("recovered page: %+v %v", got, err)
 			}
 			content, err = a.LookupContent(t.Context(), app.LookupContentRequest{
-				HashType: "sha256", Hash: "ab",
+				HashType: "sha256", Hash: fixtureSHA256AB,
 			})
 			if err != nil || content.Content.Size != nil {
 				t.Fatalf("shared metadata: %+v %v", content, err)
@@ -200,10 +200,14 @@ func TestInterruptedImportRecoveryAndCursor(t *testing.T) {
 }
 
 func TestImportProcessOutputAndExit(t *testing.T) {
-	for _, mode := range []string{"success", "arguments", "parse", "duplicate", "busy"} {
+	for _, mode := range []string{"success", "arguments", "parse", "hash-length", "duplicate", "busy"} {
 		t.Run(mode, func(t *testing.T) {
 			path, file := importFixture(t, 1)
 			switch mode {
+			case "hash-length":
+				if err := os.WriteFile(file, []byte(",sha256,ab invalid\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
 			case "parse":
 				if err := os.WriteFile(file, []byte("broken\n"), 0600); err != nil {
 					t.Fatal(err)
@@ -244,6 +248,10 @@ func TestImportProcessOutputAndExit(t *testing.T) {
 			} else if err == nil || child.ProcessState == nil || child.ProcessState.ExitCode() != 1 ||
 				stdout.Len() != 0 || stderr.Len() == 0 || ctx.Err() != nil {
 				t.Fatalf("failure: %v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+			}
+			if mode == "hash-length" &&
+				!bytes.Contains(stderr.Bytes(), []byte("must be 32 bytes, got 1")) {
+				t.Fatalf("hash diagnostic: %q", stderr.String())
 			}
 		})
 	}

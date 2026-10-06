@@ -1,0 +1,28 @@
+package importer
+
+import (
+	"encoding/hex"
+	"testing"
+)
+
+const (
+	fixtureMD5AB          = "000000000000000000000000000000ab"
+	fixtureMD5FFFFFF      = "00000000000000000000000000ffffff"
+	fixtureSHA25600000000 = "0000000000000000000000000000000000000000000000000000000000000000"
+	fixtureSHA256AB       = "00000000000000000000000000000000000000000000000000000000000000ab"
+	fixtureSHA256ABABAB   = "0000000000000000000000000000000000000000000000000000000000ababab"
+	fixtureSHA256AC       = "00000000000000000000000000000000000000000000000000000000000000ac"
+	fixtureSHA256CD       = "00000000000000000000000000000000000000000000000000000000000000cd"
+	fixtureZero8Bytes     = "0000000000000000"
+	fixtureSHA512DEADBEEF = fixtureSHA25600000000 +
+		fixtureZero8Bytes + fixtureZero8Bytes + fixtureZero8Bytes + "00000000deadbeef"
+)
+
+func fixtureHashBytes(t *testing.T, value string) []byte {
+	t.Helper()
+	decoded, err := hex.DecodeString(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return decoded
+}
