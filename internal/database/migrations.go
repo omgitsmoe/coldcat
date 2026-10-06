@@ -45,6 +45,8 @@ CREATE INDEX snapshot_source_identity ON snapshot(disk_id,input_format,captured_
 CREATE INDEX observation_content_snapshot ON observation(content_id,snapshot_id);
 CREATE INDEX observation_content_id ON observation(content_id,id);
 CREATE INDEX observation_path_snapshot ON observation(path,snapshot_id);
+CREATE INDEX import_content_content ON import_content(content_id,snapshot_id);
+CREATE INDEX pending_size_content ON pending_size(content_id,snapshot_id);
 CREATE TRIGGER immutable_snapshot_update BEFORE UPDATE ON snapshot WHEN OLD.state='complete'
  BEGIN SELECT RAISE(ABORT,'complete snapshot is immutable'); END;
 CREATE TRIGGER immutable_snapshot_delete BEFORE DELETE ON snapshot WHEN OLD.state='complete'
@@ -143,6 +145,6 @@ func migrateInitial(ctx context.Context, tx *Tx) error {
 		)
 	}
 
-	_, err := tx.ExecContext(ctx, diskSchema+inventorySchema)
+	_, err := tx.ExecContext(ctx, diskSchema+inventorySchema+searchSchema)
 	return err
 }

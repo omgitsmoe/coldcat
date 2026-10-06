@@ -153,6 +153,9 @@ func New(a *app.App) http.Handler {
 		registerMethods(pattern, "GET, HEAD",
 			map[string]func(http.ResponseWriter, *http.Request) error{"GET": handler})
 	}
+	register("/api/v1/search", func(w http.ResponseWriter, r *http.Request) error {
+		return search(a, w, r)
+	})
 	registerMethods("/api/v1/disks", "GET, HEAD, POST",
 		map[string]func(http.ResponseWriter, *http.Request) error{
 			"GET":  func(w http.ResponseWriter, r *http.Request) error { return listDisks(a, w, r) },

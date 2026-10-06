@@ -106,7 +106,10 @@ func TestImportFailuresCleanEveryCommittedBatch(t *testing.T) {
 			db, raw, disk := testDB(t)
 			_, err := ImportReader(t.Context(), db, request(disk), strings.NewReader(input))
 			assertErr(t, err)
-			for _, table := range []string{"snapshot", "observation", "content", "pending_size", "import_content"} {
+			for _, table := range []string{
+				"snapshot", "observation", "content", "pending_size", "import_content",
+				"search_path", "search_short", "search_trigram",
+			} {
 				assertEqual(t, count(t, raw, table), 0)
 			}
 		})
@@ -142,7 +145,10 @@ func TestReaderErrorAndCancellationCleanCommittedBatches(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			for _, table := range []string{"snapshot", "observation", "content", "pending_size", "import_content"} {
+			for _, table := range []string{
+				"snapshot", "observation", "content", "pending_size", "import_content",
+				"search_path", "search_short", "search_trigram",
+			} {
 				assertEqual(t, count(t, raw, table), 0)
 			}
 		})
@@ -270,6 +276,14 @@ func TestImportBlocksCatalogQueriesAndSecondImport(t *testing.T) {
 
 		if _, err := db.CreateDisk("other", "", "", 1); !errors.Is(err, database.ErrBusy) {
 			t.Fatalf("disk creation during import: %v", err)
+		}
+		if _, err := db.Search(t.Context(), base.SearchFilters{
+			Query: "a", Field: "name", Match: "exact",
+			ContentFilters: base.ContentFilters{
+				Scope: base.ScopeCurrent, ReplicaMetric: base.ReplicaDisks,
+			},
+		}, 50, base.SearchAnchor{}, nil); !errors.Is(err, database.ErrBusy) {
+			t.Fatalf("search during import: %v", err)
 		}
 
 		if _, err := db.ListDiskSnapshots(t.Context(), disk, 50, 0, time.Time{}, nil); !errors.Is(err, database.ErrBusy) {

@@ -14,16 +14,8 @@ func ValidateContentFilters(f base.ContentFilters) error {
 	invalid = invalid || (f.ReplicaMetric != base.ReplicaDisks &&
 		f.ReplicaMetric != base.ReplicaLocations) || f.DiskID < 0
 	if f.Directory != "" {
-		invalid = invalid || f.DiskID == 0 || strings.HasPrefix(f.Directory, "/")
-		if len(f.Directory) > 1 && f.Directory[1] == ':' {
-			first := f.Directory[0]
-			invalid = invalid || (first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z')
-		}
-		for _, part := range strings.Split(f.Directory, "/") {
-			invalid = invalid || part == "" || part == "." || part == ".."
-		}
+		invalid = invalid || f.DiskID == 0 || !validDirectory(f.Directory)
 	}
-	invalid = invalid || strings.ContainsRune(f.Directory, 0) || len(f.Directory) > 1024
 	filtered := false
 	for _, n := range []*int64{f.OtherReplicas, f.MinOtherReplicas, f.MaxOtherReplicas} {
 		if n != nil {
@@ -40,6 +32,24 @@ func ValidateContentFilters(f base.ContentFilters) error {
 		return fmt.Errorf("%w: invalid content filters", ErrValidation)
 	}
 	return nil
+}
+
+func validDirectory(path string) bool {
+	if strings.HasPrefix(path, "/") || strings.ContainsRune(path, 0) || len(path) > 1024 {
+		return false
+	}
+	if len(path) > 1 && path[1] == ':' {
+		first := path[0]
+		if (first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z') {
+			return false
+		}
+	}
+	for _, part := range strings.Split(path, "/") {
+		if part == "" || part == "." || part == ".." {
+			return false
+		}
+	}
+	return true
 }
 
 const contentCandidates = currentSnapshots + `, candidates AS (

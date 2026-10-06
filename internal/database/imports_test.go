@@ -3,6 +3,7 @@ package database
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -26,6 +27,37 @@ func TestSourceDigestConstraints(t *testing.T) {
 		})
 		if !errors.Is(err, ErrValidation) {
 			t.Fatalf("accepted invalid digest %s: %v", digest, err)
+		}
+	}
+}
+
+func TestImportCleanupReferenceIndexes(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "catalog.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, table := range []string{"import_content", "pending_size"} {
+		rows, err := db.db.Query("EXPLAIN QUERY PLAN SELECT snapshot_id FROM "+table+
+			" WHERE content_id=? AND snapshot_id!=?", 1, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var plan []string
+		for rows.Next() {
+			var id, parent, unused int
+			var detail string
+			if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+				t.Fatal(err)
+			}
+			plan = append(plan, detail)
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		rows.Close()
+		if !strings.Contains(strings.Join(plan, "\n"), table+"_content") {
+			t.Fatalf("unindexed cleanup reference: %v", plan)
 		}
 	}
 }

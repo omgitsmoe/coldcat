@@ -216,14 +216,15 @@ holds ownership until requests have drained and the database closes. Stop the se
 before importing. `serve` defaults to `127.0.0.1:8080`; startup errors fail the command,
 and SIGINT/SIGTERM request graceful shutdown with a ten-second drain deadline.
 
-`internal/httpapi` implements readiness, disk management, exact hash lookup, content
-lists/detail, content observation pages, disk snapshot pages, observation detail,
+`internal/httpapi` implements readiness, disk management, exact/substring search,
+exact hash lookup, content lists/detail, content observation pages, disk snapshot pages, observation detail,
 and complete snapshot detail. See
 [openapi.json](openapi.json) for the implemented wire contract. IDs, byte counts and
 aggregate counts are decimal strings; timestamps are UTC RFC3339 with optional
 fractional seconds, and unknown sizes/mtimes are null. CORS is not enabled.
 
 ```sh
+curl 'http://127.0.0.1:8080/api/v1/search?q=report&field=name&match=substring&limit=50'
 curl 'http://127.0.0.1:8080/api/v1/contents/lookup?hash_type=sha256&hash=00000000000000000000000000000000000000000000000000000000000000ab'
 curl 'http://127.0.0.1:8080/api/v1/contents/1/observations?scope=current&limit=50'
 ```
@@ -251,6 +252,146 @@ import from publishing between them. Hash lookup accepts supported algorithms an
 nonempty decoded hexadecimal identities, including abbreviated identities in
 existing catalogs. Exact algorithm-specific digest lengths are enforced on imports;
 lookup validation and existing catalog rows are unchanged.
+
+## Filename and path search
+
+`GET /api/v1/search` returns observations with content, disk, complete-snapshot context,
+basename, relevance, `is_current`, and catalog-wide scoped/current replica summaries.
+The HTTP workflow tests import three disks, search a remembered filename, open content,
+traverse locations, and verify other-replica counts plus source/capture/import dates.
+
+Defaults are `field=name`, `match=substring`, `scope=current`, `replica_metric=disks`,
+and limit 50 (maximum 200). Names are final `/`-separated segments; paths are whole
+disk-relative paths. Matching is case-sensitive and literal, preserving whitespace,
+Unicode spelling and punctuation. No Unicode normalization or wildcard interpretation
+is applied. Queries must be valid UTF-8, nonempty, at most 1024 bytes, and contain no
+NUL. This query limit does not impose a new imported-path length limit.
+
+Exact selected-field matches rank before prefixes before other substrings. Ties use
+original path in binary order, then immutable observation ID ascending. Every matching
+historical observation remains a separate history result. `is_current` describes the
+observation's selected snapshot; current counts also distinguish content still present
+somewhere from historical-only content. Sizes and mtimes retain null/known-zero semantics.
+
+Disk, complete-snapshot and directory filters select membership without narrowing
+replica counts. Directory paths use the content-list segment/literal semantics and
+require a disk or snapshot selector over HTTP. An explicit snapshot restricts the
+chosen scope: an older snapshot returns an empty current page, and is searchable under
+history. Disk/snapshot disagreement is invalid. Both replica metrics and inclusive
+bounds follow the content-list contract and require current scope.
+
+Search cursors bind filters, limit, ranking version and complete-inventory revision.
+They carry relevance and observation ID; the immutable path is reconstructed under
+the read gate, so unusually long imported paths do not produce oversized cursors.
+Malformed/context-changed/invalid-anchor cursors return 400; a changed revision returns
+409. Unchanged restart and failed-import recovery preserve cursors. SQL cancellation
+propagates, and an active in-session import blocks search.
+
+### Index publication and cleanup
+
+The initial schema contains a distinct-path lexicon (`search_path`) with indexed
+basename/path equality, an external-content case-sensitive FTS5 trigram index, and
+explicit one-/two-rune postings (`search_short`). Paths are shared across disks and
+snapshots. FTS queries use quoted literal phrases, followed by literal verification;
+short queries use exact posting lookups because FTS5 trigrams cannot retrieve them.
+No search service loads the catalog's observations into Go.
+
+Observation insert/update triggers build lexicon, trigram and short-posting data in
+the same bounded batch transaction. Index-write failures therefore use normal import
+cleanup; publication additionally checks that every observation has a search path.
+Deleting a failed observation removes its lexicon row only after its last reference
+disappears, cascades short postings, and updates FTS. Completed paths remain protected;
+short postings can be deleted only through their owning path. Tests cover committed
+batch failure, cancellation, shared-path preservation, interrupted-state recovery,
+publication prerequisites and FTS integrity.
+
+Large failure measurements exposed unindexed content-reference lookups in existing
+import ownership/staging tables. `import_content_content` and `pending_size_content`
+now index those reverse references, including ownership cascades, with query-plan tests.
+This allows the measured 50,000-file late failure to clean up within the existing
+30-second cleanup deadline and leave the catalog usable.
+
+### Search measurements and fuzzy spike
+
+Reproduce the measurements with:
+
+```sh
+go test ./internal/database -run '^$' -bench BenchmarkSearchQueries -benchtime=20x -benchmem -v
+go test ./internal/database -run '^$' -bench BenchmarkSearchFuzzyDeletionSpike -benchtime=20x -benchmem -v
+go test ./internal/importer -run '^$' -bench BenchmarkSearchIndexedImport -benchtime=1x -benchmem
+```
+
+Measured on 2026-10-06, Linux amd64, Go 1.27.1, AMD Ryzen 5 9600X. The query fixture
+has 50,000 distinct contents/names, mixed numbered report/item names and Unicode path
+prefixes. The 50,000-observation case has 50,000 distinct paths; the million-observation
+case repeats contents across 20 current disks and approximately 100,000 distinct paths.
+These are current-inventory replication fixtures; history queries exercise that query
+shape, rather than a separate history-heavy dataset. Total catalog sizes, including
+observations and all indexes, were 131,821,568 and 402,841,600 bytes respectively.
+Raw-SQL fixture construction took 10.9 and 26.8 seconds; these are not streaming-import
+throughput measurements.
+
+Warm database-method p95 samples over 20 calls, milliseconds:
+
+| Query | 50,000 observations | 1,000,000 observations |
+| --- | ---: | ---: |
+| Exact basename | 0.87 | 1.18 |
+| Exact path | 0.65 | 0.90 |
+| Rare substring | 0.91 | 0.90 |
+| Common basename substring | 22.2 | 48.5 |
+| One-rune path substring | 32.2 | 99.4 |
+| Two-rune path substring | 31.6 | 98.5 |
+| No matching substring | 0.73 | 0.87 |
+| Directory membership | 20.7 | 52.5 |
+| Rare substring + disk/location bounds | 1.22 / 1.43 | 1.56 / 1.60 |
+| Common substring + disk/location bounds | 36.1 / 33.6 | 266.7 / 220.9 |
+| Common substring + no-match disk bound | 27.9 | 2117.3 |
+| Deep common-substring page | 31.1 | 66.9 |
+| Connection-cold rare substring | 1.23 | 2.03 |
+
+The query first pages qualifying paths, each guaranteed to have an eligible observation
+after the anchor, then expands only enough paths to fill the next observation page.
+This is exhaustive keyset pagination, not a candidate-recall cap. It reduced initial
+million-observation common/short-query means from 254/400 ms to approximately 47/97 ms.
+Replica eligibility can still require examining every matching path and catalog-wide
+content replicas, particularly to prove that no result satisfies a bound. The expensive
+no-match case above asks for 99 other disks. An agreed interactive budget, larger
+distinct-path and history-heavy distributions, and filesystem-cold measurements remain
+pending. Connection-cold closes SQLite connections between operations; it does not
+evict the OS filesystem cache. These p95 samples measure database calls, not HTTP load.
+
+The 50,000-file streaming import took 17.3 seconds (about 2,897 files/s). Parsing a late
+failure and completing cleanup took 26.8 seconds total (about 1,865 input files/s).
+The failure benchmark asserts that catalog access succeeds with revision zero afterward.
+Batch-callback Go heap samples peaked around 3.7–3.8 MB; cumulative Go allocations were
+about 856 MB per run. Those samples are not peak RSS or proof of a process memory bound.
+Larger imports, journal growth and standalone recovery latency still need measurement.
+
+The initial fuzzy spike establishes:
+
+- FTS5 trigrams support literal, case-sensitive Unicode/punctuation retrieval, but
+  miss one-/two-rune queries and do not provide typo tolerance.
+- A test-only deletion-signature lexicon plus exact adjacent-swap probes retains all
+  generated single insertion/deletion/substitution/transposition cases for short,
+  Unicode and punctuated terms. Restricted Damerau/optimal-string-alignment distance
+  reranking retains these at distance one. Candidate retrieval has no truncation cap.
+- The prototype applies Unicode simple case-fold orbits, preserves punctuation, and
+  does not canonically normalize composed/decomposed Unicode or equate `ß` with `ss`.
+  This is an explicit prototype normalization, not a shipped fuzzy HTTP contract.
+- For 50,003 terms, it built 610,007 signatures in about 179 ms, allocating about
+  188 MB cumulatively. Tested typo retrieval plus reranking took 4.4–4.9 microseconds;
+  a short-term probe took 1.3 microseconds. These exclude SQLite postings, observation
+  expansion, HTTP, index persistence and exhaustive sorting of large candidate sets.
+
+The recommended next fuzzy strategy is a persisted, versioned folded name/path lexicon
+with distance-one deletion signatures and adjacent-swap probes, merged with folded
+exact/prefix/substring tiers and deterministic distance reranking. Define whether path
+typos compare whole paths or segments before implementation; the current prototype
+compares whole terms. Benchmark worst-case short-query fan-out, persisted storage/import
+cost and full ranked pagination before accepting this strategy. FTS5-only fuzzy search
+is ruled out by the recall tests. `match=fuzzy` currently returns 400; production fuzzy
+search remains pending. A short ADR for the search index, normalization/ranking,
+alternatives and consequences is proposed; no ADR has been created without approval.
 
 ## Verification and follow-on work
 

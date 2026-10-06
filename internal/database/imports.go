@@ -117,6 +117,15 @@ func (db *DB) PublishImport(ctx context.Context, req PublishImportRequest) (base
 		if state != "importing" {
 			return fmt.Errorf("%w: snapshot is not importing", ErrConflict)
 		}
+		var missingSearchPaths bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
+ SELECT 1 FROM observation o LEFT JOIN search_path p ON p.path=o.path
+ WHERE o.snapshot_id=? AND p.id IS NULL)`, id).Scan(&missingSearchPaths); err != nil {
+			return err
+		}
+		if missingSearchPaths {
+			return fmt.Errorf("%w: snapshot search index is incomplete", ErrConflict)
+		}
 
 		if !req.AllowRepeat {
 			var existing base.SnapshotId

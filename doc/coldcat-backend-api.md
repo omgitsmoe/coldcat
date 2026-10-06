@@ -16,7 +16,7 @@ Also support directory browsing/sizing, directory replication, and redundancy fi
 - `internal/base`: disk, snapshot, content, observation, scope, and query-result types with nullable unknown metadata.
 - `internal/database`: transactional schema initialization/migration infrastructure, Windows/Unix exclusive catalog locking, import staging/publication/cleanup/recovery, and focused snapshot/content/observation queries.
 - `internal/importer`: streams `.cshd` records in batches of 1,000, validates records, propagates scanner/read errors and cancellation, and cleans up failed imports.
-- `internal/app`: context-aware application methods for disk creation/editing/detail, importing, snapshot reads, content/hash lookup, observation summaries, and cursor-paginated disk/content lists, observations and disk snapshots. Content lists support catalog-wide redundancy counts and disk/directory membership filters.
+- `internal/app`: context-aware application methods for disk creation/editing/detail, importing, snapshot reads, content/hash lookup, observation summaries, and cursor-paginated disk/content lists, observations, disk snapshots, and exact/substring name/path search. Search and content lists support catalog-wide redundancy counts and membership filters.
 - `internal/httpapi`: readiness, disk management and read-only content/observation/snapshot routes, explicit wire DTOs, structured errors, and HTTP contract tests; implemented routes are described in [openapi.json](openapi.json).
 - `cmd/coldcat`: testable `create`, grouped `disk create/list`, `snapshot list`, and `import` commands with configurable `--db`, JSON list output, explicit capture-time selection, and signal cancellation.
 - Tests cover schema initialization and migration infrastructure, constraints, cross-process locking, import failure/recovery, metadata staging, current/history selection, replica counts, and lookup query plans.
@@ -30,7 +30,7 @@ Completed tasks use `[x]`; unfinished tasks use `[ ]`. **Partial** identifies a 
 | --- | --- |
 | A — fixtures, semantics, migration safety | Core schema and semantic tests complete; distributed partial-copy fixture remains. |
 | B — reliable streaming imports and CLI | Cleanup, recovery, locking, duplicate-input detection, algorithm-specific hash-length validation, CLI output/progress/signal contracts, and process interruption tests complete; import measurements remain. |
-| C — primary workflow | Disk management, content/hash lookup, paginated disk/content lists with redundancy/membership filters, observations and disk snapshots, snapshot/detail HTTP routes, and replica-count tests complete; search and remaining HTTP routes remain. |
+| C — primary workflow | Exact/substring search → content → locations HTTP workflow, disk/content management and pagination, replica filters, and snapshot/detail routes complete; initial fuzzy spike complete, production fuzzy search and remaining HTTP routes remain. |
 | D — directories | Directory-shaped fixtures exist; directory services/comparisons remain. |
 | E — performance and handoff | Foundational checks and restart/recovery pagination tests complete; remaining performance measurements and the backend handoff gate remain. |
 
@@ -42,7 +42,8 @@ Resolved foundation gaps:
 - [x] Enforce unique snapshot/path observations and reject contradictory known sizes.
 - [x] Separate capture/import time and require explicit capture-time selection/provenance.
 - [x] Index snapshot selection and observation content/path lookups, with `EXPLAIN QUERY PLAN` tests.
-- [ ] Add basename/search and derived-directory indexes alongside their implementations.
+- [x] Add basename/path search indexes alongside exact/substring search, including indexed short queries.
+- [ ] Add derived-directory indexes alongside their implementation.
 
 Implementation details are documented in [backend-foundation.md](backend-foundation.md). Development database recreation was skipped at the user's request.
 
@@ -121,7 +122,8 @@ Use the existing application layer as the shared backend:
 - [x] Enforce unique `(snapshot_id, path)` observations. Unknown size is null; a supplied zero means a known empty file.
 - [x] Remove persistent trust/visibility states. Inventories are assumed complete; `importing` exists only until publication or cleanup. Recover interrupted imports before catalog access.
 - [x] Index observation content/snapshot and snapshot/path lookups and latest-snapshot selection. Validate these lookup shapes with `EXPLAIN QUERY PLAN`.
-- [ ] Add basename/path search indexes and directory parent/fingerprint indexes, with query-plan tests for those services.
+- [x] Add basename/path search indexes with query-plan tests: distinct-path lexicon, exact B-trees, FTS5 trigrams, and one-/two-rune postings.
+- [ ] Add directory parent/fingerprint indexes, with query-plan tests for those services.
 - [ ] Add a derived directory table keyed by `(snapshot_id, path)` with parent, counts, known-byte aggregates, and manifest fingerprint; build it bottom-up before snapshot publication.
 
 ### Import lifecycle
@@ -131,9 +133,9 @@ Use the existing application layer as the shared backend:
 3. **Partial:** stream records in bounded batches of 1,000 with typed progress and throttled CLI stderr reporting. Measured memory bounds remain.
 4. **Done:** validate paths/metadata/hash encoding and algorithm-specific digest lengths, deduplicate content, and reject duplicate snapshot paths.
 5. **Done:** return scanner/read errors and cancellation, with line/path context in record failures.
-6. **Pending:** build directory aggregates/fingerprints and search indexes.
-7. **Partial:** atomically publish the snapshot and staged sizes after parsing and all current-schema writes succeed. Add directory/search build prerequisites when those services exist.
-8. **Done for current schema:** immediately and transactionally delete failed snapshots, observations, staged sizes, and unreferenced import-owned content while preserving shared content. Extend cleanup to directory/search data when added.
+6. **Partial:** search indexes are built transactionally with observation batches; directory aggregates/fingerprints remain pending.
+7. **Partial:** atomically publish the snapshot and staged sizes after parsing and all current-schema writes succeed, including the search-path prerequisite. Add directory-build prerequisites when that service exists.
+8. **Done for current schema:** immediately and transactionally delete failed snapshots, observations, staged sizes, search entries, and unreferenced import-owned content while preserving shared content and search paths. Extend cleanup to directories when added.
 9. **Done at shared initialization:** retain the incomplete marker if cleanup fails, recover abandoned imports before another import or catalog access, and fail startup on recovery failure. Server integration remains pending.
 
 - [x] Stage shared-content size enrichment until successful publication and track content introduced by each import for targeted orphan cleanup.
@@ -170,7 +172,7 @@ coldcat --db <database> serve --listen 127.0.0.1:8080
 
 ## 5. HTTP API contract
 
-**Status: partial.** Readiness, disk list/detail/create/edit, hash lookup, content detail, paginated content lists with redundancy/membership filters, paginated content observations, paginated disk snapshots, observation detail, and complete snapshot detail are implemented with contract tests and [OpenAPI](openapi.json). Other routes below remain pending.
+**Status: partial.** Readiness, disk list/detail/create/edit, exact/substring name/path search, hash lookup, content detail, paginated content lists with redundancy/membership filters, paginated content observations, paginated disk snapshots, observation detail, and complete snapshot detail are implemented with contract tests and [OpenAPI](openapi.json). Fuzzy search and other routes below remain pending.
 
 Version under `/api/v1`. GETs are read-only. Keep result lists bounded and paginated with deterministic sorting. Use structured errors such as `{error: {code, message, details}}`; map validation/not-found/conflict failures consistently. Emit UTC RFC3339 timestamps, nullable unknown metadata, and hashes as algorithm + hex. Define byte counts/IDs safely for JavaScript clients (decimal strings for potentially unsafe integers).
 
@@ -184,7 +186,7 @@ Version under `/api/v1`. GETs are read-only. Keep result lists bounded and pagin
 | `PATCH /api/v1/disks/{id}` | Implemented: atomically edit label/notes/serial/capacity; omitted fields remain unchanged, null/empty notes and serial clear them. |
 | `GET /api/v1/disks/{id}/snapshots` | Paginated complete inventories. |
 | `GET /api/v1/snapshots/{id}` | Complete inventory provenance, dates, counts, and metadata completeness. |
-| `GET /api/v1/search` | Ranked observation search with content IDs and replica summaries. |
+| `GET /api/v1/search` | Implemented: ranked exact/substring observation search with content IDs, scoped/current replica summaries, membership/replica filters, and revision-bound cursors. Fuzzy remains pending. |
 | `GET /api/v1/contents` | Implemented: paginated distinct contents, current/history scope, disk/directory membership and current redundancy bounds using both metrics. Counts remain catalog-wide. |
 | `GET /api/v1/contents/lookup?hash_type=...&hash=...` | Exact known-hash lookup without requiring a catalog ID. |
 | `GET /api/v1/contents/{id}` | Hash, size/completeness, scoped location/disk counts, historical observation count. |
@@ -202,6 +204,7 @@ Version under `/api/v1`. GETs are read-only. Keep result lists bounded and pagin
 - A full relative path means the entire path within its disk, not a host mount path.
 - Initial fuzzy contract: case-insensitive matching with explicit normalization and a deterministic relevance score. Rank exact basename, prefix, and substring matches ahead of typo matches. Test Unicode and punctuation; preserve original path spelling in output.
 - Perform a SQLite capability/performance spike for an indexed basename/path lexicon, FTS5/trigram candidate retrieval, and edit-distance reranking. Verify typo recall, including short terms, before selecting the implementation. Trigram indexing alone does not implement typo-tolerant search.
+- Initial spike complete: case-sensitive FTS5 literal matching is supported but misses short terms and typos. Exact/substring search uses explicit short postings; a test-only deletion-signature/adjacent-swap prototype verifies single-edit recall and reranking. Persisted fuzzy indexing, complete HTTP ranking semantics, and end-to-end fuzzy measurements remain pending; see [backend-foundation.md](backend-foundation.md).
 - Do not load every observation into Go or silently truncate candidate sets while claiming complete ranked results. A bounded fuzzy contract must expose any incompleteness; if this cannot meet the benchmark, explicitly choose another index strategy before shipping.
 - Replica filters: `replica_metric=locations|disks`, `other_replicas=0|1|2|...` and/or min/max bounds. For directory listings, evaluate counts against the whole current catalog, not just the selected subtree.
 - Cursor state includes sort/filter context and the inventory revision (`MAX(id)` over complete snapshots, or zero). A successful offline import invalidates existing cursors; unchanged restarts preserve them. Cursors are for their issuing catalog; cross-catalog/recreated-database cursor detection is outside scope. No catalog identity table or stored revision counter is needed. Imports cannot change the inventory while the server is running; live-import invalidation is outside the initial scope.
@@ -234,7 +237,8 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 - [x] Test malformed/unsupported versions, invalid paths/hash encoding, numeric overflow, conflicting sizes, and duplicate paths across batch boundaries.
 - [x] Validate and test algorithm-specific hash lengths in parsing and batch insertion. Import-backed fixtures use full-length identities; tests cover late-failure cleanup, metadata/cursor preservation, and CLI errors/nonzero exits.
 - [x] Assert cleanup removes failed snapshot/observation/staging rows and import-owned orphans while preserving shared content and completed metadata. Verify recovery precedes catalog access/another import and that recovery failure prevents startup.
-- [ ] Extend cleanup assertions to derived directories and search entries when those indexes exist.
+- [x] Extend cleanup assertions to search entries, including shared-path preservation, index-write failure after committed batches, cancellation, FTS integrity, and interrupted-import recovery.
+- [ ] Extend cleanup assertions to derived directories when that index exists.
 - [x] Test cross-process catalog exclusion and OS lock release on abrupt process exit (`TestCatalogLockAcrossProcesses`). Test in-session query/disk-creation exclusion and second-import rejection (`TestImportBlocksCatalogQueriesAndSecondImport`).
 - [x] Test server/import overlap and server startup recovery of seeded interrupted state, plus child-process interrupted imports with committed batches, graceful signal cleanup, and abrupt-exit recovery.
 - [x] Exercise basic CLI argument validation, capture-time provenance, configurable database path, and successful human-readable output through `newCommand` (`cmd/coldcat/command_test.go`).
@@ -247,8 +251,8 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 - [x] List distinct contents with current/history scope, disk/directory membership filters, and current redundancy bounds using both metrics. Test catalog-wide counts, literal path/segment semantics, nullable sizes, revision-bound pagination, reopen/recovery and HTTP/OpenAPI contracts.
 - [x] List a disk's complete snapshots through the application and `GET /api/v1/disks/{id}/snapshots`, ordered by capture time and ID descending, with revision-bound keyset cursors. Test empty/missing disks, capture-time ties, indexed first/deep pages, restart/recovery preservation, failed-import preservation, and successful-import invalidation.
 - [x] Exercise hash lookup → content → paginated observations → observation/snapshot detail through HTTP integration tests, including three current disks and two other disks.
-- [ ] Write HTTP integration tests that import fixtures, search a remembered filename, follow `content_id`, list locations, and verify counts and dates end-to-end.
-- [ ] Test exact/substring/fuzzy basename and path searches, typo relevance/recall, Unicode, historical-only matches, stable pagination, revision changes, and HTTP error responses.
+- [x] Write HTTP integration tests that import fixtures, search a remembered filename, follow `content_id`, list locations, and verify counts and dates end-to-end.
+- [ ] **Partial:** exact/substring basename/path searches, Unicode/punctuation, historical-only matches, replica bounds, stable pagination, long-path cursors, revision changes, restart/recovery, and HTTP errors are tested. Initial single-edit fuzzy recall/reranking spike is tested; production fuzzy relevance and API tests remain.
 - [x] Test zero/one/two other-location counts and zero/one other-disk counts, historical-only zero counts, same-disk copies, and repeated historical observations (`TestSnapshotAndReplicaSemantics`).
 - [x] Add a content present on three current disks to exercise two other disks; implement and test content-list redundancy filters using both metrics, including same-disk copies and inclusive bounds.
 
@@ -263,15 +267,15 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 ### Milestone E — performance, recovery, and backend handoff
 
 - [ ] Agree a target catalog size and interactive latency budget; a suggested initial benchmark is one million observations, with results tracked for both cold and warm queries.
-- [ ] Benchmark streaming import memory/throughput, failure cleanup/recovery, fuzzy search recall/latency, replica filters, filtered/unfiltered directory queries, and pagination using representative name/path distributions.
+- [ ] **Partial:** exact/substring search and pagination measured at 50,000/1,000,000 observations; search-indexed streaming import and late-failure cleanup measured at 50,000 files; test-only fuzzy candidate/reranking latency measured for 50,000 distinct names. Persisted fuzzy, standalone recovery, directory queries, filesystem-cold queries, and broader distributions remain.
 - [x] Check query plans for latest-snapshot selection and observation content/snapshot/path lookups (`TestQueryIndexes`).
 - [x] Check exact hash lookup and content observation-page indexes; add focused 50,000-observation warm-query benchmarks for hash lookup and first/deep pages.
 - [x] Check content-list keyset and observation query indexes. Benchmark current/history first/deep pages, disk/directory membership and both redundancy metrics at 50,000 and 1,000,000 observations; document the catalog-wide cost of no-match bounds in `backend-foundation.md`. An agreed latency budget and cold-query measurements remain pending.
-- [ ] Check search query plans and remove full-catalog scans from the normal exact/substring lookup path; justify unavoidable heavier operations with measurements.
+- [x] Check search query plans and remove full-catalog observation scans from normal exact/substring retrieval. Page qualifying paths before expanding observations; document measured broad-query costs.
 - [x] Test application/import cancellation propagation and actionable catalog-lock errors; verify database-session recovery on reopen after seeded interruption or cleanup failure.
 - [x] Test HTTP pagination across unchanged reopen/restart and successful offline imports; failed imports preserve cursors, and server startup recovers seeded interrupted state before readiness. Child-process interrupted imports additionally verify application pagination after recovery and invalidation after subsequent publication.
 - [x] Run `go test ./...`, `go test -race ./...`, and `go vet ./...` with the configured Go 1.27.1 toolchain; all passed for the completed foundation. Packages/tests also cross-compiled for Windows amd64 and macOS arm64; runtime tests ran on Linux.
-- [ ] Run focused benchmarks. No `justfile` currently exists; adopt its commands if one is introduced.
+- [ ] **Partial:** focused content, exact/substring search, initial fuzzy spike, and search-indexed import benchmarks have run. Remaining service benchmarks are pending. No `justfile` currently exists; adopt its commands if one is introduced.
 - [x] Document schema initialization, pre-0.1 reset policy, import publication/cleanup/recovery, locking, and query semantics in `doc/backend-foundation.md`.
 - [ ] Final backend gate: the principal workflow and every planned endpoint are exercised by contract tests; measured search behavior is acceptable; OpenAPI examples are usable by a future frontend.
 
