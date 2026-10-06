@@ -88,3 +88,10 @@ type ContentObservationPage struct {
 	Items      []ContentObservation
 	NextCursor string
 }
+
+type SnapshotPage struct {
+	DiskID     DiskId
+	Catalog    CatalogState
+	Items      []Snapshot
+	NextCursor string
+}

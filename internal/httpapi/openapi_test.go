@@ -186,3 +186,31 @@ func TestOpenAPIReferencesAndExamples(t *testing.T) {
 	}
 	walk(document)
 }
+
+func TestSnapshotListOpenAPIContract(t *testing.T) {
+	document := openAPIDocument(t)
+	paths := document["paths"].(map[string]any)
+	operation := paths["/api/v1/disks/{id}/snapshots"].(map[string]any)["get"].(map[string]any)
+	var names []string
+	for _, item := range operation["parameters"].([]any) {
+		parameter := item.(map[string]any)
+		if ref, ok := parameter["$ref"].(string); ok {
+			parameter = resolveReference(t, document, ref)
+		}
+		names = append(names, parameter["name"].(string))
+	}
+	if !reflect.DeepEqual(names, []string{"id", "limit", "cursor"}) {
+		t.Fatalf("snapshot list parameters: %v", names)
+	}
+	responses := operation["responses"].(map[string]any)
+	for _, status := range []string{"200", "400", "404", "405", "409", "500", "503"} {
+		if _, ok := responses[status]; !ok {
+			t.Fatalf("missing response %s", status)
+		}
+	}
+	response := responses["200"].(map[string]any)
+	media := response["content"].(map[string]any)["application/json"].(map[string]any)
+	if media["schema"].(map[string]any)["$ref"] != "#/components/schemas/SnapshotPage" {
+		t.Fatal("snapshot list response must reference SnapshotPage")
+	}
+}

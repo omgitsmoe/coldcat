@@ -270,6 +270,10 @@ func TestImportBlocksCatalogQueriesAndSecondImport(t *testing.T) {
 			t.Fatalf("disk creation during import: %v", err)
 		}
 
+		if _, err := db.ListDiskSnapshots(t.Context(), disk, 50, 0, time.Time{}, nil); !errors.Is(err, database.ErrBusy) {
+			t.Fatalf("snapshot listing during import: %v", err)
+		}
+
 		if _, err := ImportReader(t.Context(), db, request(disk), strings.NewReader("")); !errors.Is(
 			err,
 			database.ErrBusy,

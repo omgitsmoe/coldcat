@@ -112,6 +112,29 @@ func snapshotResponse(value base.Snapshot) snapshotDTO {
 	}
 }
 
+type snapshotPageDTO struct {
+	DiskID     string        `json:"disk_id"`
+	Revision   string        `json:"revision"`
+	Items      []snapshotDTO `json:"items"`
+	NextCursor *string       `json:"next_cursor"`
+}
+
+func snapshotPageResponse(value base.SnapshotPage) snapshotPageDTO {
+	result := snapshotPageDTO{
+		DiskID: decimal(value.DiskID), Revision: decimal(value.Catalog.Revision),
+		Items: make([]snapshotDTO, 0, len(value.Items)),
+	}
+	if value.NextCursor != "" {
+		result.NextCursor = &value.NextCursor
+	}
+
+	for _, item := range value.Items {
+		result.Items = append(result.Items, snapshotResponse(item))
+	}
+
+	return result
+}
+
 type observationDTO struct {
 	ID         string  `json:"id"`
 	ContentID  string  `json:"content_id"`

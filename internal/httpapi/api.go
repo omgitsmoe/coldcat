@@ -293,6 +293,35 @@ func New(a *app.App) http.Handler {
 		)
 		return nil
 	})
+	register("/api/v1/disks/{id}/snapshots", func(w http.ResponseWriter, r *http.Request) error {
+		id, err := resourceID(r)
+		if err != nil {
+			return err
+		}
+
+		values, err := query(r, "limit", "cursor")
+		if err != nil {
+			return err
+		}
+
+		limit := 50
+		if values.Has("limit") {
+			limit, err = strconv.Atoi(values.Get("limit"))
+			if err != nil || limit < 1 || limit > 200 {
+				return fmt.Errorf("%w: limit must be between 1 and 200", database.ErrValidation)
+			}
+		}
+
+		result, err := a.ListDiskSnapshots(r.Context(), app.ListDiskSnapshotsRequest{
+			DiskID: base.DiskId(id), Limit: limit, Cursor: values.Get("cursor"),
+		})
+		if err != nil {
+			return err
+		}
+
+		writeJSON(w, 200, snapshotPageResponse(result))
+		return nil
+	})
 	register("/api/v1/snapshots/{id}", func(w http.ResponseWriter, r *http.Request) error {
 		id, err := resourceID(r)
 		if err != nil {

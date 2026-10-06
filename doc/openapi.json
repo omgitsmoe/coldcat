@@ -84,6 +84,29 @@
         }
       }
     },
+    "/api/v1/disks/{id}/snapshots": {
+      "get": {
+        "summary": "Page through a disk's complete inventories",
+        "description": "Ordered by captured_at descending, then snapshot ID descending. Older inventories imported later do not outrank newer captures. Existing disks without complete inventories return an empty page; nonexistent disks return 404. Keep disk ID and limit unchanged when following a cursor. Revision is the highest completed snapshot ID, or 0. A successful offline import on any disk invalidates cursors; unchanged restarts, disk creation, failed imports and removal of incomplete inventories preserve them. Cursors are for the issuing catalog. Unknown, empty and repeated scalar parameters are rejected.",
+        "parameters": [
+          {"$ref": "#/components/parameters/ID"},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}},
+          {"name": "cursor", "in": "query", "schema": {"type": "string", "minLength": 1, "maxLength": 2048}, "description": "Opaque next_cursor from the preceding page"}
+        ],
+        "responses": {
+          "200": {"description": "Complete snapshot page", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SnapshotPage"}, "examples": {
+            "lastPage": {"value": {"disk_id": "3", "revision": "3", "items": [{"id": "3", "disk_id": "3", "state": "complete", "captured_at": "1970-01-01T00:00:10.000000123Z", "imported_at": "2026-10-05T12:00:00Z", "capture_provenance": "explicit", "input_path": "/inventories/disk-2.cshd", "input_format": "cshd", "file_count": "1", "content_count": "1"}], "next_cursor": null}},
+            "emptyDisk": {"value": {"disk_id": "4", "revision": "3", "items": [], "next_cursor": null}}
+          }}}},
+          "400": {"$ref": "#/components/responses/Invalid"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "405": {"description": "Only GET and HEAD are allowed; Allow header is GET, HEAD", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "method_not_allowed", "message": "method not allowed"}}}}},
+          "409": {"description": "Inventory changed since the cursor was issued; restart pagination", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "stale_cursor", "message": "cursor belongs to a different inventory revision"}}}}},
+          "503": {"$ref": "#/components/responses/Unavailable"},
+          "500": {"$ref": "#/components/responses/Internal"}
+        }
+      }
+    },
     "/api/v1/snapshots/{id}": {
       "get": {
         "summary": "Read a complete inventory's provenance and counters",
@@ -111,6 +134,15 @@
       "Internal": {"description": "Unexpected server failure", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "internal_error", "message": "internal server error"}}}}}
     },
     "schemas": {
+      "SnapshotPage": {
+        "type": "object", "required": ["disk_id", "revision", "items", "next_cursor"],
+        "properties": {
+          "disk_id": {"$ref": "#/components/schemas/ID"},
+          "revision": {"$ref": "#/components/schemas/Count"},
+          "items": {"type": "array", "items": {"$ref": "#/components/schemas/Snapshot"}},
+          "next_cursor": {"type": ["string", "null"]}
+        }
+      },
       "ID": {"type": "string", "pattern": "^[1-9][0-9]*$", "description": "Positive signed 64-bit ID as decimal text"},
       "Count": {"type": "string", "pattern": "^(0|[1-9][0-9]*)$"},
       "NullableBytes": {"type": ["string", "null"], "pattern": "^(0|[1-9][0-9]*)$"},
