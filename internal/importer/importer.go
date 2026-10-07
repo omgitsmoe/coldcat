@@ -48,7 +48,10 @@ type Progress struct {
 
 type ProgressFunc func(Progress) error
 
-const defaultBatchSize = 5000
+const (
+	defaultBatchSize     = 5000
+	observationBatchSize = 1000
+)
 
 type Request struct {
 	DiskID         base.DiskId
@@ -299,14 +302,19 @@ func importBatch(ctx context.Context, tx *database.Tx, snapshotID int64, batch [
 		return err
 	}
 	defer lookup.Close()
-	observe, err := tx.PrepareContext(
-		ctx,
-		"INSERT INTO observation(snapshot_id,content_id,path,mtime) VALUES(?,?,?,?)",
-	)
-	if err != nil {
-		return err
+
+	observations := make([]any, 0, 4*observationBatchSize)
+	flushObservations := func() error {
+		query := "INSERT INTO observation(snapshot_id,content_id,path,mtime) VALUES " +
+			strings.TrimSuffix(strings.Repeat("(?,?,?,?),", len(observations)/4), ",")
+		if _, err := tx.ExecContext(ctx, query, observations...); err != nil {
+			return fmt.Errorf("observe %d paths from %q through %q: %w",
+				len(observations)/4, observations[2], observations[len(observations)-2], err)
+		}
+		observations = observations[:0]
+		return nil
 	}
-	defer observe.Close()
+
 	trackContent, err := tx.PrepareContext(ctx,
 		"INSERT INTO import_content(snapshot_id,content_id) VALUES(?,?)")
 	if err != nil {
@@ -398,9 +406,15 @@ func importBatch(ctx context.Context, tx *database.Tx, snapshotID int64, batch [
 			mtime = database.FormatTime(file.MTime)
 		}
 
-		if _, err := observe.ExecContext(ctx, snapshotID, id, file.path(), mtime); err != nil {
-			return fmt.Errorf("observe path %q: %w", file.path(), err)
+		observations = append(observations, snapshotID, id, file.path(), mtime)
+		if len(observations) == 4*observationBatchSize {
+			if err := flushObservations(); err != nil {
+				return err
+			}
 		}
+	}
+	if len(observations) > 0 {
+		return flushObservations()
 	}
 
 	return nil

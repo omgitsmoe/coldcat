@@ -89,12 +89,24 @@ implementation because imports consume recorded hashes rather than computing the
 
 Each input represents a complete inventory of one disk. Imports commit bounded
 batches of 5,000 records while their snapshot is internally `importing`.
+Within each transaction, observation inserts use at most 1,000 rows per SQL
+statement (4,000 bound parameters). Search and immutability triggers still run
+for every row; committed progress still advances only after the whole transaction.
+SQL insertion errors identify the affected batch's first and last paths.
 Sizes are staged only for content whose size is not yet known, including enrichment
 of existing content. Repeated observations must agree with either the known or
 staged size. Publication
 atomically applies those sizes, records counters, removes staging/ownership rows,
 and changes the snapshot to `complete`. Completed snapshots and observations are
 immutable.
+
+On the 10,000-file import-phase fixture (7,500 unique contents, known sizes,
+nested paths), paired five-iteration runs measured 0.975 s/import before observation
+batching and 0.638 s/import afterward on an AMD Ryzen 5 9600X. Ingestion fell from
+0.598 s to 0.262 s; directory building and publication were essentially unchanged.
+The 50,000-file indexed-import fixture (distinct contents, shallow paths, unknown
+sizes) fell from 2.931 s/import to 1.834 s/import in paired five-iteration runs.
+These warm synthetic measurements do not predict an arbitrary inventory's speedup.
 
 The importer computes a streaming SHA-256 semantic digest over parsed records in
 input order. The version-1 encoding starts with a length-prefixed
