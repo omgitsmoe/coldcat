@@ -129,6 +129,14 @@ defensively. Content lookup requires an observation in a completed inventory.
 
 ## Query semantics
 
+- `GET /api/v1/catalog` exposes `scope=current`, inventory `revision`, and decimal-string
+  `disk_count`, `file_count`, and `content_count` for dashboard/sidebar statistics.
+  Disks include those without inventories. Files count observations in the latest complete
+  snapshot per disk; content counts distinct identities across those snapshots, not summed
+  per-disk counts. Empty catalogs return zeros. One SQL statement provides a consistent view.
+  The revision is the maximum complete snapshot ID (or zero), not a catalog identity or a
+  general response version: disk creation/editing can change the response without advancing it.
+  No parameters, historical totals, or persistent identity table are provided.
 - Current scope selects the latest complete snapshot of each disk by
   `(captured_at, snapshot_id)`. Later ingestion of an older inventory does not
   replace a newer inventory.

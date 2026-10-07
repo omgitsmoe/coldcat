@@ -3,6 +3,25 @@
   "info": {"title": "Coldcat backend API", "version": "0.1.0", "description": "Content, observation and disk-management API. Imports run offline with the server stopped. GETs are read-only. IDs, counts and bytes are decimal strings. Only complete inventories are visible."},
   "servers": [{"url": "http://127.0.0.1:8080"}],
   "paths": {
+    "/api/v1/catalog": {
+      "get": {
+        "summary": "Read current catalog statistics",
+        "description": "One catalog belongs to the running backend. No parameters are accepted. disk_count includes registered disks without inventories. file_count counts observations in the latest complete snapshot per disk, selected by captured_at then id descending; copies at different paths count separately. content_count counts distinct content identities across those snapshots, not summed per-disk totals. Historical-only content and incomplete imports are excluded. Current means latest recorded state, not recent filesystem verification. revision is MAX(id) over complete snapshots, or zero; disk creation and metadata edits do not advance it. This is an inventory revision, not a general response version or catalog identity. Empty catalogs return zero totals.",
+        "responses": {
+          "200": {"description": "Current catalog totals", "content": {"application/json": {
+            "schema": {"$ref": "#/components/schemas/CatalogSummary"},
+            "examples": {
+              "empty": {"value": {"revision": "0", "scope": "current", "disk_count": "0", "file_count": "0", "content_count": "0"}},
+              "populated": {"value": {"revision": "12", "scope": "current", "disk_count": "4", "file_count": "1500", "content_count": "1100"}}
+            }
+          }}},
+          "400": {"$ref": "#/components/responses/Invalid"},
+          "405": {"description": "Only GET and HEAD are allowed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "500": {"$ref": "#/components/responses/Internal"},
+          "503": {"$ref": "#/components/responses/Unavailable"}
+        }
+      }
+    },
     "/api/v1/snapshots/{id}/directories": {
       "get": {
         "summary": "Browse immediate child directories in a complete snapshot",
@@ -418,6 +437,18 @@
       "Internal": {"description": "Unexpected server failure", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "internal_error", "message": "internal server error"}}}}}
     },
     "schemas": {
+      "CatalogSummary": {
+        "type": "object",
+        "required": ["revision", "scope", "disk_count", "file_count", "content_count"],
+        "additionalProperties": false,
+        "properties": {
+          "revision": {"$ref": "#/components/schemas/Decimal"},
+          "scope": {"type": "string", "const": "current"},
+          "disk_count": {"$ref": "#/components/schemas/Decimal"},
+          "file_count": {"$ref": "#/components/schemas/Decimal"},
+          "content_count": {"$ref": "#/components/schemas/Decimal"}
+        }
+      },
       "DirectorySummary": {
         "type": "object", "required": ["path", "file_count", "content_count", "known_bytes", "unknown_size_file_count", "size_complete", "unique_content_known_bytes", "unknown_size_content_count", "unique_content_size_complete", "max_known_mtime"],
         "properties": {
