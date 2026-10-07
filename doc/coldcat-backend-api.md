@@ -32,7 +32,7 @@ Completed tasks use `[x]`; unfinished tasks use `[ ]`. **Partial** identifies a 
 | B — reliable streaming imports and CLI | Cleanup, recovery, locking, duplicate-input detection, algorithm-specific hash-length validation, CLI output/progress/signal contracts, and process interruption tests complete; import measurements remain. |
 | C — primary workflow | Exact/substring/fuzzy search → content → locations HTTP workflow, disk/content management and pagination, replica filters, and snapshot/detail routes complete; larger fuzzy performance acceptance remains. |
 | D — directories | Derived indexes, browsing/sizing, redundancy histograms, exact replicas, content coverage, filtering, and all five directory HTTP routes complete. |
-| E — performance and handoff | Foundational checks and restart/recovery pagination tests complete; remaining performance measurements and the backend handoff gate remain. |
+| E — performance and handoff | Active milestone: close performance acceptance and the backend handoff gate. Foundational checks, restart/recovery pagination tests, and 50,000/1,000,000-distinct-path persisted fuzzy measurements are complete; broad fuzzy latency and storage remain acceptance concerns. |
 
 Resolved foundation gaps:
 
@@ -268,7 +268,7 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 ### Milestone E — performance, recovery, and backend handoff
 
 - [ ] Agree a target catalog size and interactive latency budget; a suggested initial benchmark is one million observations, with results tracked for both cold and warm queries.
-- [ ] **Partial:** exact/substring search, pagination, directory query/build/enrichment costs and directory-only recovery measured at 50,000/1,000,000 observations; search-and-directory-indexed streaming import and late-failure cleanup measured at 50,000 files; test-only fuzzy candidate/reranking latency measured for 50,000 distinct names. Persisted fuzzy, full-index standalone recovery, filesystem-cold queries, and broader multi-disk distributions remain. Directory measurements cover wide/deep/high-duplicate trees; see `backend-foundation.md`.
+- [ ] **Partial:** exact/substring search, pagination, directory query/build/enrichment costs and directory-only recovery measured at 50,000/1,000,000 observations; search-and-directory-indexed streaming import and late-failure cleanup measured at 50,000 files; test-only fuzzy candidate/reranking latency measured for 50,000 distinct names and persisted fuzzy latency/storage measured for 50,000/1,000,000 distinct paths. Full-index standalone recovery, filesystem-cold queries, and broader multi-disk distributions remain. Directory measurements cover wide/deep/high-duplicate trees; see `backend-foundation.md`.
 - [x] Check query plans for latest-snapshot selection and observation content/snapshot/path lookups (`TestQueryIndexes`).
 - [x] Check exact hash lookup and content observation-page indexes; add focused 50,000-observation warm-query benchmarks for hash lookup and first/deep pages.
 - [x] Check content-list keyset and observation query indexes. Benchmark current/history first/deep pages, disk/directory membership and both redundancy metrics at 50,000 and 1,000,000 observations; document the catalog-wide cost of no-match bounds in `backend-foundation.md`. An agreed latency budget and cold-query measurements remain pending.
@@ -279,6 +279,33 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 - [ ] **Partial:** focused content, exact/substring search, directory queries/build/recovery/comparisons, initial fuzzy spike, and search-indexed import benchmarks have run. Initial exact-replica and coverage measurements use 50,000 files; filtered and broader multi-disk distributions remain. No `justfile` currently exists; adopt its commands if one is introduced.
 - [x] Document schema initialization, pre-0.1 reset policy, import publication/cleanup/recovery, locking, and query semantics in `doc/backend-foundation.md`.
 - [ ] Final backend gate: the principal workflow and every planned endpoint are exercised by contract tests; measured search behavior is acceptable; OpenAPI examples are usable by a future frontend.
+
+### Active acceptance sequence
+
+Backend acceptance is the next work, not another feature milestone. No frontend implementation
+or frontend UX planning starts during this sequence. Snapshot diffing, UI-driven importing,
+extractors, thumbnails, and Wails remain deferred.
+
+1. **Done — measure persisted fuzzy scale:** the million-distinct-path benchmark produced
+   a 5.09 GB catalog with 41.8 million signatures, built in 11m12.5s. Warm mean typo lookup
+   was 0.798 ms; broad folded-prefix search was 1669.8 ms. Results are recorded in
+   `backend-foundation.md`; storage and broad-query latency remain acceptance concerns.
+   Distinguish distinct paths from repeated observations; raw fixture construction is not
+   streaming-import throughput, and warm means are not p95.
+2. **Agree acceptance limits:** select supported observation/distinct-path counts and budgets
+   for ordinary search, broad/short queries, replica-filter no-match cases, directory comparisons,
+   storage, import, and recovery. Keep limits proposed until explicitly approved. Existing slow
+   cases must be accepted as documented limitations or improved, not silently omitted.
+3. **Measure remaining operational costs:** full-index streaming import and late-failure cleanup
+   memory, transaction duration/journal growth, standalone interrupted-import recovery, and
+   representative multi-disk/history-heavy and filtered-comparison workloads.
+4. **Validate interactive behavior:** measure end-to-end HTTP search and follow-up reads,
+   including warm and filesystem-cold behavior. Closing/reopening SQLite alone does not
+   establish filesystem-cold performance. Compare results against the agreed limits.
+5. **Close handoff:** audit endpoint/primary-workflow contract coverage and OpenAPI examples,
+   document integration setup (including same-origin serving or explicit development CORS),
+   and rerun required correctness checks after any implementation changes. Record unresolved
+   limits explicitly; do not mark the gate complete solely because benchmarks ran.
 
 ## 7. Future snapshot comparison and UI-driven imports
 
@@ -309,4 +336,5 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 5. Imports are CLI-only and offline, with exclusive catalog access. Automatically delete failed imports and recover interrupted imports before database use.
 6. Support snapshot diffing later; preserve the necessary snapshot/path/content model now.
 
-The backend foundation is implemented. Continue with the remaining fixture/import/CLI tasks and primary workflow above; begin frontend work only after the final backend gate.
+The backend functionality and primary HTTP workflows are implemented. Continue with the active
+Milestone E acceptance sequence above; begin frontend work only after the final backend gate.

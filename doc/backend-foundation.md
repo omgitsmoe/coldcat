@@ -538,8 +538,26 @@ throughput. Warm means over 20 database calls were:
 | `xy` (two-rune no-match) | 0.64 ms |
 
 These do not establish p95, worst-case short-query fan-out, or a latency guarantee.
-Storage cost is substantial and remains an acceptance concern. The million-distinct-path
-case has not run. Larger distributions, HTTP latency, filesystem-cold behavior, indexed
+The million-distinct-path case ran on 2026-10-07 on the same CPU with four Go CPUs.
+It produced 41,800,000 signature postings and a 5,093,818,368-byte catalog
+(5.09 GB / 4.74 GiB), with fixture construction taking 11m12.5s. Warm means over
+20 database calls were:
+
+| Fuzzy basename query | Time/op |
+| --- | ---: |
+| `reprot-0000005.txt` (adjacent-swap typo) | 0.798 ms |
+| `REPORT` (broad folded prefix) | 1669.8 ms |
+| `a` (one-rune no-match) | 0.629 ms |
+| `xy` (two-rune no-match) | 0.621 ms |
+
+The targeted typo lookup remains fast, but broad folded-prefix latency and catalog
+storage are acceptance concerns. These catalog bytes include all fixture tables and
+indexes, not incremental fuzzy-index storage. The raw fixture omits directory aggregates;
+its build time is not streaming-import throughput. The short no-match probes do not
+measure short-query fan-out when many paths match. This successful benchmark run does
+not establish acceptable performance, p95, HTTP latency, or filesystem-cold behavior.
+
+Larger/more varied distributions, HTTP latency, filesystem-cold behavior, indexed
 streaming-import overhead, and standalone recovery still require measurements and
 an agreed acceptance budget. Functionality is implemented; the final performance
 and frontend-handoff gate remains open.
