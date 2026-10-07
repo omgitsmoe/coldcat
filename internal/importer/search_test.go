@@ -1,6 +1,7 @@
 package importer
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -13,10 +14,12 @@ func TestSearchIndexFailureCleansCommittedBatchesAndPreservesSharedPaths(t *test
 		strings.NewReader(",sha256,"+fixtureSHA25600000000+" tree/file-0\n"+
 			",sha256,"+fixtureSHA25600000000+" tree/FILE-0\n"))
 	assertNoErr(t, err)
-	failure := `CREATE TRIGGER fail_search BEFORE INSERT ON search_path
- WHEN NEW.path='tree/file-1001' BEGIN SELECT RAISE(ABORT,'search index failed'); END;`
+	failure := fmt.Sprintf(`CREATE TRIGGER fail_search BEFORE INSERT ON search_path
+ WHEN NEW.path='tree/file-%d' BEGIN SELECT RAISE(ABORT,'search index failed'); END;`,
+		defaultBatchSize+1)
 	assertNoErr(t, execSQL(raw, failure))
-	_, err = ImportReader(t.Context(), db, request(disk), strings.NewReader(manyFiles(2005, false)))
+	_, err = ImportReader(t.Context(), db, request(disk),
+		strings.NewReader(manyFiles(2*defaultBatchSize+5, false)))
 	if err == nil || !strings.Contains(err.Error(), "search index failed") {
 		t.Fatalf("index failure: %v", err)
 	}

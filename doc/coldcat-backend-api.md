@@ -15,7 +15,7 @@ Also support directory browsing/sizing, directory replication, and redundancy fi
 - Go, SQLite (`modernc.org/sqlite`), and `urfave/cli/v3`.
 - `internal/base`: disk, snapshot, content, observation, scope, and query-result types with nullable unknown metadata.
 - `internal/database`: transactional schema initialization/migration infrastructure, Windows/Unix exclusive catalog locking, import staging/publication/cleanup/recovery, and focused snapshot/content/observation queries.
-- `internal/importer`: streams `.cshd` records in batches of 1,000, validates records, propagates scanner/read errors and cancellation, and cleans up failed imports.
+- `internal/importer`: streams `.cshd` records in batches of 5,000, validates records, propagates scanner/read errors and cancellation, and cleans up failed imports.
 - `internal/app`: context-aware application methods for current catalog statistics, disk creation/editing/detail, importing, snapshot reads, content/hash lookup, observation summaries, and cursor-paginated disk/content lists, observations, disk snapshots, and exact/substring name/path search. Search and content lists support catalog-wide redundancy counts and membership filters.
 - `internal/httpapi`: readiness, disk management and read-only content/observation/snapshot routes, explicit wire DTOs, structured errors, and HTTP contract tests; implemented routes are described in [openapi.json](openapi.json).
 - `cmd/coldcat`: testable `create`, grouped `disk create/list`, `snapshot list`, and `import` commands with configurable `--db`, JSON list output, explicit capture-time selection, and signal cancellation.
@@ -130,7 +130,7 @@ Use the existing application layer as the shared backend:
 
 1. **Done:** acquire exclusive catalog access, recover abandoned imports, and validate disk, format, explicit inventory time, and input path.
 2. **Done:** create an `importing` snapshot.
-3. **Partial:** stream records in bounded batches of 1,000 with typed progress and throttled CLI stderr reporting. Measured memory bounds remain.
+3. **Partial:** stream records in bounded batches of 5,000 with typed progress and throttled CLI stderr reporting. Measured memory bounds remain.
 4. **Done:** validate paths/metadata/hash encoding and algorithm-specific digest lengths, deduplicate content, and reject duplicate snapshot paths.
 5. **Done:** return scanner/read errors and cancellation, with line/path context in record failures.
 6. **Done:** search indexes are built transactionally with observation batches; directory aggregates/fingerprints are built in a separate derived-index transaction before publication, streaming rows without whole-inventory Go collections.

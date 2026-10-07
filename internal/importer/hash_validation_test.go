@@ -116,15 +116,15 @@ func TestInvalidHashLengthCleansImportAndPreservesMetadata(t *testing.T) {
 			assertNoErr(t, err)
 			input := "# version 1\n"
 			if late {
-				input = manyFiles(1001, true)
+				input = manyFiles(defaultBatchSize+1, true)
 			}
 			input += ",4,sha256,ab invalid\n"
 			committed := int64(0)
 			req := request(disk)
 			req.Progress = func(progress Progress) error {
 				committed = progress.CommittedFiles
-				assertEqual(t, count(t, raw, "observation"), 1001)
-				assertEqual(t, count(t, raw, "pending_size"), 1000)
+				assertEqual(t, count(t, raw, "observation"), defaultBatchSize+1)
+				assertEqual(t, count(t, raw, "pending_size"), defaultBatchSize)
 				return nil
 			}
 			_, err = ImportReader(t.Context(), db, req, strings.NewReader(input))
@@ -134,7 +134,7 @@ func TestInvalidHashLengthCleansImportAndPreservesMetadata(t *testing.T) {
 			}
 			wantCommitted := int64(0)
 			if late {
-				wantCommitted = 1000
+				wantCommitted = defaultBatchSize
 			}
 			assertEqual(t, committed, wantCommitted)
 			for _, table := range []string{"snapshot", "content", "observation"} {

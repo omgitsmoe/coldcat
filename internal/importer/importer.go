@@ -34,8 +34,9 @@ type FileFunc = func(File) error
 type ProgressPhase string
 
 const (
-	ProgressImporting  ProgressPhase = "importing"
-	ProgressPublishing ProgressPhase = "publishing"
+	ProgressImporting   ProgressPhase = "importing"
+	ProgressDirectories ProgressPhase = "directories"
+	ProgressPublishing  ProgressPhase = "publishing"
 )
 
 type Progress struct {
@@ -46,6 +47,8 @@ type Progress struct {
 }
 
 type ProgressFunc func(Progress) error
+
+const defaultBatchSize = 5000
 
 type Request struct {
 	DiskID         base.DiskId
@@ -103,6 +106,16 @@ func ImportReader(
 	db *database.DB,
 	req Request,
 	r io.Reader,
+) (result base.Snapshot, err error) {
+	return importReader(ctx, db, req, r, defaultBatchSize)
+}
+
+func importReader(
+	ctx context.Context,
+	db *database.DB,
+	req Request,
+	r io.Reader,
+	batchSize int,
 ) (result base.Snapshot, err error) {
 	if req.DiskID <= 0 || req.CapturedAt.IsZero() || req.CapturedAt.UTC().Year() < 1 ||
 		req.CapturedAt.UTC().Year() > 9999 {
@@ -169,7 +182,6 @@ func ImportReader(
 		}
 	}()
 
-	const batchSize = 1000
 	var committed int64
 	report := func(phase ProgressPhase, final bool) error {
 		if req.Progress != nil {
@@ -221,12 +233,16 @@ func ImportReader(
 		return result, err
 	}
 
-	if err = report(ProgressPublishing, true); err != nil {
+	if err = report(ProgressDirectories, true); err != nil {
 		return result, err
 	}
 
 	if err = db.BuildDirectories(ctx, snapshotID); err != nil {
 		return result, fmt.Errorf("build directories: %w", err)
+	}
+
+	if err = report(ProgressPublishing, true); err != nil {
+		return result, err
 	}
 
 	result, err = db.PublishImport(
@@ -291,6 +307,27 @@ func importBatch(ctx context.Context, tx *database.Tx, snapshotID int64, batch [
 		return err
 	}
 	defer observe.Close()
+	trackContent, err := tx.PrepareContext(ctx,
+		"INSERT INTO import_content(snapshot_id,content_id) VALUES(?,?)")
+	if err != nil {
+		return err
+	}
+	defer trackContent.Close()
+
+	lookupSize, err := tx.PrepareContext(ctx,
+		"SELECT size FROM pending_size WHERE snapshot_id=? AND content_id=?")
+	if err != nil {
+		return err
+	}
+	defer lookupSize.Close()
+
+	stageSize, err := tx.PrepareContext(ctx,
+		"INSERT INTO pending_size(snapshot_id,content_id,size) VALUES(?,?,?)")
+	if err != nil {
+		return err
+	}
+	defer stageSize.Close()
+
 	for _, file := range batch {
 		if err := validateFile(file); err != nil {
 			return fmt.Errorf("file %q: %w", file.path(), err)
@@ -318,7 +355,7 @@ func importBatch(ctx context.Context, tx *database.Tx, snapshotID int64, batch [
 		}
 
 		if added > 0 {
-			if _, err := tx.ExecContext(ctx, "INSERT INTO import_content(snapshot_id,content_id) VALUES(?,?)", snapshotID, id); err != nil {
+			if _, err := trackContent.ExecContext(ctx, snapshotID, id); err != nil {
 				return err
 			}
 		}
@@ -335,23 +372,24 @@ func importBatch(ctx context.Context, tx *database.Tx, snapshotID int64, batch [
 				)
 			}
 
-			var staged int64
-			err := tx.QueryRowContext(ctx, "SELECT size FROM pending_size WHERE snapshot_id=? AND content_id=?", snapshotID, id).
-				Scan(&staged)
-			if err == nil && staged != size {
-				return fmt.Errorf(
-					"%w: file %q conflicts with staged content size",
-					database.ErrConflict,
-					file.path(),
-				)
-			}
+			if !known.Valid {
+				var staged int64
+				err := lookupSize.QueryRowContext(ctx, snapshotID, id).Scan(&staged)
+				if err == nil && staged != size {
+					return fmt.Errorf(
+						"%w: file %q conflicts with staged content size",
+						database.ErrConflict,
+						file.path(),
+					)
+				}
 
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-
-			if _, err := tx.ExecContext(ctx, "INSERT INTO pending_size(snapshot_id,content_id,size) VALUES(?,?,?) ON CONFLICT DO NOTHING", snapshotID, id, size); err != nil {
-				return err
+				if errors.Is(err, sql.ErrNoRows) {
+					if _, err := stageSize.ExecContext(ctx, snapshotID, id, size); err != nil {
+						return err
+					}
+				} else if err != nil {
+					return err
+				}
 			}
 		}
 

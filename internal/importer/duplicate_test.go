@@ -128,7 +128,7 @@ func TestDigestDoesNotDependOnSharedContentEnrichment(t *testing.T) {
 func TestIncompleteDigestDoesNotBlockRetry(t *testing.T) {
 	db, raw, disk := testDB(t)
 	req := request(disk)
-	input := manyFiles(1001, true)
+	input := manyFiles(defaultBatchSize+1, true)
 	_, err := ImportReader(t.Context(), db, req, strings.NewReader(input+"broken\n"))
 	assertErr(t, err)
 	assertEqual(t, count(t, raw, "snapshot"), 0)
@@ -147,5 +147,5 @@ func TestIncompleteDigestDoesNotBlockRetry(t *testing.T) {
 	_, err = ImportReader(t.Context(), db, req, strings.NewReader(input))
 	assertNoErr(t, err)
 	assertEqual(t, count(t, raw, "snapshot"), 1)
-	assertEqual(t, count(t, raw, "observation"), 1001)
+	assertEqual(t, count(t, raw, "observation"), defaultBatchSize+1)
 }

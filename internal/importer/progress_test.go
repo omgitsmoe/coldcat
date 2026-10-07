@@ -9,7 +9,7 @@ import (
 )
 
 func TestProgressTracksCommittedBatches(t *testing.T) {
-	for _, n := range []int{0, 1000, 2501} {
+	for _, n := range []int{0, defaultBatchSize, 2*defaultBatchSize + 501} {
 		t.Run(fmt.Sprint(n), func(t *testing.T) {
 			db, raw, disk := testDB(t)
 			req := request(disk)
@@ -26,12 +26,16 @@ func TestProgressTracksCommittedBatches(t *testing.T) {
 			result, err := ImportReader(t.Context(), db, req, strings.NewReader(manyFiles(n, true)))
 			assertNoErr(t, err)
 			assertEqual(t, result.FileCount, int64(n))
-			assertEqual(t, len(events), (n+999)/1000+1)
-			for i, event := range events[:len(events)-1] {
-				want := min(int64((i+1)*1000), int64(n))
+			assertEqual(t, len(events), (n+defaultBatchSize-1)/defaultBatchSize+2)
+			for i, event := range events[:len(events)-2] {
+				want := min(int64((i+1)*defaultBatchSize), int64(n))
 				assertEqual(t, event.CommittedFiles, want)
 				assertEqual(t, event.Phase, ProgressImporting)
 			}
+			directories := events[len(events)-2]
+			assertEqual(t, directories.Phase, ProgressDirectories)
+			assertEqual(t, directories.CommittedFiles, int64(n))
+			assertEqual(t, directories.StreamingComplete, true)
 			last := events[len(events)-1]
 			assertEqual(t, last.Phase, ProgressPublishing)
 			assertEqual(t, last.CommittedFiles, int64(n))
@@ -41,7 +45,7 @@ func TestProgressTracksCommittedBatches(t *testing.T) {
 }
 
 func TestProgressFailuresCleanImports(t *testing.T) {
-	for _, mode := range []string{"batch", "publishing", "cancel", "parse", "rollback"} {
+	for _, mode := range []string{"batch", "directories", "publishing", "cancel", "parse", "rollback"} {
 		t.Run(mode, func(t *testing.T) {
 			db, raw, disk := testDB(t)
 			_, err := ImportReader(t.Context(), db, request(disk),
@@ -55,7 +59,7 @@ func TestProgressFailuresCleanImports(t *testing.T) {
 			var events []Progress
 			req.Progress = func(p Progress) error {
 				events = append(events, p)
-				if mode == "batch" || mode == "publishing" && p.Phase == ProgressPublishing {
+				if mode == "batch" || string(p.Phase) == mode {
 					return failure
 				}
 				if mode == "cancel" {
@@ -63,16 +67,17 @@ func TestProgressFailuresCleanImports(t *testing.T) {
 				}
 				return nil
 			}
-			input := manyFiles(1001, true)
+			input := manyFiles(defaultBatchSize+1, true)
 			if mode == "parse" {
 				input += "broken\n"
 			}
 			if mode == "rollback" {
-				input = manyFiles(999, true) + ",4,sha256," + fixtureSHA25600000000 + " tree/file-0\n"
+				input = manyFiles(defaultBatchSize-1, true) +
+					",4,sha256," + fixtureSHA25600000000 + " tree/file-0\n"
 			}
 			_, err = ImportReader(ctx, db, req, strings.NewReader(input))
 			assertErr(t, err)
-			if mode == "batch" || mode == "publishing" {
+			if mode == "batch" || mode == "directories" || mode == "publishing" {
 				if !errors.Is(err, failure) {
 					t.Fatalf("lost callback error: %v", err)
 				}

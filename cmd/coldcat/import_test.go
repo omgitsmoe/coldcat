@@ -65,7 +65,8 @@ func TestImportOutputContract(t *testing.T) {
 					if err := cmd.Run(t.Context(), importArgs(path, file, extra...)); err != nil {
 						t.Fatal(err)
 					}
-					if !strings.Contains(stderr.String(), fmt.Sprintf("publishing: %d files", n)) {
+					if !strings.Contains(stderr.String(), fmt.Sprintf("directories: %d files", n)) ||
+						!strings.Contains(stderr.String(), fmt.Sprintf("publishing: %d files", n)) {
 						t.Fatalf("progress: %q", stderr.String())
 					}
 					if jsonMode {

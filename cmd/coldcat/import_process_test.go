@@ -25,7 +25,7 @@ type gatedImportWriter struct{ ctx context.Context }
 
 func (w gatedImportWriter) Write(p []byte) (int, error) {
 	n, err := os.Stderr.Write(p)
-	if err == nil && bytes.HasPrefix(p, []byte("importing: 1000 files committed")) {
+	if err == nil && bytes.HasPrefix(p, []byte("importing: 5000 files committed")) {
 		<-w.ctx.Done()
 	}
 	return n, err
@@ -86,7 +86,7 @@ func TestInterruptedImportRecoveryAndCursor(t *testing.T) {
 
 			var input strings.Builder
 			input.WriteString("# version 1\n,4,sha256," + fixtureSHA256AB + " shared\n")
-			for i := range 1000 {
+			for i := range 5000 {
 				fmt.Fprintf(&input, ",4,sha256,%064x new/file-%d\n", i+256, i)
 			}
 			if err := os.WriteFile(file, []byte(input.String()), 0600); err != nil {
@@ -112,7 +112,7 @@ func TestInterruptedImportRecoveryAndCursor(t *testing.T) {
 			}
 			t.Cleanup(func() { child.Process.Kill() })
 			scanner := bufio.NewScanner(stderr)
-			if !scanner.Scan() || !strings.HasPrefix(scanner.Text(), "importing: 1000 files committed") {
+			if !scanner.Scan() || !strings.HasPrefix(scanner.Text(), "importing: 5000 files committed") {
 				t.Fatalf("commit handshake: %q %v", scanner.Text(), scanner.Err())
 			}
 			switch mode {
@@ -156,9 +156,9 @@ func TestInterruptedImportRecoveryAndCursor(t *testing.T) {
 			}
 			if mode == "kill" {
 				assertRows("snapshot", 2)
-				assertRows("observation", 1002)
-				assertRows("pending_size", 1000)
-				assertRows("import_content", 999)
+				assertRows("observation", 5002)
+				assertRows("pending_size", 5000)
+				assertRows("import_content", 4999)
 			} else {
 				assertRows("snapshot", 1)
 				assertRows("observation", 2)

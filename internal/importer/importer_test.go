@@ -61,15 +61,16 @@ func manyFiles(n int, known bool) string {
 
 func TestImportPublishesOnlyAfterSuccess(t *testing.T) {
 	db, raw, disk := testDB(t)
+	const files = 2*defaultBatchSize + 5
 	result, err := ImportReader(
 		t.Context(),
 		db,
 		request(disk),
-		strings.NewReader(manyFiles(2005, true)),
+		strings.NewReader(manyFiles(files, true)),
 	)
 	assertNoErr(t, err)
-	assertEqual(t, result.FileCount, int64(2005))
-	assertEqual(t, result.ContentCount, int64(2005))
+	assertEqual(t, result.FileCount, int64(files))
+	assertEqual(t, result.ContentCount, int64(files))
 	if result.ImportedAt.IsZero() {
 		t.Fatal("missing import time")
 	}
@@ -87,12 +88,12 @@ func TestImportPublishesOnlyAfterSuccess(t *testing.T) {
 
 func TestImportFailuresCleanEveryCommittedBatch(t *testing.T) {
 	tests := map[string]string{
-		"late parse failure": manyFiles(1001, true) + "broken\n",
+		"late parse failure": manyFiles(defaultBatchSize+1, true) + "broken\n",
 		"duplicate across batches": manyFiles(
-			1001,
+			defaultBatchSize+1,
 			true,
 		) + ",4,sha256," + fixtureSHA25600000000 + " tree/file-0\n",
-		"conflicting size across batches": manyFiles(1001, true) +
+		"conflicting size across batches": manyFiles(defaultBatchSize+1, true) +
 			",9,sha256," + fixtureSHA25600000000 + " other\n",
 		"conflicting size within batch": "# version 1\n,4,sha256," + fixtureSHA256AB +
 			" a\n,5,sha256," + fixtureSHA256AB + " b\n",
@@ -128,10 +129,12 @@ func TestReaderErrorAndCancellationCleanCommittedBatches(t *testing.T) {
 			defer cancel()
 			failure := errors.New("reader failed")
 
-			var reader io.Reader = io.MultiReader(strings.NewReader(manyFiles(1001, true)), errorReader{failure})
+			var reader io.Reader = io.MultiReader(
+				strings.NewReader(manyFiles(defaultBatchSize+1, true)), errorReader{failure},
+			)
 			if cancelled {
 				reader = io.MultiReader(
-					strings.NewReader(manyFiles(1001, true)),
+					strings.NewReader(manyFiles(defaultBatchSize+1, true)),
 					cancelReader{cancel: cancel},
 				)
 			}
@@ -172,7 +175,7 @@ func TestFailedEnrichmentPreservesCompletedContent(t *testing.T) {
 		t.Context(),
 		db,
 		request(disk),
-		strings.NewReader(manyFiles(1001, true)+"broken\n"),
+		strings.NewReader(manyFiles(defaultBatchSize+1, true)+"broken\n"),
 	)
 	assertErr(t, err)
 	assertEqual(t, count(t, raw, "snapshot"), 1)
@@ -227,10 +230,10 @@ func TestCleanupFailurePoisonsQueriesUntilRecovery(t *testing.T) {
 		t.Context(),
 		db,
 		request(disk),
-		strings.NewReader(manyFiles(1001, true)+"broken\n"),
+		strings.NewReader(manyFiles(defaultBatchSize+1, true)+"broken\n"),
 	)
 	if err == nil || !strings.Contains(err.Error(), "cleanup blocked") ||
-		!strings.Contains(err.Error(), "line 1003") {
+		!strings.Contains(err.Error(), fmt.Sprintf("line %d", defaultBatchSize+3)) {
 		t.Fatal(err)
 	}
 

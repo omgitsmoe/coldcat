@@ -53,12 +53,15 @@ including recovery and label lookup, but excluding final output serialization.
 Progress reports committed file observations in the still-unpublished inventory,
 not visible files or distinct contents. The first batch is reported immediately;
 intermediate messages are throttled to one per 250 milliseconds. A final partial
-batch and the pre-publication phase are always reported. No percentage is claimed
+batch and the `directories` and `publishing` phase starts are always reported.
+The difference between their elapsed times measures directory construction; the
+final summary follows atomic publication. No percentage is claimed
 because the total input record count is unknown. Progress also uses stderr in JSON
 mode, leaving stdout suitable for scripts.
 
 Application imports accept an optional synchronous typed progress callback. Events
-run after batch commits, outside transactions, and immediately before publication.
+run after batch commits, outside transactions, before directory construction, and
+immediately before publication.
 Callback errors and cancellation use normal failed-import cleanup. No fallible
 callback runs after publication. The CLI fails an import if progress output fails.
 
@@ -85,8 +88,10 @@ earlier batches committed. Digest validation does not require a linked hashing
 implementation because imports consume recorded hashes rather than computing them.
 
 Each input represents a complete inventory of one disk. Imports commit bounded
-batches of 1,000 records while their snapshot is internally `importing`.
-Known sizes are staged, including enrichment of existing content. Publication
+batches of 5,000 records while their snapshot is internally `importing`.
+Sizes are staged only for content whose size is not yet known, including enrichment
+of existing content. Repeated observations must agree with either the known or
+staged size. Publication
 atomically applies those sizes, records counters, removes staging/ownership rows,
 and changes the snapshot to `complete`. Completed snapshots and observations are
 immutable.
@@ -171,7 +176,7 @@ After observation batches finish, the database builds this index in a separate t
 while the snapshot is still importing. Recursive SQL enumerates ancestors and groups content
 membership; Go streams directory rows and fingerprint entries rather than retaining whole
 inventories or manifests. Fingerprints are built bottom-up. Observation batches remain
-bounded at 1,000; the derived-index transaction can be larger and its database/journal cost
+bounded at 5,000; the derived-index transaction can be larger and its database/journal cost
 must be distinguished from streaming Go memory. Membership storage grows with file depth.
 
 Publication requires a successful directory-build marker, a root, completed fingerprints,
