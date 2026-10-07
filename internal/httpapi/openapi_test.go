@@ -118,8 +118,10 @@ func assertResponseSchema(t *testing.T, document map[string]any, schema map[stri
 			utf8.RuneCountInString(typed) < int(minimum) {
 			t.Fatalf("string %q shorter than minLength %v", typed, minimum)
 		}
-		if pattern, ok := schema["pattern"].(string); ok && !regexp.MustCompile(pattern).MatchString(typed) {
-			t.Fatalf("%q does not match %s", typed, pattern)
+		if pattern, ok := schema["pattern"].(string); ok {
+			if !regexp.MustCompile(pattern).MatchString(typed) {
+				t.Fatalf("%q does not match %s", typed, pattern)
+			}
 		}
 
 		if schema["format"] == "date-time" {
@@ -226,7 +228,8 @@ func TestSnapshotListOpenAPIContract(t *testing.T) {
 
 func TestContentListOpenAPIContract(t *testing.T) {
 	document := openAPIDocument(t)
-	operation := document["paths"].(map[string]any)["/api/v1/contents"].(map[string]any)["get"].(map[string]any)
+	paths := document["paths"].(map[string]any)
+	operation := paths["/api/v1/contents"].(map[string]any)["get"].(map[string]any)
 	var names []string
 	for _, item := range operation["parameters"].([]any) {
 		parameter := item.(map[string]any)
@@ -245,6 +248,39 @@ func TestContentListOpenAPIContract(t *testing.T) {
 	for _, status := range []string{"200", "400", "404", "405", "409", "500", "503"} {
 		if _, ok := responses[status]; !ok {
 			t.Fatalf("missing response %s", status)
+		}
+	}
+}
+
+func TestDirectoryComparisonOpenAPIContract(t *testing.T) {
+	document := openAPIDocument(t)
+
+	for _, route := range []string{
+		"/api/v1/snapshots/{id}/directory/replicas",
+		"/api/v1/snapshots/{id}/directory/coverage",
+	} {
+		operation := document["paths"].(map[string]any)[route].(map[string]any)["get"].(map[string]any)
+
+		var names []string
+		for _, item := range operation["parameters"].([]any) {
+			parameter := item.(map[string]any)
+			if ref, ok := parameter["$ref"].(string); ok {
+				parameter = resolveReference(t, document, ref)
+			}
+
+			names = append(names, parameter["name"].(string))
+		}
+
+		want := []string{"id", "path", "allow", "block", "limit", "cursor"}
+		if !reflect.DeepEqual(names, want) {
+			t.Fatalf("%s parameters: %v", route, names)
+		}
+
+		responses := operation["responses"].(map[string]any)
+		for _, status := range []string{"200", "400", "404", "405", "409", "500", "503"} {
+			if _, ok := responses[status]; !ok {
+				t.Fatalf("%s missing response %s", route, status)
+			}
 		}
 	}
 }

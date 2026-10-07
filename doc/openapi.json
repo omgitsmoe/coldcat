@@ -83,6 +83,66 @@
         }
       }
     },
+    "/api/v1/snapshots/{id}/directory/replicas": {
+      "get": {
+        "summary": "Page exact directory-tree replicas",
+        "description": "Compares the requested complete-snapshot directory with directories in each disk's latest complete snapshot. Relative file paths and content identities must match; root names and mtimes are ignored. Unfiltered fingerprints select candidates, but canonical manifests are verified. Filters are applied symmetrically and block rules take precedence. Paths use / on every platform. Doublestar v4 syntax is supported: *, **, ?, character classes, alternatives and backslash escaping. Matching is case-sensitive. Empty filtered comparisons return no replicas. Sort by disk ID, root path and directory ID. Successful imports invalidate cursors.",
+        "parameters": [
+          {"$ref": "#/components/parameters/ID"},
+          {"$ref": "#/components/parameters/DirectoryPath"},
+          {"$ref": "#/components/parameters/DirectoryAllow"},
+          {"$ref": "#/components/parameters/DirectoryBlock"},
+          {"$ref": "#/components/parameters/DirectoryLimit"},
+          {"$ref": "#/components/parameters/DirectoryCursor"}
+        ],
+        "responses": {
+          "200": {"description": "Verified exact-tree replica page", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DirectoryReplicaPage"}, "example": {
+            "snapshot": {"id": "1", "disk_id": "1", "state": "complete", "captured_at": "2026-10-01T12:00:00Z", "imported_at": "2026-10-06T12:00:00Z", "capture_provenance": "explicit", "input_path": "/inventories/source.cshd", "input_format": "cshd", "file_count": "3", "content_count": "3"},
+            "revision": "3", "is_current": true, "replica_scope": "current",
+            "filters": {"path": "photos", "allow": [], "block": ["**/*.log"]},
+            "selection": {"retained_file_count": "2", "excluded_file_count": "1", "content_count": "2", "known_bytes": "8", "unknown_size_file_count": "0", "size_complete": true, "empty_comparison": false},
+            "items": [{"disk": {"id": "2", "label": "backup", "serial": "", "capacity": "100"}, "snapshot": {"id": "2", "disk_id": "2", "state": "complete", "captured_at": "2026-10-01T12:00:00Z", "imported_at": "2026-10-06T12:01:00Z", "capture_provenance": "explicit", "input_path": "/inventories/backup.cshd", "input_format": "cshd", "file_count": "3", "content_count": "3"}, "path": "renamed", "same_disk": false, "whole_tree_equal": false, "retained_file_count": "2", "excluded_file_count": "1"}],
+            "next_cursor": null
+          }}}},
+          "400": {"$ref": "#/components/responses/Invalid"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"$ref": "#/components/responses/StaleCursor"},
+          "405": {"description": "Only GET and HEAD are allowed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "500": {"$ref": "#/components/responses/Internal"},
+          "503": {"$ref": "#/components/responses/Unavailable"}
+        }
+      }
+    },
+    "/api/v1/snapshots/{id}/directory/coverage": {
+      "get": {
+        "summary": "Page content coverage on other disks",
+        "description": "For each other disk's latest complete snapshot, reports how many selected source file occurrences and distinct contents exist anywhere on that disk. Destination names and paths do not matter. Source-disk results are excluded. Known and unknown source byte counts remain separate. Uses the same case-sensitive doublestar allow/block selection as directory replicas. Empty filtered comparisons return no disk rows. Sort by disk ID; successful imports invalidate cursors.",
+        "parameters": [
+          {"$ref": "#/components/parameters/ID"},
+          {"$ref": "#/components/parameters/DirectoryPath"},
+          {"$ref": "#/components/parameters/DirectoryAllow"},
+          {"$ref": "#/components/parameters/DirectoryBlock"},
+          {"$ref": "#/components/parameters/DirectoryLimit"},
+          {"$ref": "#/components/parameters/DirectoryCursor"}
+        ],
+        "responses": {
+          "200": {"description": "Other-disk coverage page", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DirectoryCoveragePage"}, "example": {
+            "snapshot": {"id": "1", "disk_id": "1", "state": "complete", "captured_at": "2026-10-01T12:00:00Z", "imported_at": "2026-10-06T12:00:00Z", "capture_provenance": "explicit", "input_path": "/inventories/source.cshd", "input_format": "cshd", "file_count": "3", "content_count": "3"},
+            "revision": "3", "is_current": true, "replica_scope": "current",
+            "filters": {"path": "photos", "allow": [], "block": []},
+            "selection": {"retained_file_count": "3", "excluded_file_count": "0", "content_count": "3", "known_bytes": "8", "unknown_size_file_count": "1", "size_complete": false, "empty_comparison": false},
+            "items": [{"disk": {"id": "2", "label": "partial", "serial": "", "capacity": "100"}, "snapshot": {"id": "2", "disk_id": "2", "state": "complete", "captured_at": "2026-10-01T12:00:00Z", "imported_at": "2026-10-06T12:01:00Z", "capture_provenance": "explicit", "input_path": "/inventories/partial.cshd", "input_format": "cshd", "file_count": "2", "content_count": "2"}, "covered_file_count": "2", "missing_file_count": "1", "covered_content_count": "2", "missing_content_count": "1", "covered_known_bytes": "4", "missing_known_bytes": "4", "covered_unknown_size_file_count": "1", "missing_unknown_size_file_count": "0", "complete": false}],
+            "next_cursor": null
+          }}}},
+          "400": {"$ref": "#/components/responses/Invalid"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"$ref": "#/components/responses/StaleCursor"},
+          "405": {"description": "Only GET and HEAD are allowed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "500": {"$ref": "#/components/responses/Internal"},
+          "503": {"$ref": "#/components/responses/Unavailable"}
+        }
+      }
+    },
     "/api/v1/search": {
       "get": {
         "summary": "Search observations by filename or disk-relative path",
@@ -339,6 +399,8 @@
       "DirectoryPath": {"name": "path", "in": "query", "allowEmptyValue": true, "description": "Omitted or empty means root. Case-sensitive valid UTF-8 disk-relative directory with / separators; long imported directory paths are supported. No absolute paths, traversal or trailing separators; glob characters and backslashes are literal.", "schema": {"type": "string"}, "example": "docs"},
       "DirectoryLimit": {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}},
       "DirectoryCursor": {"name": "cursor", "in": "query", "description": "Opaque next_cursor; preserve filters and limit.", "schema": {"type": "string", "minLength": 1, "maxLength": 16384}},
+      "DirectoryAllow": {"name": "allow", "in": "query", "description": "Repeatable case-sensitive doublestar v4 pattern. With any allow rule, a relative source path must match at least one. Maximum 100 patterns and 1024 UTF-8 bytes per pattern across allow/block, with 16384 bytes total.", "style": "form", "explode": true, "schema": {"type": "array", "maxItems": 100, "items": {"type": "string", "minLength": 1, "maxLength": 1024}}},
+      "DirectoryBlock": {"name": "block", "in": "query", "description": "Repeatable case-sensitive doublestar v4 pattern. Matching block rules override allow rules.", "style": "form", "explode": true, "schema": {"type": "array", "maxItems": 100, "items": {"type": "string", "minLength": 1, "maxLength": 1024}}},
       "ID": {"name": "id", "in": "path", "required": true, "schema": {"$ref": "#/components/schemas/ID"}},
       "Scope": {"name": "scope", "in": "query", "schema": {"type": "string", "enum": ["current", "history"], "default": "current"}}
     },
@@ -419,6 +481,80 @@
             "size": {"type": ["string", "null"], "pattern": "^(0|[1-9][0-9]*)$"},
             "other_location_count": {"$ref": "#/components/schemas/Decimal"}, "other_disk_count": {"$ref": "#/components/schemas/Decimal"}
           }}
+        }
+      },
+      "DirectoryComparisonFilters": {
+        "type": "object", "required": ["path", "allow", "block"],
+        "properties": {
+          "path": {"type": "string"},
+          "allow": {"type": "array", "items": {"type": "string"}},
+          "block": {"type": "array", "items": {"type": "string"}}
+        }
+      },
+      "DirectorySelection": {
+        "type": "object", "required": ["retained_file_count", "excluded_file_count", "content_count", "known_bytes", "unknown_size_file_count", "size_complete", "empty_comparison"],
+        "properties": {
+          "retained_file_count": {"$ref": "#/components/schemas/Count"},
+          "excluded_file_count": {"$ref": "#/components/schemas/Count"},
+          "content_count": {"$ref": "#/components/schemas/Count"},
+          "known_bytes": {"$ref": "#/components/schemas/Decimal"},
+          "unknown_size_file_count": {"$ref": "#/components/schemas/Count"},
+          "size_complete": {"type": "boolean"},
+          "empty_comparison": {"type": "boolean"}
+        }
+      },
+      "DirectoryReplica": {
+        "type": "object", "required": ["disk", "snapshot", "path", "same_disk", "whole_tree_equal", "retained_file_count", "excluded_file_count"],
+        "properties": {
+          "disk": {"$ref": "#/components/schemas/Disk"},
+          "snapshot": {"$ref": "#/components/schemas/Snapshot"},
+          "path": {"type": "string"},
+          "same_disk": {"type": "boolean"},
+          "whole_tree_equal": {"type": "boolean"},
+          "retained_file_count": {"$ref": "#/components/schemas/Count"},
+          "excluded_file_count": {"$ref": "#/components/schemas/Count"}
+        }
+      },
+      "DirectoryReplicaPage": {
+        "type": "object", "required": ["snapshot", "revision", "is_current", "replica_scope", "filters", "selection", "items", "next_cursor"],
+        "properties": {
+          "snapshot": {"$ref": "#/components/schemas/Snapshot"},
+          "revision": {"$ref": "#/components/schemas/Decimal"},
+          "is_current": {"type": "boolean"},
+          "replica_scope": {"type": "string", "const": "current"},
+          "filters": {"$ref": "#/components/schemas/DirectoryComparisonFilters"},
+          "selection": {"$ref": "#/components/schemas/DirectorySelection"},
+          "items": {"type": "array", "items": {"$ref": "#/components/schemas/DirectoryReplica"}},
+          "next_cursor": {"type": ["string", "null"]}
+        }
+      },
+      "DirectoryCoverage": {
+        "type": "object", "required": ["disk", "snapshot", "covered_file_count", "missing_file_count", "covered_content_count", "missing_content_count", "covered_known_bytes", "missing_known_bytes", "covered_unknown_size_file_count", "missing_unknown_size_file_count", "complete"],
+        "properties": {
+          "disk": {"$ref": "#/components/schemas/Disk"},
+          "snapshot": {"$ref": "#/components/schemas/Snapshot"},
+          "covered_file_count": {"$ref": "#/components/schemas/Count"},
+          "missing_file_count": {"$ref": "#/components/schemas/Count"},
+          "covered_content_count": {"$ref": "#/components/schemas/Count"},
+          "missing_content_count": {"$ref": "#/components/schemas/Count"},
+          "covered_known_bytes": {"$ref": "#/components/schemas/Decimal"},
+          "missing_known_bytes": {"$ref": "#/components/schemas/Decimal"},
+          "covered_unknown_size_file_count": {"$ref": "#/components/schemas/Count"},
+          "missing_unknown_size_file_count": {"$ref": "#/components/schemas/Count"},
+          "complete": {"type": "boolean"}
+        }
+      },
+      "DirectoryCoveragePage": {
+        "type": "object", "required": ["snapshot", "revision", "is_current", "replica_scope", "filters", "selection", "items", "next_cursor"],
+        "properties": {
+          "snapshot": {"$ref": "#/components/schemas/Snapshot"},
+          "revision": {"$ref": "#/components/schemas/Decimal"},
+          "is_current": {"type": "boolean"},
+          "replica_scope": {"type": "string", "const": "current"},
+          "filters": {"$ref": "#/components/schemas/DirectoryComparisonFilters"},
+          "selection": {"$ref": "#/components/schemas/DirectorySelection"},
+          "items": {"type": "array", "items": {"$ref": "#/components/schemas/DirectoryCoverage"}},
+          "next_cursor": {"type": ["string", "null"]}
         }
       },
       "CreateDisk": {

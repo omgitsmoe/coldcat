@@ -63,3 +63,66 @@ type DirectoryPage struct {
 	Items      []DirectoryEntry
 	NextCursor string
 }
+
+type DirectoryComparisonFilters struct {
+	SnapshotID SnapshotId `json:"snapshot_id"`
+	Path       string     `json:"path"`
+	Allow      []string   `json:"allow"`
+	Block      []string   `json:"block"`
+}
+
+type DirectorySelection struct {
+	RetainedFileCount    int64
+	ExcludedFileCount    int64
+	ContentCount         int64
+	KnownBytes           int64
+	UnknownSizeFileCount int64
+	EmptyComparison      bool
+}
+
+type DirectoryReplica struct {
+	DirectoryID       int64
+	Disk              Disk
+	Snapshot          Snapshot
+	Path              string
+	SameDisk          bool
+	WholeTreeEqual    bool
+	RetainedFileCount int64
+	ExcludedFileCount int64
+}
+
+type DirectoryReplicaAnchor struct {
+	DiskID      DiskId `json:"disk_id"`
+	Path        string `json:"path"`
+	DirectoryID int64  `json:"directory_id"`
+}
+
+type DirectoryReplicaPage struct {
+	DirectoryContext
+	Filters    DirectoryComparisonFilters
+	Selection  DirectorySelection
+	Items      []DirectoryReplica
+	NextCursor string
+}
+
+type DirectoryCoverage struct {
+	Disk                    Disk
+	Snapshot                Snapshot
+	CoveredFileCount        int64
+	MissingFileCount        int64
+	CoveredContentCount     int64
+	MissingContentCount     int64
+	CoveredKnownBytes       int64
+	MissingKnownBytes       int64
+	CoveredUnknownSizeFiles int64
+	MissingUnknownSizeFiles int64
+	Complete                bool
+}
+
+type DirectoryCoveragePage struct {
+	DirectoryContext
+	Filters    DirectoryComparisonFilters
+	Selection  DirectorySelection
+	Items      []DirectoryCoverage
+	NextCursor string
+}

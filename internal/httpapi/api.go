@@ -166,6 +166,14 @@ func New(a *app.App) http.Handler {
 		func(w http.ResponseWriter, r *http.Request) error {
 			return listDirectoryEntries(a, w, r, false)
 		})
+	register("/api/v1/snapshots/{id}/directory/replicas",
+		func(w http.ResponseWriter, r *http.Request) error {
+			return listDirectoryReplicas(a, w, r)
+		})
+	register("/api/v1/snapshots/{id}/directory/coverage",
+		func(w http.ResponseWriter, r *http.Request) error {
+			return listDirectoryCoverage(a, w, r)
+		})
 	registerMethods("/api/v1/disks", "GET, HEAD, POST",
 		map[string]func(http.ResponseWriter, *http.Request) error{
 			"GET":  func(w http.ResponseWriter, r *http.Request) error { return listDisks(a, w, r) },

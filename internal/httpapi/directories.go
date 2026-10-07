@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/omgitsmoe/coldcat/internal/app"
@@ -221,5 +222,245 @@ func listDirectoryEntries(
 		return err
 	}
 	writeJSON(w, http.StatusOK, dto)
+	return nil
+}
+
+type directoryComparisonFiltersDTO struct {
+	Path  string   `json:"path"`
+	Allow []string `json:"allow"`
+	Block []string `json:"block"`
+}
+
+type directorySelectionDTO struct {
+	RetainedFileCount    string `json:"retained_file_count"`
+	ExcludedFileCount    string `json:"excluded_file_count"`
+	ContentCount         string `json:"content_count"`
+	KnownBytes           string `json:"known_bytes"`
+	UnknownSizeFileCount string `json:"unknown_size_file_count"`
+	SizeComplete         bool   `json:"size_complete"`
+	EmptyComparison      bool   `json:"empty_comparison"`
+}
+
+func directoryComparisonFiltersResponse(
+	filters base.DirectoryComparisonFilters,
+) directoryComparisonFiltersDTO {
+	return directoryComparisonFiltersDTO{
+		Path:  filters.Path,
+		Allow: append([]string{}, filters.Allow...),
+		Block: append([]string{}, filters.Block...),
+	}
+}
+
+func directorySelectionResponse(selection base.DirectorySelection) directorySelectionDTO {
+	return directorySelectionDTO{
+		RetainedFileCount:    decimal(selection.RetainedFileCount),
+		ExcludedFileCount:    decimal(selection.ExcludedFileCount),
+		ContentCount:         decimal(selection.ContentCount),
+		KnownBytes:           decimal(selection.KnownBytes),
+		UnknownSizeFileCount: decimal(selection.UnknownSizeFileCount),
+		SizeComplete:         selection.UnknownSizeFileCount == 0,
+		EmptyComparison:      selection.EmptyComparison,
+	}
+}
+
+type directoryReplicaDTO struct {
+	Disk              diskDTO     `json:"disk"`
+	Snapshot          snapshotDTO `json:"snapshot"`
+	Path              string      `json:"path"`
+	SameDisk          bool        `json:"same_disk"`
+	WholeTreeEqual    bool        `json:"whole_tree_equal"`
+	RetainedFileCount string      `json:"retained_file_count"`
+	ExcludedFileCount string      `json:"excluded_file_count"`
+}
+
+type directoryReplicaPageDTO struct {
+	directoryContextDTO
+	Filters    directoryComparisonFiltersDTO `json:"filters"`
+	Selection  directorySelectionDTO         `json:"selection"`
+	Items      []directoryReplicaDTO         `json:"items"`
+	NextCursor *string                       `json:"next_cursor"`
+}
+
+func directoryReplicaPageResponse(page base.DirectoryReplicaPage) directoryReplicaPageDTO {
+	result := directoryReplicaPageDTO{
+		directoryContextDTO: directoryContextResponse(page.DirectoryContext),
+		Filters:             directoryComparisonFiltersResponse(page.Filters),
+		Selection:           directorySelectionResponse(page.Selection),
+		Items:               make([]directoryReplicaDTO, 0, len(page.Items)),
+	}
+
+	if page.NextCursor != "" {
+		result.NextCursor = &page.NextCursor
+	}
+
+	for _, item := range page.Items {
+		result.Items = append(result.Items, directoryReplicaDTO{
+			Disk:              diskResponse(item.Disk),
+			Snapshot:          snapshotResponse(item.Snapshot),
+			Path:              item.Path,
+			SameDisk:          item.SameDisk,
+			WholeTreeEqual:    item.WholeTreeEqual,
+			RetainedFileCount: decimal(item.RetainedFileCount),
+			ExcludedFileCount: decimal(item.ExcludedFileCount),
+		})
+	}
+
+	return result
+}
+
+type directoryCoverageDTO struct {
+	Disk                    diskDTO     `json:"disk"`
+	Snapshot                snapshotDTO `json:"snapshot"`
+	CoveredFileCount        string      `json:"covered_file_count"`
+	MissingFileCount        string      `json:"missing_file_count"`
+	CoveredContentCount     string      `json:"covered_content_count"`
+	MissingContentCount     string      `json:"missing_content_count"`
+	CoveredKnownBytes       string      `json:"covered_known_bytes"`
+	MissingKnownBytes       string      `json:"missing_known_bytes"`
+	CoveredUnknownSizeFiles string      `json:"covered_unknown_size_file_count"`
+	MissingUnknownSizeFiles string      `json:"missing_unknown_size_file_count"`
+	Complete                bool        `json:"complete"`
+}
+
+type directoryCoveragePageDTO struct {
+	directoryContextDTO
+	Filters    directoryComparisonFiltersDTO `json:"filters"`
+	Selection  directorySelectionDTO         `json:"selection"`
+	Items      []directoryCoverageDTO        `json:"items"`
+	NextCursor *string                       `json:"next_cursor"`
+}
+
+func directoryCoveragePageResponse(page base.DirectoryCoveragePage) directoryCoveragePageDTO {
+	result := directoryCoveragePageDTO{
+		directoryContextDTO: directoryContextResponse(page.DirectoryContext),
+		Filters:             directoryComparisonFiltersResponse(page.Filters),
+		Selection:           directorySelectionResponse(page.Selection),
+		Items:               make([]directoryCoverageDTO, 0, len(page.Items)),
+	}
+
+	if page.NextCursor != "" {
+		result.NextCursor = &page.NextCursor
+	}
+
+	for _, item := range page.Items {
+		result.Items = append(result.Items, directoryCoverageDTO{
+			Disk:                    diskResponse(item.Disk),
+			Snapshot:                snapshotResponse(item.Snapshot),
+			CoveredFileCount:        decimal(item.CoveredFileCount),
+			MissingFileCount:        decimal(item.MissingFileCount),
+			CoveredContentCount:     decimal(item.CoveredContentCount),
+			MissingContentCount:     decimal(item.MissingContentCount),
+			CoveredKnownBytes:       decimal(item.CoveredKnownBytes),
+			MissingKnownBytes:       decimal(item.MissingKnownBytes),
+			CoveredUnknownSizeFiles: decimal(item.CoveredUnknownSizeFiles),
+			MissingUnknownSizeFiles: decimal(item.MissingUnknownSizeFiles),
+			Complete:                item.Complete,
+		})
+	}
+
+	return result
+}
+
+func directoryComparisonQuery(r *http.Request) (url.Values, error) {
+	values, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		return nil, fmt.Errorf("%w: malformed query", database.ErrValidation)
+	}
+
+	for key, items := range values {
+		switch key {
+		case "allow", "block":
+			for _, item := range items {
+				if item == "" {
+					return nil, fmt.Errorf("%w: empty parameter %q", database.ErrValidation, key)
+				}
+			}
+		case "path":
+			if len(items) != 1 {
+				return nil, fmt.Errorf("%w: repeated parameter %q", database.ErrValidation, key)
+			}
+		case "limit", "cursor":
+			if len(items) != 1 || items[0] == "" {
+				return nil, fmt.Errorf(
+					"%w: repeated or empty parameter %q",
+					database.ErrValidation,
+					key,
+				)
+			}
+		default:
+			return nil, fmt.Errorf("%w: unknown parameter %q", database.ErrValidation, key)
+		}
+	}
+
+	return values, nil
+}
+
+func directoryComparisonRequest(
+	r *http.Request,
+) (app.ListDirectoryComparisonsRequest, error) {
+	var result app.ListDirectoryComparisonsRequest
+
+	id, err := resourceID(r)
+	if err != nil {
+		return result, err
+	}
+
+	values, err := directoryComparisonQuery(r)
+	if err != nil {
+		return result, err
+	}
+
+	limit := 50
+	if values.Has("limit") {
+		limit, err = strconv.Atoi(values.Get("limit"))
+		if err != nil || limit < 1 || limit > 200 {
+			return result, fmt.Errorf(
+				"%w: limit must be between 1 and 200",
+				database.ErrValidation,
+			)
+		}
+	}
+
+	result = app.ListDirectoryComparisonsRequest{
+		Filters: base.DirectoryComparisonFilters{
+			SnapshotID: base.SnapshotId(id),
+			Path:       values.Get("path"),
+			Allow:      values["allow"],
+			Block:      values["block"],
+		},
+		Limit:  limit,
+		Cursor: values.Get("cursor"),
+	}
+
+	return result, nil
+}
+
+func listDirectoryReplicas(a *app.App, w http.ResponseWriter, r *http.Request) error {
+	req, err := directoryComparisonRequest(r)
+	if err != nil {
+		return err
+	}
+
+	page, err := a.ListDirectoryReplicas(r.Context(), req)
+	if err != nil {
+		return err
+	}
+
+	writeJSON(w, http.StatusOK, directoryReplicaPageResponse(page))
+	return nil
+}
+
+func listDirectoryCoverage(a *app.App, w http.ResponseWriter, r *http.Request) error {
+	req, err := directoryComparisonRequest(r)
+	if err != nil {
+		return err
+	}
+
+	page, err := a.ListDirectoryCoverage(r.Context(), req)
+	if err != nil {
+		return err
+	}
+
+	writeJSON(w, http.StatusOK, directoryCoveragePageResponse(page))
 	return nil
 }

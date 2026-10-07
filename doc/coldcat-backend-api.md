@@ -31,7 +31,7 @@ Completed tasks use `[x]`; unfinished tasks use `[ ]`. **Partial** identifies a 
 | A — fixtures, semantics, migration safety | Core schema and semantic tests complete, including the distributed partial-copy fixture. |
 | B — reliable streaming imports and CLI | Cleanup, recovery, locking, duplicate-input detection, algorithm-specific hash-length validation, CLI output/progress/signal contracts, and process interruption tests complete; import measurements remain. |
 | C — primary workflow | Exact/substring search → content → locations HTTP workflow, disk/content management and pagination, replica filters, and snapshot/detail routes complete; initial fuzzy spike complete, production fuzzy search and remaining HTTP routes remain. |
-| D — directories | Derived indexes, browsing/sizing, redundancy histograms, and three browsing HTTP routes complete; replica/coverage comparison services remain. |
+| D — directories | Derived indexes, browsing/sizing, redundancy histograms, exact replicas, content coverage, filtering, and all five directory HTTP routes complete. |
 | E — performance and handoff | Foundational checks and restart/recovery pagination tests complete; remaining performance measurements and the backend handoff gate remain. |
 
 Resolved foundation gaps:
@@ -172,7 +172,7 @@ coldcat --db <database> serve --listen 127.0.0.1:8080
 
 ## 5. HTTP API contract
 
-**Status: partial.** Readiness, disk list/detail/create/edit, exact/substring name/path search, hash lookup, content detail, paginated content lists with redundancy/membership filters, paginated content observations, paginated disk snapshots, observation detail, complete snapshot detail, and directory browsing/detail/entries are implemented with contract tests and [OpenAPI](openapi.json). Fuzzy search, catalog summary, and directory replicas/coverage remain pending.
+**Status: partial.** Readiness, disk list/detail/create/edit, exact/substring name/path search, hash lookup, content detail, paginated content lists with redundancy/membership filters, paginated content observations, paginated disk snapshots, observation detail, complete snapshot detail, and all directory browsing/comparison routes are implemented with contract tests and [OpenAPI](openapi.json). Fuzzy search and catalog summary remain pending.
 
 Version under `/api/v1`. GETs are read-only. Keep result lists bounded and paginated with deterministic sorting. Use structured errors such as `{error: {code, message, details}}`; map validation/not-found/conflict failures consistently. Emit UTC RFC3339 timestamps, nullable unknown metadata, and hashes as algorithm + hex. Define byte counts/IDs safely for JavaScript clients (decimal strings for potentially unsafe integers).
 
@@ -259,10 +259,10 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 ### Milestone D — directories
 
 - [x] Test root/nested browsing, segment boundaries (`foo` must not include `foobar`), wildcard characters in paths, recursive counts, duplicate-content bytes, and unknown-size completeness. Include zero-file roots, Unicode boundaries, long imported names/directories with compact ID-based cursors, historical redundancy, shared-size enrichment, staging-mutation invalidation, cursor binding/restart/recovery, and HTTP/OpenAPI contracts for all three browsing routes.
-- [ ] Test exact-tree equality despite root renaming/mtime changes; reject rearranged paths, missing files, and extra files.
-- [ ] Test filtered equality with differing excluded `.log` files, retained extra files, root/nested glob matches, allow/block precedence, escaped glob characters, different roots, and all files excluded. Verify filtered candidates are not incorrectly eliminated by whole-tree fingerprints.
-- [ ] Test per-disk coverage when source files are spread over unrelated directories and when no single disk has the full source set.
-- [ ] Test filtered source coverage, destination-name independence, and retained/excluded counts.
+- [x] Test exact-tree equality despite root renaming/mtime changes; reject rearranged paths, missing files, and extra files.
+- [x] Test filtered equality with differing excluded `.log` files, retained extra files, root/nested doublestar matches, allow/block precedence, escaped glob characters, different roots, and all files excluded. Filtered candidates are not eliminated by whole-tree fingerprint mismatches. Patterns use `github.com/bmatcuk/doublestar/v4` with documented request bounds.
+- [x] Test per-disk coverage when source files are spread over unrelated directories and when no single disk has the full source set.
+- [x] Test filtered source coverage, destination-name independence, and retained/excluded counts.
 
 ### Milestone E — performance, recovery, and backend handoff
 
@@ -275,7 +275,7 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 - [x] Test application/import cancellation propagation and actionable catalog-lock errors; verify database-session recovery on reopen after seeded interruption or cleanup failure.
 - [x] Test HTTP pagination across unchanged reopen/restart and successful offline imports; failed imports preserve cursors, and server startup recovers seeded interrupted state before readiness. Child-process interrupted imports additionally verify application pagination after recovery and invalidation after subsequent publication.
 - [x] Run `go test ./...`, `go test -race ./...`, and `go vet ./...` with the configured Go 1.27.1 toolchain; all passed for the completed foundation. Packages/tests also cross-compiled for Windows amd64 and macOS arm64; runtime tests ran on Linux.
-- [ ] **Partial:** focused content, exact/substring search, directory queries/build/recovery, initial fuzzy spike, and search-indexed import benchmarks have run. Replica/coverage service benchmarks remain pending. No `justfile` currently exists; adopt its commands if one is introduced.
+- [ ] **Partial:** focused content, exact/substring search, directory queries/build/recovery/comparisons, initial fuzzy spike, and search-indexed import benchmarks have run. Initial exact-replica and coverage measurements use 50,000 files; filtered and broader multi-disk distributions remain. No `justfile` currently exists; adopt its commands if one is introduced.
 - [x] Document schema initialization, pre-0.1 reset policy, import publication/cleanup/recovery, locking, and query semantics in `doc/backend-foundation.md`.
 - [ ] Final backend gate: the principal workflow and every planned endpoint are exercised by contract tests; measured search behavior is acceptable; OpenAPI examples are usable by a future frontend.
 

@@ -201,18 +201,47 @@ already-computed child fingerprint. Root names, sizes, mtimes, and input-record 
 participate. Distinct file paths preserve multiplicity. File and inferred directory entries
 at the same path are distinguished by kind.
 
-These fingerprints are candidate indexes for the future exact-tree service. That service
-must verify canonical manifest equality before declaring replicas and build query-specific
-manifests for filtered comparisons.
+These fingerprints are candidate indexes for exact-tree comparisons. Unfiltered requests use
+the index to select candidates, then stream and compare canonical descendant manifests before
+declaring replicas. Filtered requests build query-specific manifests and never reject a
+candidate merely because its whole-tree fingerprint differs.
+
+### Exact replicas and content coverage
+
+Directory comparison destinations use each disk's latest complete snapshot. The requested
+source may be historical. Exact replicas compare relative file paths and `(hash_type, hash)`;
+root names and mtimes do not participate. The source directory itself is excluded, while other
+roots on the source disk remain eligible. Responses distinguish same-disk matches and whether
+a filtered match is also equal as a whole tree.
+
+Allow and block patterns apply symmetrically to paths relative to each root. Matching uses
+`github.com/bmatcuk/doublestar/v4` with `/` separators on every host, case-sensitive matching,
+and its `*`, `**`, `?`, character-class, alternative, and backslash-escape syntax. No allow
+patterns means all files; otherwise any allow match retains a file, and any block match then
+excludes it. Patterns are validated once and normalized by sorting and deduplication. Requests
+accept at most 100 patterns in each list, 1,024 UTF-8 bytes per pattern, and 16,384 pattern bytes
+in total. A selection retaining no files returns `empty_comparison=true`, no replica or coverage
+items, and no misleading complete result.
+
+Coverage is content-based and excludes the source disk. A selected source content is covered
+when it occurs anywhere in another disk's current snapshot, regardless of destination name or
+directory. Responses report both source file occurrences and distinct contents, preserving
+repeated-content multiplicity. Known-byte and unknown-size occurrence subtotals remain separate.
+Selected source membership is streamed in 1,000-row batches into a transaction-local SQLite
+table, avoiding a whole-directory Go collection.
 
 ### HTTP and pagination
 
-The three directory routes operate on the requested complete snapshot:
+The five directory routes operate on the requested complete snapshot:
 
 - `/api/v1/snapshots/{id}/directories?parent=...`: immediate child directories.
 - `/api/v1/snapshots/{id}/directory?path=...`: recursive summary and redundancy histogram.
 - `/api/v1/snapshots/{id}/directory/entries?path=...`: immediate files/directories;
   `recursive=true` selects descendant files only.
+- `/api/v1/snapshots/{id}/directory/replicas?path=...`: verified exact-tree matches, optionally
+  under repeatable `allow` and `block` filters.
+- `/api/v1/snapshots/{id}/directory/coverage?path=...`: optionally filtered source-content
+  coverage on every other disk with a current snapshot.
 
 Omitted/empty `parent` or `path` selects root. Malformed paths return 400; absent directories
 and incomplete/missing snapshots return 404. No host-path normalization or wildcard expansion
@@ -239,11 +268,12 @@ queries aggregate current replicas once per qualifying distinct content rather t
 file occurrence. Both forms use keyset seeking; subtree prefix bounds preserve segment
 boundaries and do not interpret SQL wildcards. OpenAPI describes the wire types and examples.
 
-Directory query/build and recovery benchmarks run at 50,000 and 1,000,000 observations:
+Directory query/build, recovery, and comparison benchmarks run at 50,000 and 1,000,000
+observations:
 
 ```sh
 go test ./internal/database -run '^$' \
-  -bench 'BenchmarkDirectory(Queries|Recovery|Enrichment)' -benchtime=1x -benchmem -v
+  -bench 'BenchmarkDirectory(Queries|Recovery|Enrichment|Comparisons)' -benchtime=1x -benchmem -v
 ```
 
 The isolated directory benchmarks disable observation search-index triggers during fixture
@@ -253,6 +283,12 @@ time and added catalog bytes are logged; recovery includes catalog opening and d
 an abandoned built inventory. These are warm, single-iteration measurements, not filesystem-cold
 latencies or a production latency guarantee. `BenchmarkSearchIndexedImport` exercises the
 full streaming import with both search and directory indexes.
+
+The initial 50,000-file warm comparison measurement on the same Linux/Ryzen system took
+547 ms for an unfiltered verified replica and 401 ms for coverage across one other disk.
+These costs include source selection and complete manifest/content verification; no interactive
+latency budget has yet been agreed. Filtered comparisons and broader multi-disk distributions
+remain important follow-up measurements.
 
 On Linux amd64 / Ryzen 5 9600X, the warm single-iteration measurements were:
 

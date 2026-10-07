@@ -251,3 +251,86 @@ func BenchmarkDirectoryEnrichment(b *testing.B) {
 		})
 	}
 }
+
+func BenchmarkDirectoryComparisons(b *testing.B) {
+	for _, count := range []int{50000, 1000000} {
+		b.Run(fmt.Sprint(count), func(b *testing.B) {
+			db, err := Open(filepath.Join(b.TempDir(), "catalog.sqlite"))
+			if err != nil {
+				b.Fatal(err)
+			}
+			defer db.Close()
+
+			if _, err := db.db.Exec(`DROP TRIGGER observation_search_insert;
+ DROP TRIGGER observation_search_delete; DROP TRIGGER observation_search_update;`); err != nil {
+				b.Fatal(err)
+			}
+
+			contents := 10000
+			err = db.TransactionContext(b.Context(), func(tx *Tx) error {
+				_, err := tx.ExecContext(b.Context(), `INSERT INTO disk(id,label,capacity)
+ VALUES(1,'source',0),(2,'copy',0);
+ INSERT INTO snapshot
+ (id,disk_id,state,captured_at,imported_at,capture_provenance,input_format)
+ VALUES(1,1,'importing','2023-01-01T00:00:00.000000000Z',
+ '2023-01-01T00:00:00.000000000Z','explicit','cshd'),
+ (2,2,'importing','2023-01-01T00:00:00.000000000Z',
+ '2023-01-01T00:00:00.000000000Z','explicit','cshd');
+ WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<?)
+ INSERT INTO content(id,size,hash_type,hash)
+ SELECT n,4,'sha256',CAST(printf('%032d',n) AS BLOB) FROM ids;`, contents)
+				if err != nil {
+					return err
+				}
+
+				_, err = tx.ExecContext(b.Context(), `WITH RECURSIVE ids(n) AS
+ (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<?)
+ INSERT INTO observation(snapshot_id,content_id,path)
+ SELECT 1,1+((n-1)%?),'tree/'||printf('file-%07d',n) FROM ids;
+ WITH RECURSIVE ids(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM ids WHERE n<?)
+ INSERT INTO observation(snapshot_id,content_id,path)
+ SELECT 2,1+((n-1)%?),'copy/'||printf('file-%07d',n) FROM ids`,
+					count, contents, count, contents)
+				return err
+			})
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			for id := int64(1); id <= 2; id++ {
+				if err := db.BuildDirectories(b.Context(), id); err != nil {
+					b.Fatal(err)
+				}
+			}
+
+			if _, err := db.db.Exec(`UPDATE snapshot SET state='complete',
+ source_digest=zeroblob(32),file_count=?,content_count=?`, count, contents); err != nil {
+				b.Fatal(err)
+			}
+
+			filters := base.DirectoryComparisonFilters{SnapshotID: 1, Path: "tree"}
+			for _, name := range []string{"replicas", "coverage"} {
+				b.Run(name, func(b *testing.B) {
+					b.ReportAllocs()
+
+					for b.Loop() {
+						switch name {
+						case "replicas":
+							page, err := db.ListDirectoryReplicas(
+								b.Context(), filters, 50, base.DirectoryReplicaAnchor{}, nil,
+							)
+							if err != nil || len(page.Items) != 1 {
+								b.Fatalf("replicas: %d, %v", len(page.Items), err)
+							}
+						case "coverage":
+							page, err := db.ListDirectoryCoverage(b.Context(), filters, 50, 0, nil)
+							if err != nil || len(page.Items) != 1 || !page.Items[0].Complete {
+								b.Fatalf("coverage: %+v, %v", page.Items, err)
+							}
+						}
+					}
+				})
+			}
+		})
+	}
+}

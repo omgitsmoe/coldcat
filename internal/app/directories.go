@@ -25,6 +25,12 @@ type ListDirectoryEntriesRequest struct {
 	Cursor  string
 }
 
+type ListDirectoryComparisonsRequest struct {
+	Filters base.DirectoryComparisonFilters
+	Limit   int
+	Cursor  string
+}
+
 type directoryCursor struct {
 	Version int                  `json:"version"`
 	Kind    string               `json:"kind"`
@@ -110,5 +116,205 @@ func (a *App) ListDirectoryEntries(
 		}
 		page.NextCursor = base64.RawURLEncoding.EncodeToString(data)
 	}
+	return page, nil
+}
+
+type directoryComparisonCursor struct {
+	Version       int                         `json:"version"`
+	Kind          string                      `json:"kind"`
+	Catalog       base.CatalogState           `json:"catalog"`
+	Filters       string                      `json:"filters"`
+	Limit         int                         `json:"limit"`
+	ReplicaAfter  base.DirectoryReplicaAnchor `json:"replica_after,omitempty"`
+	CoverageAfter base.DiskId                 `json:"coverage_after,omitempty"`
+}
+
+func normalizeComparisonRequest(
+	req ListDirectoryComparisonsRequest,
+) (ListDirectoryComparisonsRequest, string, error) {
+	filters, err := database.NormalizeDirectoryComparisonFilters(req.Filters)
+	if err != nil {
+		return req, "", err
+	}
+	req.Filters = filters
+
+	if req.Limit == 0 {
+		req.Limit = 50
+	}
+
+	data, err := json.Marshal(filters)
+	if err != nil {
+		return req, "", err
+	}
+
+	digest := sha256.Sum256(data)
+	return req, hex.EncodeToString(digest[:]), nil
+}
+
+func decodeDirectoryComparisonCursor(
+	encoded, kind, filterDigest string, limit int,
+) (directoryComparisonCursor, error) {
+	invalid := func() (directoryComparisonCursor, error) {
+		return directoryComparisonCursor{}, fmt.Errorf(
+			"%w: invalid directory comparison cursor",
+			database.ErrValidation,
+		)
+	}
+
+	if encoded == "" {
+		return directoryComparisonCursor{}, nil
+	}
+	if len(encoded) > 16384 {
+		return invalid()
+	}
+
+	data, err := base64.RawURLEncoding.Strict().DecodeString(encoded)
+	if err != nil {
+		return invalid()
+	}
+
+	var cursor directoryComparisonCursor
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&cursor); err != nil {
+		return invalid()
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return invalid()
+	}
+
+	if cursor.Version != 1 || cursor.Kind != kind || cursor.Catalog.Revision < 0 ||
+		cursor.Limit != limit || cursor.Filters != filterDigest {
+		return invalid()
+	}
+
+	return cursor, nil
+}
+
+func encodeDirectoryComparisonCursor(cursor directoryComparisonCursor) (string, error) {
+	data, err := json.Marshal(cursor)
+	if err != nil {
+		return "", err
+	}
+
+	return base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+func (a *App) ListDirectoryReplicas(
+	ctx context.Context, req ListDirectoryComparisonsRequest,
+) (base.DirectoryReplicaPage, error) {
+	req, filterDigest, err := normalizeComparisonRequest(req)
+	if err != nil {
+		return base.DirectoryReplicaPage{}, err
+	}
+
+	const kind = "directory-replicas:disk:path:id:asc"
+	cursor, err := decodeDirectoryComparisonCursor(req.Cursor, kind, filterDigest, req.Limit)
+	if err != nil {
+		return base.DirectoryReplicaPage{}, err
+	}
+
+	var expected *base.CatalogState
+	if req.Cursor != "" {
+		if cursor.ReplicaAfter.DiskID <= 0 || cursor.ReplicaAfter.DirectoryID <= 0 ||
+			cursor.CoverageAfter != 0 {
+			return base.DirectoryReplicaPage{}, fmt.Errorf(
+				"%w: invalid directory comparison cursor",
+				database.ErrValidation,
+			)
+		}
+
+		expected = &cursor.Catalog
+	}
+
+	page, err := a.db.ListDirectoryReplicas(
+		ctx,
+		req.Filters,
+		req.Limit,
+		cursor.ReplicaAfter,
+		expected,
+	)
+	if err != nil {
+		return page, err
+	}
+
+	if len(page.Items) > req.Limit {
+		page.Items = page.Items[:req.Limit]
+		last := page.Items[len(page.Items)-1]
+
+		page.NextCursor, err = encodeDirectoryComparisonCursor(directoryComparisonCursor{
+			Version: 1,
+			Kind:    kind,
+			Catalog: page.Catalog,
+			Filters: filterDigest,
+			Limit:   req.Limit,
+			ReplicaAfter: base.DirectoryReplicaAnchor{
+				DiskID:      last.Disk.Id,
+				Path:        last.Path,
+				DirectoryID: last.DirectoryID,
+			},
+		})
+		if err != nil {
+			return page, err
+		}
+	}
+
+	return page, nil
+}
+
+func (a *App) ListDirectoryCoverage(
+	ctx context.Context, req ListDirectoryComparisonsRequest,
+) (base.DirectoryCoveragePage, error) {
+	req, filterDigest, err := normalizeComparisonRequest(req)
+	if err != nil {
+		return base.DirectoryCoveragePage{}, err
+	}
+
+	const kind = "directory-coverage:disk:asc"
+	cursor, err := decodeDirectoryComparisonCursor(req.Cursor, kind, filterDigest, req.Limit)
+	if err != nil {
+		return base.DirectoryCoveragePage{}, err
+	}
+
+	var expected *base.CatalogState
+	if req.Cursor != "" {
+		if cursor.CoverageAfter <= 0 || cursor.ReplicaAfter != (base.DirectoryReplicaAnchor{}) {
+			return base.DirectoryCoveragePage{}, fmt.Errorf(
+				"%w: invalid directory comparison cursor",
+				database.ErrValidation,
+			)
+		}
+
+		expected = &cursor.Catalog
+	}
+
+	page, err := a.db.ListDirectoryCoverage(
+		ctx,
+		req.Filters,
+		req.Limit,
+		cursor.CoverageAfter,
+		expected,
+	)
+	if err != nil {
+		return page, err
+	}
+
+	if len(page.Items) > req.Limit {
+		page.Items = page.Items[:req.Limit]
+		last := page.Items[len(page.Items)-1]
+
+		page.NextCursor, err = encodeDirectoryComparisonCursor(directoryComparisonCursor{
+			Version:       1,
+			Kind:          kind,
+			Catalog:       page.Catalog,
+			Filters:       filterDigest,
+			Limit:         req.Limit,
+			CoverageAfter: last.Disk.Id,
+		})
+		if err != nil {
+			return page, err
+		}
+	}
+
 	return page, nil
 }
