@@ -30,9 +30,19 @@ func TestSearchIndexesCleanupAndRecovery(t *testing.T) {
  VALUES(2,1,'importing','2024-01-01T00:00:00.000000000Z',
  '2024-01-01T00:00:00.000000000Z','explicit');
  INSERT INTO observation(snapshot_id,content_id,path)
- VALUES(2,1,'foo/report'),(2,1,'unfinished/report');`)
+ VALUES(2,1,'foo/report'),(2,1,'unfinished/REPORT');`)
 	if err != nil {
 		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		path   string
+		sealed int
+	}{{"foo/report", 1}, {"unfinished/REPORT", 0}} {
+		var sealed int
+		if err := db.db.QueryRow(`SELECT sealed FROM search_path WHERE path=?`, test.path).
+			Scan(&sealed); err != nil || sealed != test.sealed {
+			t.Fatalf("seal %q: got %d want %d: %v", test.path, sealed, test.sealed, err)
+		}
 	}
 	f := base.SearchFilters{Query: "report", Field: "name", Match: "substring",
 		ContentFilters: base.ContentFilters{Scope: base.ScopeHistory, ReplicaMetric: base.ReplicaDisks}}
@@ -43,11 +53,19 @@ func TestSearchIndexesCleanupAndRecovery(t *testing.T) {
 	for _, statement := range []string{
 		`DELETE FROM search_path WHERE path='foo/report'`,
 		`UPDATE search_path SET name='changed' WHERE path='foo/report'`,
+		`UPDATE search_path SET sealed=0 WHERE path='foo/report'`,
+		`UPDATE search_path SET sealed=1 WHERE path='unfinished/REPORT'`,
+		`INSERT INTO search_short(field,gram,path_id)
+ SELECT 'name','x',id FROM search_path WHERE path='foo/report'`,
+		`INSERT INTO search_fold_short(field,gram,path_id)
+ SELECT 'name','x',id FROM search_path WHERE path='foo/report'`,
+		`INSERT INTO search_fuzzy_signature(field,signature,path_id)
+ SELECT 'name',123,id FROM search_path WHERE path='foo/report'`,
 		`DELETE FROM search_short WHERE path_id=(SELECT id FROM search_path WHERE path='foo/report')`,
 		`DELETE FROM search_fuzzy_signature
  WHERE path_id=(SELECT id FROM search_path WHERE path='foo/report')`,
 		`DELETE FROM search_fold_short
- WHERE path_id=(SELECT id FROM search_path WHERE path='foo/report')`,
+ WHERE path_id=(SELECT id FROM search_path WHERE path='unfinished/REPORT')`,
 	} {
 		if _, err := db.db.Exec(statement); err == nil {
 			t.Fatalf("accepted mutation: %s", statement)
@@ -108,9 +126,13 @@ func TestSearchIndexesCleanupAndRecovery(t *testing.T) {
 		`SELECT COUNT(*) FROM search_path`,
 		`SELECT COUNT(*) FROM search_trigram WHERE search_trigram MATCH 'name:"report"'`,
 		`SELECT COUNT(DISTINCT path_id) FROM search_short WHERE field='name' AND gram='re'`,
-		`SELECT COUNT(DISTINCT path_id) FROM search_fold_short WHERE field='name' AND gram='re'`,
+		`SELECT COUNT(*) FROM (
+ SELECT path_id FROM search_short WHERE field='name' AND gram='re' UNION
+ SELECT path_id FROM search_fold_short WHERE field='name' AND gram='re')`,
 		`SELECT COUNT(DISTINCT path_id) FROM search_fuzzy_signature`,
-		`SELECT COUNT(*) FROM search_fold_trigram WHERE search_fold_trigram MATCH 'name_fold:"report"'`,
+		`SELECT COUNT(*) FROM (
+ SELECT rowid FROM search_trigram WHERE search_trigram MATCH 'name:"report"' UNION
+ SELECT rowid FROM search_fold_trigram WHERE search_fold_trigram MATCH 'name_fold:"report"')`,
 	} {
 		var count int
 		if err := db.db.QueryRow(query).Scan(&count); err != nil || count != 1 {
@@ -143,7 +165,7 @@ func testPublicationRequiresSearchIndex(t *testing.T, index string) {
  VALUES(1,1,'importing','2023-01-01T00:00:00.000000000Z',
  '2023-01-01T00:00:00.000000000Z','explicit','cshd');
  INSERT INTO content(id,hash_type,hash) VALUES(1,'sha256',zeroblob(32));
- INSERT INTO observation(snapshot_id,content_id,path) VALUES(1,1,'report');`)
+ INSERT INTO observation(snapshot_id,content_id,path) VALUES(1,1,'Report');`)
 	if err != nil {
 		t.Fatal(err)
 	}

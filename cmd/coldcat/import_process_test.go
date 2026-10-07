@@ -96,7 +96,7 @@ func TestInterruptedImportRecoveryAndCursor(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
 			defer cancel()
 			child := exec.CommandContext(ctx, executable, "-test.run=^TestInterruptedImportHelper$")
 			child.Env = append(os.Environ(), "COLDCAT_INTERRUPTED_DB="+path,

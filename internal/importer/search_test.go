@@ -16,7 +16,8 @@ func TestSearchIndexFailureCleansCommittedBatchesAndPreservesSharedPaths(t *test
 func testSearchIndexFailure(t *testing.T, index string) {
 	db, raw, disk := testDB(t)
 	_, err := ImportReader(t.Context(), db, request(disk),
-		strings.NewReader(",sha256,"+fixtureSHA25600000000+" tree/file-0\n"))
+		strings.NewReader(",sha256,"+fixtureSHA25600000000+" tree/file-0\n"+
+			",sha256,"+fixtureSHA25600000000+" tree/FILE-0\n"))
 	assertNoErr(t, err)
 	failure := `CREATE TRIGGER fail_search BEFORE INSERT ON search_path
  WHEN NEW.path='tree/file-1001' BEGIN SELECT RAISE(ABORT,'search index failed'); END;`
@@ -30,11 +31,15 @@ func testSearchIndexFailure(t *testing.T, index string) {
 	if err == nil || !strings.Contains(err.Error(), "search index failed") {
 		t.Fatalf("index failure: %v", err)
 	}
-	assertEqual(t, count(t, raw, "search_path"), 1)
+	assertEqual(t, count(t, raw, "search_path"), 2)
 	for _, table := range []string{"search_fuzzy_signature", "search_fold_short"} {
 		var paths int
 		assertNoErr(t, raw.QueryRow(`SELECT COUNT(DISTINCT path_id) FROM `+table).Scan(&paths))
-		assertEqual(t, paths, 1)
+		want := 2
+		if table == "search_fold_short" {
+			want = 1
+		}
+		assertEqual(t, paths, want)
 	}
 	var matches int
 	assertNoErr(t, raw.QueryRow(`SELECT COUNT(*) FROM search_trigram
@@ -55,5 +60,5 @@ func testSearchIndexFailure(t *testing.T, index string) {
 		ContentFilters: base.ContentFilters{Scope: base.ScopeCurrent, ReplicaMetric: base.ReplicaDisks},
 	}, 50, base.SearchAnchor{}, nil)
 	assertNoErr(t, err)
-	assertEqual(t, len(page.Items), 1)
+	assertEqual(t, len(page.Items), 2)
 }

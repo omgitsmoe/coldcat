@@ -479,9 +479,13 @@ or individual path segments. Relevance is `exact`, `prefix`, `substring`, or `ty
 in that order; ties use original binary path then observation ID. Candidate unions
 deduplicate paths, not observations, so historical occurrences remain separate results.
 
-The shared distinct-path lexicon stores generated folded names/paths. Folded FTS5
-trigrams and explicit short postings retrieve literal matches. Version-1 deletion
-fingerprints and adjacent-swap probes retrieve typo candidates. A rolling 64-bit
+The shared distinct-path lexicon stores generated folded names/paths. Fuzzy literal
+retrieval unions the existing case-sensitive postings with folded FTS5/short postings
+only for fields whose text changes under folding. Unchanged fields reuse the existing
+indexes rather than duplicating them. A filtered external-content view masks unchanged
+fields and keeps the partial folded FTS index verifiable with `integrity-check`.
+Version-1 deletion fingerprints and adjacent-swap probes retrieve typo candidates.
+A rolling 64-bit
 fingerprint allows linear generation/storage per term instead of materializing every
 full deletion string. Fingerprint collisions can only add candidates: the original
 folded term is always verified with a linear distance-one predicate. No observation
@@ -490,12 +494,20 @@ Index data is shared across observations of the same original path; distinct pat
 with the same basename currently have separate postings.
 
 Fuzzy postings are written in the same observation-batch transaction as existing
-search indexes. Publication requires fuzzy signatures and folded short postings for
-both fields. Cleanup cascades remove import-only postings and update folded FTS,
-while shared completed paths survive. Tests inject a fuzzy write failure after a
+search indexes. Publication requires fuzzy signatures and literal short postings for
+both fields, plus folded short postings where folding changes the field. Cleanup
+cascades remove import-only postings and update folded FTS while shared completed
+paths survive. Tests inject a fuzzy write failure after a
 committed batch and check both FTS indexes' integrity. Fuzzy cursors use a separate
 version/kind binding normalization and ranking v1; existing literal cursors keep their
 original format and both retain revision-bound restart/recovery semantics.
+
+Publication atomically seals each path referenced by a completed snapshot. Posting
+insert guards read that path flag instead of repeating observation/snapshot joins for
+every gram/signature. Path identities remain immutable, a seal cannot be cleared or
+set before completion, and sealing failure rolls publication back. A new path cannot
+be inserted for an already-completed observation, so it cannot bypass protection with
+an unsealed flag. Shared historical paths remain sealed across later failed imports.
 
 This updates the pre-0.1 initial schema, not existing catalogs. Recreate an older
 development catalog before using these indexes; the workspace catalog has not been
@@ -509,18 +521,21 @@ go test ./internal/database -run '^$' \
 ```
 
 The fixture uses 50,000 or 1,000,000 distinct paths and contents; construction can
-be expensive. On 2026-10-07, Linux amd64 / Go 1.27.1 / Ryzen 5 9600X, the 50,000-path
-fixture produced 1,990,000 signature postings and a 366,702,592-byte catalog in 51 s.
+be expensive. On 2026-10-07, Linux amd64 / Go 1.27.1 / Ryzen 5 9600X in a container
+limited to four CPUs and 8 GiB, the 50,000-path fixture produced 1,990,000 signature
+postings and a 239,276,032-byte catalog in 30.5 s. The prior duplicate-folded-index
+layout used 366,702,592 bytes and took 51 s with the same fixture. These paths are all
+lowercase; mixed-case/Unicode distributions can require more folded postings.
 It uses raw transactional fixture insertion and does not build directory aggregates;
 these are total catalog bytes, not incremental fuzzy-index bytes or streaming-import
 throughput. Warm means over 20 database calls were:
 
 | Fuzzy basename query | Time/op |
 | --- | ---: |
-| `reprot-0000005.txt` (adjacent-swap typo) | 0.76 ms |
-| `REPORT` (broad folded prefix) | 84.6 ms |
-| `a` (one-rune no-match) | 0.63 ms |
-| `xy` (two-rune no-match) | 0.69 ms |
+| `reprot-0000005.txt` (adjacent-swap typo) | 0.77 ms |
+| `REPORT` (broad folded prefix) | 86.7 ms |
+| `a` (one-rune no-match) | 0.65 ms |
+| `xy` (two-rune no-match) | 0.64 ms |
 
 These do not establish p95, worst-case short-query fan-out, or a latency guarantee.
 Storage cost is substantial and remains an acceptance concern. The million-distinct-path
@@ -528,6 +543,14 @@ case has not run. Larger distributions, HTTP latency, filesystem-cold behavior, 
 streaming-import overhead, and standalone recovery still require measurements and
 an agreed acceptance budget. Functionality is implemented; the final performance
 and frontend-handoff gate remains open.
+
+The same container had no memory-limit/OOM events during race-test investigation.
+An isolated 1,000-file progress/import race test took 16.2 s before these write-layout
+changes and 9.9 s after them. CPU profiling showed mostly instrumented SQLite
+execution, using roughly one CPU core; more memory or parallel CPUs do not resolve
+that serial cost. The CLI interruption test allows one minute for the first committed
+batch and signal cleanup, preserving its handshake, exit, recovery, and cursor
+assertions without treating a short wall-clock timeout as an import throughput budget.
 
 ### Literal index publication and cleanup
 

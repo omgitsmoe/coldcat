@@ -136,11 +136,14 @@ func fuzzyPaths(f base.SearchFilters) (string, []any) {
 	var literal string
 	var args []any
 	if utf8.RuneCountInString(query) < 3 {
-		literal = `SELECT path_id AS id FROM search_fold_short WHERE field=? AND gram=?`
-		args = []any{f.Field, query}
+		literal = `SELECT path_id AS id FROM search_short WHERE field=? AND gram=?
+ UNION SELECT path_id AS id FROM search_fold_short WHERE field=? AND gram=?`
+		args = []any{f.Field, query, f.Field, query}
 	} else {
-		literal = `SELECT rowid AS id FROM search_fold_trigram WHERE search_fold_trigram MATCH ?`
-		args = []any{f.Field + `_fold:"` + strings.ReplaceAll(query, `"`, `""`) + `"`}
+		literal = `SELECT rowid AS id FROM search_trigram WHERE search_trigram MATCH ?
+ UNION SELECT rowid AS id FROM search_fold_trigram WHERE search_fold_trigram MATCH ?`
+		phrase := `:"` + strings.ReplaceAll(query, `"`, `""`) + `"`
+		args = []any{f.Field + phrase, f.Field + "_fold" + phrase}
 	}
 	keys, _ := json.Marshal(fuzzySignatures(query, true))
 	source := `WITH candidate_ids AS (
