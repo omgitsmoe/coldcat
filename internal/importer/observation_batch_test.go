@@ -32,6 +32,28 @@ func TestObservationBatchBoundaries(t *testing.T) {
 	}
 }
 
+func TestObservationSQLBatchesStayWithinOneLargerTransaction(t *testing.T) {
+	db, raw, disk := testDB(t)
+	const files = observationBatchSize + 1
+	req := request(disk)
+	commits := 0
+	req.Progress = func(p Progress) error {
+		if p.Phase == ProgressImporting {
+			commits++
+			assertEqual(t, p.CommittedFiles, int64(files))
+			assertEqual(t, count(t, raw, "observation"), files)
+		}
+		return nil
+	}
+	result, err := importReader(t.Context(), db, req,
+		strings.NewReader(manyFiles(files, true)), 2*defaultBatchSize)
+	assertNoErr(t, err)
+	assertEqual(t, commits, 1)
+	assertEqual(t, result.FileCount, int64(files))
+	assertNoErr(t, execSQL(raw,
+		`INSERT INTO search_trigram(search_trigram,rank) VALUES('integrity-check',1)`))
+}
+
 func TestObservationBatchFailureRollsBackAndCleansEarlierCommits(t *testing.T) {
 	for _, duplicateAt := range []int{
 		observationBatchSize - 1, observationBatchSize, defaultBatchSize + 1,

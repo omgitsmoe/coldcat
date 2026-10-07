@@ -50,7 +50,7 @@ type ProgressFunc func(Progress) error
 
 const (
 	defaultBatchSize     = 5000
-	observationBatchSize = 1000
+	observationBatchSize = 5000
 )
 
 type Request struct {
@@ -303,7 +303,7 @@ func importBatch(ctx context.Context, tx *database.Tx, snapshotID int64, batch [
 	}
 	defer lookup.Close()
 
-	observations := make([]any, 0, 4*observationBatchSize)
+	observations := make([]any, 0, 4*min(len(batch), observationBatchSize))
 	flushObservations := func() error {
 		query := "INSERT INTO observation(snapshot_id,content_id,path,mtime) VALUES " +
 			strings.TrimSuffix(strings.Repeat("(?,?,?,?),", len(observations)/4), ",")
@@ -353,19 +353,22 @@ func importBatch(ctx context.Context, tx *database.Tx, snapshotID int64, batch [
 
 		var id int64
 		var known sql.NullInt64
-		if err := lookup.QueryRowContext(ctx, algorithm, file.Hash).Scan(&id, &known); err != nil {
-			return err
-		}
-
 		added, err := created.RowsAffected()
 		if err != nil {
 			return err
 		}
 
 		if added > 0 {
+			id, err = created.LastInsertId()
+			if err != nil {
+				return err
+			}
+
 			if _, err := trackContent.ExecContext(ctx, snapshotID, id); err != nil {
 				return err
 			}
+		} else if err := lookup.QueryRowContext(ctx, algorithm, file.Hash).Scan(&id, &known); err != nil {
+			return err
 		}
 
 		if file.SizeKnown {
@@ -381,22 +384,28 @@ func importBatch(ctx context.Context, tx *database.Tx, snapshotID int64, batch [
 			}
 
 			if !known.Valid {
-				var staged int64
-				err := lookupSize.QueryRowContext(ctx, snapshotID, id).Scan(&staged)
-				if err == nil && staged != size {
-					return fmt.Errorf(
-						"%w: file %q conflicts with staged content size",
-						database.ErrConflict,
-						file.path(),
-					)
+				// Foreign keys prevent staging from predating a newly inserted content row.
+				needsStaging := added > 0
+				if !needsStaging {
+					var staged int64
+					err := lookupSize.QueryRowContext(ctx, snapshotID, id).Scan(&staged)
+					if err == nil && staged != size {
+						return fmt.Errorf(
+							"%w: file %q conflicts with staged content size",
+							database.ErrConflict,
+							file.path(),
+						)
+					}
+					needsStaging = errors.Is(err, sql.ErrNoRows)
+					if err != nil && !needsStaging {
+						return err
+					}
 				}
 
-				if errors.Is(err, sql.ErrNoRows) {
+				if needsStaging {
 					if _, err := stageSize.ExecContext(ctx, snapshotID, id, size); err != nil {
 						return err
 					}
-				} else if err != nil {
-					return err
 				}
 			}
 		}

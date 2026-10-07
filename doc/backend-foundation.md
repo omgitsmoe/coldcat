@@ -89,8 +89,8 @@ implementation because imports consume recorded hashes rather than computing the
 
 Each input represents a complete inventory of one disk. Imports commit bounded
 batches of 5,000 records while their snapshot is internally `importing`.
-Within each transaction, observation inserts use at most 1,000 rows per SQL
-statement (4,000 bound parameters). Search and immutability triggers still run
+Within each transaction, observation inserts use at most 5,000 rows per SQL
+statement (20,000 bound parameters). Search and immutability triggers still run
 for every row; committed progress still advances only after the whole transaction.
 SQL insertion errors identify the affected batch's first and last paths.
 Sizes are staged only for content whose size is not yet known, including enrichment
@@ -100,6 +100,11 @@ atomically applies those sizes, records counters, removes staging/ownership rows
 and changes the snapshot to `complete`. Completed snapshots and observations are
 immutable.
 
+Newly inserted content uses the insert result's row ID instead of a separate
+lookup. Its size is NULL by construction, and foreign keys guarantee it cannot
+already have staged metadata. Existing content still requires both identity/size
+lookup and, when necessary, staged-size conflict validation.
+
 On the 10,000-file import-phase fixture (7,500 unique contents, known sizes,
 nested paths), paired five-iteration runs measured 0.975 s/import before observation
 batching and 0.638 s/import afterward on an AMD Ryzen 5 9600X. Ingestion fell from
@@ -107,6 +112,13 @@ batching and 0.638 s/import afterward on an AMD Ryzen 5 9600X. Ingestion fell fr
 The 50,000-file indexed-import fixture (distinct contents, shallow paths, unknown
 sizes) fell from 2.931 s/import to 1.834 s/import in paired five-iteration runs.
 These warm synthetic measurements do not predict an arbitrary inventory's speedup.
+
+After the directory-build checkpoint, larger observation statements and new-content
+lookup elision brought the nested fixture to 0.452 s/import and the shallow fixture
+to 1.327 s/import. Paired ten-iteration runs against the initial observation-batching
+checkpoint measured 0.619 s and 1.632 s respectively: a further 27% and 19% reduction
+in elapsed time. The shallow fixture's sampled Go heap increased from 3.8 MB to
+4.6 MB with the larger SQL buffers; sampled heap is not RSS or a peak-memory bound.
 
 The importer computes a streaming SHA-256 semantic digest over parsed records in
 input order. The version-1 encoding starts with a length-prefixed
