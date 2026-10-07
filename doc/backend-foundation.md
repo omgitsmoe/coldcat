@@ -394,7 +394,7 @@ holds ownership until requests have drained and the database closes. Stop the se
 before importing. `serve` defaults to `127.0.0.1:8080`; startup errors fail the command,
 and SIGINT/SIGTERM request graceful shutdown with a ten-second drain deadline.
 
-`internal/httpapi` implements readiness, disk management, exact/substring/fuzzy search,
+`internal/httpapi` implements readiness, disk management, case-insensitive exact/substring search,
 exact hash lookup, content lists/detail, content observation pages, disk snapshot pages, observation detail,
 and complete snapshot detail. See
 [openapi.json](openapi.json) for the implemented wire contract. IDs, byte counts and
@@ -440,7 +440,7 @@ traverse locations, and verify other-replica counts plus source/capture/import d
 
 Defaults are `field=name`, `match=substring`, `scope=current`, `replica_metric=disks`,
 and limit 50 (maximum 200). Names are final `/`-separated segments; paths are whole
-disk-relative paths. Matching is case-sensitive and literal, preserving whitespace,
+disk-relative paths. Matching is case-insensitive and literal, preserving whitespace,
 Unicode spelling and punctuation. No Unicode normalization or wildcard interpretation
 is applied. Queries must be valid UTF-8, nonempty, at most 1024 bytes, and contain no
 NUL. This query limit does not impose a new imported-path length limit.
@@ -465,60 +465,69 @@ Malformed/context-changed/invalid-anchor cursors return 400; a changed revision 
 409. Unchanged restart and failed-import recovery preserve cursors. SQL cancellation
 propagates, and an active in-session import blocks search.
 
-### Fuzzy matching
+### Case-insensitive search without fuzzy matching
 
-`match=fuzzy` uses version-1 Unicode simple case-folding, preserving punctuation and
-whitespace. It does not normalize composed/decomposed Unicode or equate `ß` with `ss`.
-Original names and paths remain unchanged in responses. Exact/substring modes keep
-their existing case-sensitive semantics.
+`match=exact|substring` uses version-1 Unicode simple case-folding, preserving punctuation
+and whitespace. It does not normalize composed/decomposed Unicode or equate `ß` with `ss`.
+Original names and paths remain unchanged in responses. Substring queries require at
+least three Unicode code points; exact queries may be shorter. `match=fuzzy` and short
+substring queries return validation errors, not scan fallbacks.
 
-Fuzzy search includes folded exact, prefix, and substring matches, followed by terms
-within one rune insertion, deletion, substitution, or adjacent transposition. Typos
-compare the entire selected basename or disk-relative path, not arbitrary substrings
-or individual path segments. Relevance is `exact`, `prefix`, `substring`, or `typo`,
-in that order; ties use original binary path then observation ID. Candidate unions
-deduplicate paths, not observations, so historical occurrences remain separate results.
+Relevance is folded `exact`, `prefix`, or `substring`, in that order; ties use original
+binary path then observation ID. Directory identity and membership remain case-sensitive.
+The distinct-path lexicon stores folded names/paths with B-tree exact indexes and one
+external-content FTS5 trigram index. The trigram tokenizer is case-sensitive over already
+folded text, preserving the explicit folding contract. Query phrases are literal and
+candidate matches are verified against folded text. Retrieval remains exhaustive.
 
-The shared distinct-path lexicon stores generated folded names/paths. Fuzzy literal
-retrieval unions the existing case-sensitive postings with folded FTS5/short postings
-only for fields whose text changes under folding. Unchanged fields reuse the existing
-indexes rather than duplicating them. A filtered external-content view masks unchanged
-fields and keeps the partial folded FTS index verifiable with `integrity-check`.
-Version-1 deletion fingerprints and adjacent-swap probes retrieve typo candidates.
-A rolling 64-bit
-fingerprint allows linear generation/storage per term instead of materializing every
-full deletion string. Fingerprint collisions can only add candidates: the original
-folded term is always verified with a linear distance-one predicate. No observation
-or candidate collection is loaded wholesale into Go and no candidate cap is used.
-Index data is shared across observations of the same original path; distinct paths
-with the same basename currently have separate postings.
+Fuzzy signatures, literal/folded short postings, and the separate folded FTS index have
+been removed. Publication atomically seals paths referenced by completed snapshots;
+cleanup deletes import-only paths and updates FTS while preserving shared completed paths.
+Search cursor version 3 binds folding/ranking and rejects earlier cursor formats.
 
-Fuzzy postings are written in the same observation-batch transaction as existing
-search indexes. Publication requires fuzzy signatures and literal short postings for
-both fields, plus folded short postings where folding changes the field. Cleanup
-cascades remove import-only postings and update folded FTS while shared completed
-paths survive. Tests inject a fuzzy write failure after a
-committed batch and check both FTS indexes' integrity. Fuzzy cursors use a separate
-version/kind binding normalization and ranking v1; existing literal cursors keep their
-original format and both retain revision-bound restart/recovery semantics.
+See [ADR 0001](adr/0001-search-without-fuzzy.md). This updates the pre-0.1 initial schema;
+opening an obsolete fuzzy/short-index catalog fails with an explicit recreation/reimport
+instruction. The workspace catalog has not been recreated or modified.
 
-Publication atomically seals each path referenced by a completed snapshot. Posting
-insert guards read that path flag instead of repeating observation/snapshot joins for
-every gram/signature. Path identities remain immutable, a seal cannot be cleared or
-set before completion, and sealing failure rolls publication back. A new path cannot
-be inserted for an already-completed observation, so it cannot bypass protection with
-an unsealed flag. Shared historical paths remain sealed across later failed imports.
-
-This updates the pre-0.1 initial schema, not existing catalogs. Recreate an older
-development catalog before using these indexes; the workspace catalog has not been
-recreated or modified.
-
-Persisted fuzzy measurements can be reproduced with:
+Reproduce the current equivalent distinct-path fixture with:
 
 ```sh
 go test ./internal/database -run '^$' \
-  -bench BenchmarkSearchFuzzyPersisted -benchtime=20x -benchmem -v
+  -bench BenchmarkSearchPersisted -benchtime=20x -benchmem -v
 ```
+
+### Current simplified-schema measurements
+
+On 2026-10-07, Linux amd64 / Go 1.27.1 / Ryzen 5 9600X, four Go CPUs, the equivalent
+million-distinct-path raw fixture built in 60.5 seconds and occupied 614,731,776 bytes
+(615 MB / 586 MiB). Compared with the removed fuzzy fixture below, total catalog bytes
+fell about 88% and fixture construction was about 11 times faster. Both fixtures omit
+directory aggregates; these are not standalone fuzzy-index byte measurements or actual
+CSHD input sizes. Warm means over 20 database calls were:
+
+| Case-insensitive basename substring query | Time/op |
+| --- | ---: |
+| `report-0000005.txt` (targeted literal) | 4.49 ms |
+| `REPORT` (broad folded prefix) | 1874.0 ms |
+| `absent` (no-match) | 0.649 ms |
+
+The targeted query is not equivalent to the old typo query. Broad-prefix latency has
+not improved and remains an acceptance concern; removing fuzzy postings is not a
+broad-query optimization. These means do not establish p95, HTTP, or filesystem-cold costs.
+
+The 50,000-file `BenchmarkSearchIndexedImport` with the simplified schema completed a
+successful streaming import at 15,960 files/s (about 3.13 seconds inside the import),
+including directory construction/publication. Parsing the late-failure fixture and
+finishing cleanup ran at 17,313 input files/s (about 2.89 seconds); the benchmark verifies
+catalog access with revision zero afterward. Sampled Go heap was about 3.81 / 3.71 MB;
+this is neither peak RSS nor a bound on SQLite memory. Inputs use synthetic short paths
+and unique SHA-256 contents, so these results do not predict the user's 84,000-line
+inventory throughput. Actual import memory/journal, recovery, and HTTP acceptance remain.
+
+### Historical fuzzy measurements (removed implementation)
+
+The following measurements explain the decision to remove fuzzy search. They are not
+measurements of the current schema; the old fuzzy benchmark is no longer present.
 
 The fixture uses 50,000 or 1,000,000 distinct paths and contents; construction can
 be expensive. On 2026-10-07, Linux amd64 / Go 1.27.1 / Ryzen 5 9600X in a container
@@ -557,7 +566,7 @@ its build time is not streaming-import throughput. The short no-match probes do 
 measure short-query fan-out when many paths match. This successful benchmark run does
 not establish acceptable performance, p95, HTTP latency, or filesystem-cold behavior.
 
-Larger/more varied distributions, HTTP latency, filesystem-cold behavior, indexed
+Current-schema before/after measurements, varied distributions, HTTP latency, filesystem-cold behavior, indexed
 streaming-import overhead, and standalone recovery still require measurements and
 an agreed acceptance budget. Functionality is implemented; the final performance
 and frontend-handoff gate remains open.
@@ -572,19 +581,18 @@ assertions without treating a short wall-clock timeout as an import throughput b
 
 ### Literal index publication and cleanup
 
-The initial schema contains a distinct-path lexicon (`search_path`) with indexed
-basename/path equality, an external-content case-sensitive FTS5 trigram index, and
-explicit one-/two-rune postings (`search_short`). Paths are shared across disks and
-snapshots. FTS queries use quoted literal phrases, followed by literal verification;
-short queries use exact posting lookups because FTS5 trigrams cannot retrieve them.
+The initial schema contains a distinct-path lexicon (`search_path`) with indexed folded
+basename/path equality and one external-content FTS5 trigram index over folded text.
+Paths are shared across disks and snapshots. FTS queries use quoted literal phrases,
+followed by folded literal verification; short substring queries are rejected because
+FTS5 trigrams cannot retrieve them.
 No search service loads the catalog's observations into Go.
 
-Observation insert/update triggers build lexicon, trigram and short-posting data in
+Observation insert/update triggers build lexicon and trigram data in
 the same bounded batch transaction. Index-write failures therefore use normal import
 cleanup; publication additionally checks that every observation has a search path.
 Deleting a failed observation removes its lexicon row only after its last reference
-disappears, cascades short postings, and updates FTS. Completed paths remain protected;
-short postings can be deleted only through their owning path. Tests cover committed
+disappears and updates FTS. Completed paths remain protected. Tests cover committed
 batch failure, cancellation, shared-path preservation, interrupted-state recovery,
 publication prerequisites and FTS integrity.
 
@@ -594,13 +602,15 @@ now index those reverse references, including ownership cascades, with query-pla
 This allows the measured 50,000-file late failure to clean up within the existing
 30-second cleanup deadline and leave the catalog usable.
 
-### Search measurements and fuzzy spike
+### Historical search measurements and fuzzy spike
+
+These measurements precede ADR 0001 and removal of fuzzy/short indexes. Re-run current
+search and import benchmarks for acceptance; the old fuzzy spike benchmark was removed.
 
 Reproduce the measurements with:
 
 ```sh
 go test ./internal/database -run '^$' -bench BenchmarkSearchQueries -benchtime=20x -benchmem -v
-go test ./internal/database -run '^$' -bench BenchmarkSearchFuzzyDeletionSpike -benchtime=20x -benchmem -v
 go test ./internal/importer -run '^$' -bench BenchmarkSearchIndexedImport -benchtime=1x -benchmem
 ```
 
@@ -666,12 +676,10 @@ The initial fuzzy spike establishes:
   a short-term probe took 1.3 microseconds. These exclude SQLite postings, observation
   expansion, HTTP, index persistence and exhaustive sorting of large candidate sets.
 
-Production fuzzy search now follows that strategy using fixed-width persisted
-fingerprints, folded literal retrieval, and whole-term verification as described above.
-FTS5-only fuzzy search is ruled out by the recall tests. Broader persisted storage/import
-and query acceptance measurements remain pending. A short ADR for the search index,
-normalization/ranking, alternatives and consequences is proposed; no ADR has been
-created without approval.
+The persisted implementation was subsequently removed because its storage/write costs
+were disproportionate. FTS5 alone does not provide typo tolerance; the current contract
+explicitly drops that capability rather than claiming equivalent recall. ADR 0001 records
+the approved replacement, normalization, short-query restriction, and consequences.
 
 ## Verification and follow-on work
 

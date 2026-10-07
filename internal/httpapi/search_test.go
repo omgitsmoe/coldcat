@@ -16,7 +16,7 @@ import (
 )
 
 func TestSearchHTTPWorkflow(t *testing.T) {
-	for _, match := range []string{"substring", "fuzzy"} {
+	for _, match := range []string{"substring", "exact"} {
 		t.Run(match, func(t *testing.T) { testSearchHTTPWorkflow(t, match) })
 	}
 }
@@ -90,9 +90,9 @@ func testSearchHTTPWorkflow(t *testing.T, match string) {
 		}
 	}
 	var page searchPageDTO
-	searchURL, relevance := "/api/v1/search?q=report&", "prefix"
-	if match == "fuzzy" {
-		searchURL, relevance = "/api/v1/search?q=REPROT.txt&match=fuzzy&", "typo"
+	searchURL, relevance := "/api/v1/search?q=REPORT&", "prefix"
+	if match == "exact" {
+		searchURL, relevance = "/api/v1/search?q=REPORT.txt&match=exact&", "exact"
 	}
 	get(searchURL+"limit=1", 200, &page, "/api/v1/search")
 	if len(page.Items) != 1 || page.NextCursor == nil {
@@ -156,7 +156,8 @@ func testSearchHTTPWorkflow(t *testing.T, match string) {
 		t.Fatal("directory membership changed catalog-wide counts")
 	}
 	for _, query := range []string{
-		"", "q=", "q=a&q=b", "q=a&field=bad", "q=a&match=bad",
+		"", "q=", "q=a", "q=ab", "q=é猫", "q=report&match=fuzzy",
+		"q=report&q=other", "q=report&field=bad", "q=report&match=bad",
 		"q=a&disk_id=0", "q=a&snapshot_id=-1", "q=a&directory=foo",
 		"q=a&scope=bad", "q=a&limit=201", "q=a&cursor=bad", "q=a&unknown=x",
 		"q=a&other_replicas=-1", "q=a&other_replicas=0&min_other_replicas=0",
@@ -170,7 +171,7 @@ func testSearchHTTPWorkflow(t *testing.T, match string) {
 			t.Fatalf("%s: %+v", query, failure)
 		}
 	}
-	for _, query := range []string{"q=a&disk_id=9999", "q=a&snapshot_id=9999"} {
+	for _, query := range []string{"q=report&disk_id=9999", "q=report&snapshot_id=9999"} {
 		var failure errorDTO
 		get("/api/v1/search?"+query, 404, &failure, "")
 	}

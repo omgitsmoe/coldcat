@@ -45,10 +45,7 @@ func (a *App) Search(ctx context.Context, req SearchRequest) (base.SearchPage, e
 	if req.Limit == 0 {
 		req.Limit = 50
 	}
-	version, kind := 1, "search:rank:path:id"
-	if f.Match == "fuzzy" {
-		version, kind = 2, "search:fuzzy-v1:rank:path:id"
-	}
+	version, kind := 3, "search:fold-v1:rank:path:id"
 	if err := database.ValidateSearchFilters(*f); err != nil {
 		return base.SearchPage{}, err
 	}

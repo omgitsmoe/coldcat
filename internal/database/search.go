@@ -18,8 +18,11 @@ func ValidateSearchFilters(f base.SearchFilters) error {
 	}
 	if f.Query == "" || len(f.Query) > 1024 || !utf8.ValidString(f.Query) ||
 		strings.ContainsRune(f.Query, 0) || (f.Field != "name" && f.Field != "path") ||
-		(f.Match != "exact" && f.Match != "substring" && f.Match != "fuzzy") || f.SnapshotID < 0 {
+		(f.Match != "exact" && f.Match != "substring") || f.SnapshotID < 0 {
 		return fmt.Errorf("%w: invalid search query, field, match, or snapshot", ErrValidation)
+	}
+	if f.Match == "substring" && utf8.RuneCountInString(f.Query) < 3 {
+		return fmt.Errorf("%w: substring search requires at least three characters", ErrValidation)
 	}
 	if f.Directory != "" {
 		if (f.DiskID == 0 && f.SnapshotID == 0) || !validDirectory(f.Directory) ||
@@ -35,32 +38,23 @@ func searchCandidates(f base.SearchFilters) (string, []any) {
 }
 
 func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (string, []any) {
-	column := "p." + f.Field
+	column := "p." + f.Field + "_fold"
+	folded := searchFold(f.Query)
 	var source string
 	var args []any
 	if f.Match == "exact" {
-		source = "SELECT p.id,p.path,p.name FROM search_path p WHERE " + column + "=?"
-		args = []any{f.Query}
-	} else if utf8.RuneCountInString(f.Query) < 3 {
-		source = `SELECT p.id,p.path,p.name FROM search_short g
- CROSS JOIN search_path p ON p.id=g.path_id WHERE g.field=? AND g.gram=?`
-		args = []any{f.Field, f.Query}
+		source = "SELECT p.* FROM search_path p WHERE " + column + "=?"
+		args = []any{folded}
 	} else {
-		source = `SELECT p.id,p.path,p.name FROM search_trigram t
+		source = `SELECT p.* FROM search_trigram t
  CROSS JOIN search_path p ON p.id=t.rowid WHERE search_trigram MATCH ?`
-		args = []any{f.Field + `:"` + strings.ReplaceAll(f.Query, `"`, `""`) + `"`}
+		args = []any{f.Field + `_fold:"` + strings.ReplaceAll(folded, `"`, `""`) + `"`}
 	}
-	var ranked string
-	if f.Match == "fuzzy" {
-		source, args = fuzzyPaths(f)
-		ranked = `ranked_paths AS MATERIALIZED (` + source + `)`
-	} else {
-		ranked = `retrieved_paths AS MATERIALIZED (` + source + `),
+	ranked := `retrieved_paths AS MATERIALIZED (` + source + `),
  ranked_paths AS MATERIALIZED (SELECT p.*,
  CASE WHEN ` + column + `=? THEN 0 WHEN substr(` + column + `,1,length(?))=?
  THEN 1 ELSE 2 END AS rank FROM retrieved_paths p WHERE instr(` + column + `,?)>0)`
-		args = append(args, f.Query, f.Query, f.Query, f.Query)
-	}
+	args = append(args, folded, folded, folded, folded)
 	query := currentSnapshots + `, ` + ranked + `,
  paths AS MATERIALIZED (SELECT p.* FROM ranked_paths p`
 	if limit > 0 {
@@ -142,8 +136,6 @@ func searchRank(value string) int {
 		return 1
 	case "substring":
 		return 2
-	case "typo":
-		return 3
 	default:
 		return -1
 	}
@@ -159,8 +151,7 @@ func (db *DB) Search(
 	}
 	if limit < 1 || limit > 200 || after.ID < 0 ||
 		(after.ID == 0 && (after.Relevance != "" || after.Path != "")) ||
-		(after.ID > 0 && (searchRank(after.Relevance) < 0 ||
-			(after.Relevance == "typo" && f.Match != "fuzzy"))) {
+		(after.ID > 0 && searchRank(after.Relevance) < 0) {
 		return result, fmt.Errorf("%w: invalid search page", ErrValidation)
 	}
 	release, err := db.readAccess()
@@ -276,7 +267,7 @@ func (db *DB) Search(
 		}
 		s.Id, d.Id, c.Content.Id, c.Scope = o.SnapshotId, s.DiskId, o.ContentId, f.Scope
 		d.Capacity = uint64(capacity)
-		item.Relevance = []string{"exact", "prefix", "substring", "typo"}[relevance]
+		item.Relevance = []string{"exact", "prefix", "substring"}[relevance]
 		c.Content.HashType, err = base.FromIdentifier(algorithm)
 		if err != nil {
 			return result, err

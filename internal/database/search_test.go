@@ -55,17 +55,6 @@ func TestSearchIndexesCleanupAndRecovery(t *testing.T) {
 		`UPDATE search_path SET name='changed' WHERE path='foo/report'`,
 		`UPDATE search_path SET sealed=0 WHERE path='foo/report'`,
 		`UPDATE search_path SET sealed=1 WHERE path='unfinished/REPORT'`,
-		`INSERT INTO search_short(field,gram,path_id)
- SELECT 'name','x',id FROM search_path WHERE path='foo/report'`,
-		`INSERT INTO search_fold_short(field,gram,path_id)
- SELECT 'name','x',id FROM search_path WHERE path='foo/report'`,
-		`INSERT INTO search_fuzzy_signature(field,signature,path_id)
- SELECT 'name',123,id FROM search_path WHERE path='foo/report'`,
-		`DELETE FROM search_short WHERE path_id=(SELECT id FROM search_path WHERE path='foo/report')`,
-		`DELETE FROM search_fuzzy_signature
- WHERE path_id=(SELECT id FROM search_path WHERE path='foo/report')`,
-		`DELETE FROM search_fold_short
- WHERE path_id=(SELECT id FROM search_path WHERE path='unfinished/REPORT')`,
 	} {
 		if _, err := db.db.Exec(statement); err == nil {
 			t.Fatalf("accepted mutation: %s", statement)
@@ -75,13 +64,9 @@ func TestSearchIndexesCleanupAndRecovery(t *testing.T) {
 		field, match, query, index string
 	}{
 		{"name", "exact", "report", "search_name"},
-		{"path", "exact", "foo/report", "sqlite_autoindex_search_path_1"},
-		{"name", "substring", "re", "SEARCH g USING PRIMARY KEY"},
+		{"path", "exact", "foo/report", "search_path_fold"},
 		{"name", "substring", "report", "VIRTUAL TABLE INDEX"},
 		{"path", "substring", "foo/report", "VIRTUAL TABLE INDEX"},
-		{"name", "fuzzy", "reprot", "SEARCH g USING PRIMARY KEY"},
-		{"name", "fuzzy", "re", "SEARCH search_fold_short USING PRIMARY KEY"},
-		{"path", "fuzzy", "foo/repotr", "VIRTUAL TABLE INDEX"},
 	} {
 		f.Field, f.Match, f.Query = test.field, test.match, test.query
 		for _, after := range []int{0, 10000} {
@@ -124,15 +109,7 @@ func TestSearchIndexesCleanupAndRecovery(t *testing.T) {
 	}
 	for _, query := range []string{
 		`SELECT COUNT(*) FROM search_path`,
-		`SELECT COUNT(*) FROM search_trigram WHERE search_trigram MATCH 'name:"report"'`,
-		`SELECT COUNT(DISTINCT path_id) FROM search_short WHERE field='name' AND gram='re'`,
-		`SELECT COUNT(*) FROM (
- SELECT path_id FROM search_short WHERE field='name' AND gram='re' UNION
- SELECT path_id FROM search_fold_short WHERE field='name' AND gram='re')`,
-		`SELECT COUNT(DISTINCT path_id) FROM search_fuzzy_signature`,
-		`SELECT COUNT(*) FROM (
- SELECT rowid FROM search_trigram WHERE search_trigram MATCH 'name:"report"' UNION
- SELECT rowid FROM search_fold_trigram WHERE search_fold_trigram MATCH 'name_fold:"report"')`,
+		`SELECT COUNT(*) FROM search_trigram WHERE search_trigram MATCH 'name_fold:"report"'`,
 	} {
 		var count int
 		if err := db.db.QueryRow(query).Scan(&count); err != nil || count != 1 {
@@ -142,19 +119,9 @@ func TestSearchIndexesCleanupAndRecovery(t *testing.T) {
 	if _, err := db.db.Exec(`INSERT INTO search_trigram(search_trigram) VALUES('integrity-check')`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.db.Exec(`INSERT INTO search_fold_trigram(search_fold_trigram,rank)
- VALUES('integrity-check',1)`); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func TestPublicationRequiresSearchPaths(t *testing.T) {
-	for _, index := range []string{"paths", "fuzzy_name", "fuzzy_path", "short_name", "short_path"} {
-		t.Run(index, func(t *testing.T) { testPublicationRequiresSearchIndex(t, index) })
-	}
-}
-
-func testPublicationRequiresSearchIndex(t *testing.T, index string) {
 	db, err := Open(filepath.Join(t.TempDir(), "catalog.sqlite"))
 	if err != nil {
 		t.Fatal(err)
@@ -170,13 +137,6 @@ func testPublicationRequiresSearchIndex(t *testing.T, index string) {
 		t.Fatal(err)
 	}
 	mutate := `DELETE FROM search_path`
-	if strings.HasPrefix(index, "fuzzy_") {
-		mutate = `DROP TRIGGER immutable_fuzzy_signature_delete;
- DELETE FROM search_fuzzy_signature WHERE field='` + strings.TrimPrefix(index, "fuzzy_") + `'`
-	} else if strings.HasPrefix(index, "short_") {
-		mutate = `DROP TRIGGER immutable_fold_short_delete;
- DELETE FROM search_fold_short WHERE field='` + strings.TrimPrefix(index, "short_") + `'`
-	}
 	if _, err := db.db.Exec(mutate); err != nil {
 		t.Fatal(err)
 	}
@@ -247,8 +207,7 @@ func BenchmarkSearchQueries(b *testing.B) {
 					Field: "path", Match: "exact"}},
 				{"rare", base.SearchFilters{Query: "00005"}},
 				{"common", base.SearchFilters{Query: "report"}},
-				{"short_one", base.SearchFilters{Query: "é", Field: "path"}},
-				{"short_two", base.SearchFilters{Query: "é猫", Field: "path"}},
+				{"unicode_three", base.SearchFilters{Query: "é猫/", Field: "path"}},
 				{"no_match", base.SearchFilters{Query: "missing-path"}},
 				{"history", base.SearchFilters{Query: "00005",
 					ContentFilters: base.ContentFilters{Scope: base.ScopeHistory}}},

@@ -69,6 +69,17 @@ func OpenContext(ctx context.Context, path string) (*DB, error) {
 		return nil, fmt.Errorf("failed to initialize DB schema: %w", err)
 	}
 
+	var obsoleteSearch bool
+	err = db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_schema
+ WHERE name IN ('search_fuzzy_signature','search_short','search_fold_short'))`).Scan(&obsoleteSearch)
+	if err != nil || obsoleteSearch {
+		result.Close()
+		if err != nil {
+			return nil, fmt.Errorf("check search schema: %w", err)
+		}
+		return nil, fmt.Errorf("obsolete pre-0.1 search schema: recreate the catalog and reimport inventories")
+	}
+
 	if err := result.RecoverImports(ctx); err != nil {
 		result.Close()
 		return nil, fmt.Errorf("recover abandoned imports: %w", err)

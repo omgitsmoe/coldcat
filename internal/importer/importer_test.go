@@ -108,7 +108,7 @@ func TestImportFailuresCleanEveryCommittedBatch(t *testing.T) {
 			assertErr(t, err)
 			for _, table := range []string{
 				"snapshot", "observation", "content", "pending_size", "import_content",
-				"search_path", "search_short", "search_trigram",
+				"search_path", "search_trigram",
 			} {
 				assertEqual(t, count(t, raw, table), 0)
 			}
@@ -147,7 +147,7 @@ func TestReaderErrorAndCancellationCleanCommittedBatches(t *testing.T) {
 
 			for _, table := range []string{
 				"snapshot", "observation", "content", "pending_size", "import_content",
-				"search_path", "search_short", "search_trigram",
+				"search_path", "search_trigram",
 			} {
 				assertEqual(t, count(t, raw, table), 0)
 			}

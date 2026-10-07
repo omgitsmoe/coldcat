@@ -11,6 +11,36 @@ import (
 	"testing"
 )
 
+func TestObsoleteSearchSchemaRequiresRecreation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "catalog.sqlite")
+	db, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.db.Exec(`CREATE TABLE search_fuzzy_signature(id INTEGER)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if reopened, err := Open(path); err == nil {
+		reopened.Close()
+		t.Fatal("accepted obsolete search schema")
+	} else if !strings.Contains(err.Error(), "recreate the catalog and reimport") {
+		t.Fatalf("unactionable schema error: %v", err)
+	}
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	var preserved int
+	if err := raw.QueryRow(`SELECT count(*) FROM sqlite_schema
+ WHERE name='search_fuzzy_signature'`).Scan(&preserved); err != nil || preserved != 1 {
+		t.Fatalf("obsolete catalog was modified: %d %v", preserved, err)
+	}
+}
+
 func TestInitialSchemaReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "catalog.sqlite")
 	for pass := range 2 {
@@ -35,7 +65,7 @@ func TestInitialSchemaReopen(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if tables != 24 {
+		if tables != 16 {
 			t.Fatalf("initial schema has %d tables", tables)
 		}
 
