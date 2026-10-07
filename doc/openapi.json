@@ -165,11 +165,11 @@
     "/api/v1/search": {
       "get": {
         "summary": "Search observations by filename or disk-relative path",
-        "description": "Exact and substring matching are case-sensitive, literal and exhaustive. Name means the final /-separated segment; path means the entire disk-relative path. No normalization, trimming or wildcard interpretation is applied. Rank exact selected-field matches before prefixes before other substrings, then original path in binary order, then observation ID ascending. History includes repeated observations and visibly marks historical results. Counts remain catalog-wide despite membership filters. Snapshot filters restrict scope: an older snapshot returns no current results, and requires history to search its observations. Keep all applied filters and limit unchanged when following a cursor. Successful imports invalidate cursors; unchanged restart, recovery and failed imports preserve them. Unknown, repeated and empty parameters are rejected except directory. Fuzzy matching is not yet implemented.",
+        "description": "Exact and substring matching are case-sensitive, literal and exhaustive. Name means the final /-separated segment; path means the entire disk-relative path. Fuzzy matching uses Unicode simple case-folding, preserves punctuation and whitespace, does not normalize composed/decomposed Unicode or equate sharp-s with ss, and includes folded exact/prefix/substring matches plus whole-selected-field matches within one rune insertion, deletion, substitution or adjacent transposition. It is not typo-tolerant substring matching. Rank exact selected-field matches before prefixes before other substrings before typos, then original path in binary order, then observation ID ascending. Original spelling is preserved. Retrieval is exhaustive without candidate caps. History includes repeated observations and visibly marks historical results. Counts remain catalog-wide despite membership filters. Snapshot filters restrict scope: an older snapshot returns no current results, and requires history to search its observations. Keep all applied filters and limit unchanged when following a cursor. Successful imports invalidate cursors; unchanged restart, recovery and failed imports preserve them. Unknown, repeated and empty parameters are rejected except directory.",
         "parameters": [
           {"name": "q", "in": "query", "required": true, "description": "Nonempty valid UTF-8 literal text, at most 1024 bytes, no NUL. Whitespace is significant.", "schema": {"type": "string", "minLength": 1}, "example": "report"},
           {"name": "field", "in": "query", "schema": {"type": "string", "enum": ["name", "path"], "default": "name"}},
-          {"name": "match", "in": "query", "schema": {"type": "string", "enum": ["exact", "substring"], "default": "substring"}},
+          {"name": "match", "in": "query", "schema": {"type": "string", "enum": ["exact", "substring", "fuzzy"], "default": "substring"}},
           {"$ref": "#/components/parameters/Scope"},
           {"name": "disk_id", "in": "query", "schema": {"$ref": "#/components/schemas/ID"}},
           {"name": "snapshot_id", "in": "query", "description": "Complete snapshot. Must belong to disk_id when both are supplied.", "schema": {"$ref": "#/components/schemas/ID"}},
@@ -189,6 +189,13 @@
               "disk": {"id": "1", "label": "source", "serial": "", "capacity": "100"},
               "snapshot": {"id": "1", "disk_id": "1", "state": "complete", "captured_at": "2026-10-01T12:00:00Z", "imported_at": "2026-10-06T12:00:00Z", "capture_provenance": "explicit", "input_path": "/inventories/source.cshd", "input_format": "cshd", "file_count": "2", "content_count": "1"},
               "basename": "report.txt", "is_current": true, "relevance": "prefix"
+            }], "next_cursor": null}},
+            "fuzzy": {"value": {"scope": "current", "revision": "3", "filters": {"q": "REPROT.txt", "field": "name", "match": "fuzzy", "snapshot_id": null, "disk_id": null, "directory": "", "replica_metric": "disks", "other_replicas": null, "min_other_replicas": null, "max_other_replicas": null}, "items": [{
+              "observation": {"id": "1", "content_id": "1", "snapshot_id": "1", "path": "docs/report.txt", "mtime": null},
+              "content": {"id": "1", "hash": {"algorithm": "sha256", "hex": "abababababababababababababababababababababababababababababababab"}, "size": "0", "scope": "current", "location_count": "4", "disk_count": "3", "observation_count": "4", "current_location_count": "4", "current_disk_count": "3"},
+              "disk": {"id": "1", "label": "source", "serial": "", "capacity": "100"},
+              "snapshot": {"id": "1", "disk_id": "1", "state": "complete", "captured_at": "2026-10-01T12:00:00Z", "imported_at": "2026-10-06T12:00:00Z", "capture_provenance": "explicit", "input_path": "/inventories/source.cshd", "input_format": "cshd", "file_count": "2", "content_count": "1"},
+              "basename": "report.txt", "is_current": true, "relevance": "typo"
             }], "next_cursor": null}},
             "empty": {"value": {"scope": "current", "revision": "0", "filters": {"q": "report", "field": "name", "match": "substring", "snapshot_id": null, "disk_id": null, "directory": "", "replica_metric": "disks", "other_replicas": null, "min_other_replicas": null, "max_other_replicas": null}, "items": [], "next_cursor": null}}
           }}}},
@@ -670,7 +677,7 @@
           "filters": {"type": "object", "required": ["q", "field", "match", "snapshot_id", "disk_id", "directory", "replica_metric", "other_replicas", "min_other_replicas", "max_other_replicas"], "properties": {
             "q": {"type": "string", "minLength": 1},
             "field": {"type": "string", "enum": ["name", "path"]},
-            "match": {"type": "string", "enum": ["exact", "substring"]},
+            "match": {"type": "string", "enum": ["exact", "substring", "fuzzy"]},
             "snapshot_id": {"type": ["string", "null"], "pattern": "^[1-9][0-9]*$"},
             "disk_id": {"type": ["string", "null"], "pattern": "^[1-9][0-9]*$"},
             "directory": {"type": "string"},
@@ -691,7 +698,7 @@
           "disk": {"$ref": "#/components/schemas/Disk"},
           "snapshot": {"$ref": "#/components/schemas/Snapshot"},
           "basename": {"type": "string"}, "is_current": {"type": "boolean"},
-          "relevance": {"type": "string", "enum": ["exact", "prefix", "substring"]}
+          "relevance": {"type": "string", "enum": ["exact", "prefix", "substring", "typo"]}
         }
       },
       "SnapshotPage": {

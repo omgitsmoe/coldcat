@@ -44,6 +44,10 @@ func TestSearchIndexesCleanupAndRecovery(t *testing.T) {
 		`DELETE FROM search_path WHERE path='foo/report'`,
 		`UPDATE search_path SET name='changed' WHERE path='foo/report'`,
 		`DELETE FROM search_short WHERE path_id=(SELECT id FROM search_path WHERE path='foo/report')`,
+		`DELETE FROM search_fuzzy_signature
+ WHERE path_id=(SELECT id FROM search_path WHERE path='foo/report')`,
+		`DELETE FROM search_fold_short
+ WHERE path_id=(SELECT id FROM search_path WHERE path='foo/report')`,
 	} {
 		if _, err := db.db.Exec(statement); err == nil {
 			t.Fatalf("accepted mutation: %s", statement)
@@ -57,6 +61,9 @@ func TestSearchIndexesCleanupAndRecovery(t *testing.T) {
 		{"name", "substring", "re", "SEARCH g USING PRIMARY KEY"},
 		{"name", "substring", "report", "VIRTUAL TABLE INDEX"},
 		{"path", "substring", "foo/report", "VIRTUAL TABLE INDEX"},
+		{"name", "fuzzy", "reprot", "SEARCH g USING PRIMARY KEY"},
+		{"name", "fuzzy", "re", "SEARCH search_fold_short USING PRIMARY KEY"},
+		{"path", "fuzzy", "foo/repotr", "VIRTUAL TABLE INDEX"},
 	} {
 		f.Field, f.Match, f.Query = test.field, test.match, test.query
 		for _, after := range []int{0, 10000} {
@@ -101,6 +108,9 @@ func TestSearchIndexesCleanupAndRecovery(t *testing.T) {
 		`SELECT COUNT(*) FROM search_path`,
 		`SELECT COUNT(*) FROM search_trigram WHERE search_trigram MATCH 'name:"report"'`,
 		`SELECT COUNT(DISTINCT path_id) FROM search_short WHERE field='name' AND gram='re'`,
+		`SELECT COUNT(DISTINCT path_id) FROM search_fold_short WHERE field='name' AND gram='re'`,
+		`SELECT COUNT(DISTINCT path_id) FROM search_fuzzy_signature`,
+		`SELECT COUNT(*) FROM search_fold_trigram WHERE search_fold_trigram MATCH 'name_fold:"report"'`,
 	} {
 		var count int
 		if err := db.db.QueryRow(query).Scan(&count); err != nil || count != 1 {
@@ -110,9 +120,19 @@ func TestSearchIndexesCleanupAndRecovery(t *testing.T) {
 	if _, err := db.db.Exec(`INSERT INTO search_trigram(search_trigram) VALUES('integrity-check')`); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := db.db.Exec(`INSERT INTO search_fold_trigram(search_fold_trigram,rank)
+ VALUES('integrity-check',1)`); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestPublicationRequiresSearchPaths(t *testing.T) {
+	for _, index := range []string{"paths", "fuzzy_name", "fuzzy_path", "short_name", "short_path"} {
+		t.Run(index, func(t *testing.T) { testPublicationRequiresSearchIndex(t, index) })
+	}
+}
+
+func testPublicationRequiresSearchIndex(t *testing.T, index string) {
 	db, err := Open(filepath.Join(t.TempDir(), "catalog.sqlite"))
 	if err != nil {
 		t.Fatal(err)
@@ -123,9 +143,19 @@ func TestPublicationRequiresSearchPaths(t *testing.T) {
  VALUES(1,1,'importing','2023-01-01T00:00:00.000000000Z',
  '2023-01-01T00:00:00.000000000Z','explicit','cshd');
  INSERT INTO content(id,hash_type,hash) VALUES(1,'sha256',zeroblob(32));
- INSERT INTO observation(snapshot_id,content_id,path) VALUES(1,1,'report');
- DELETE FROM search_path;`)
+ INSERT INTO observation(snapshot_id,content_id,path) VALUES(1,1,'report');`)
 	if err != nil {
+		t.Fatal(err)
+	}
+	mutate := `DELETE FROM search_path`
+	if strings.HasPrefix(index, "fuzzy_") {
+		mutate = `DROP TRIGGER immutable_fuzzy_signature_delete;
+ DELETE FROM search_fuzzy_signature WHERE field='` + strings.TrimPrefix(index, "fuzzy_") + `'`
+	} else if strings.HasPrefix(index, "short_") {
+		mutate = `DROP TRIGGER immutable_fold_short_delete;
+ DELETE FROM search_fold_short WHERE field='` + strings.TrimPrefix(index, "short_") + `'`
+	}
+	if _, err := db.db.Exec(mutate); err != nil {
 		t.Fatal(err)
 	}
 	_, err = db.PublishImport(t.Context(), PublishImportRequest{SnapshotID: 1})

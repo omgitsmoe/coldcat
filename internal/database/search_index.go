@@ -50,9 +50,29 @@ func init() {
 
 const searchSchema = `
 CREATE TABLE search_path (
- id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL
+ id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+ name_fold TEXT GENERATED ALWAYS AS (coldcat_fold_v1(name)) STORED,
+ path_fold TEXT GENERATED ALWAYS AS (coldcat_fold_v1(path)) STORED
 );
 CREATE INDEX search_name ON search_path(name,path);
+CREATE INDEX search_fold_name ON search_path(name_fold,path);
+CREATE INDEX search_fold_path ON search_path(path_fold,path);
+CREATE VIRTUAL TABLE search_fold_trigram USING fts5(
+ name_fold, path_fold, content='search_path', content_rowid='id',
+ tokenize='trigram case_sensitive 1'
+);
+CREATE TABLE search_fold_short (
+ field TEXT NOT NULL CHECK(field IN ('name','path')), gram TEXT NOT NULL,
+ path_id INTEGER NOT NULL REFERENCES search_path(id) ON DELETE CASCADE,
+ PRIMARY KEY(field,gram,path_id)
+) WITHOUT ROWID;
+CREATE INDEX search_fold_short_path ON search_fold_short(path_id);
+CREATE TABLE search_fuzzy_signature (
+ field TEXT NOT NULL CHECK(field IN ('name','path')), signature INTEGER NOT NULL,
+ path_id INTEGER NOT NULL REFERENCES search_path(id) ON DELETE CASCADE,
+ PRIMARY KEY(field,signature,path_id)
+) WITHOUT ROWID;
+CREATE INDEX search_fuzzy_signature_path ON search_fuzzy_signature(path_id);
 CREATE VIRTUAL TABLE search_trigram USING fts5(
  name, path, content='search_path', content_rowid='id', tokenize='trigram case_sensitive 1'
 );
@@ -63,12 +83,22 @@ CREATE TABLE search_short (
 ) WITHOUT ROWID;
 CREATE INDEX search_short_path ON search_short(path_id);
 CREATE TRIGGER search_path_insert AFTER INSERT ON search_path BEGIN
+ INSERT INTO search_fold_trigram(rowid,name_fold,path_fold)
+ VALUES(NEW.id,NEW.name_fold,NEW.path_fold);
+ INSERT INTO search_fold_short(field,gram,path_id)
+ SELECT json_extract(value,'$.field'),json_extract(value,'$.gram'),NEW.id
+ FROM json_each(coldcat_short_grams(NEW.name_fold,NEW.path_fold));
+ INSERT INTO search_fuzzy_signature(field,signature,path_id)
+ SELECT json_extract(value,'$.field'),json_extract(value,'$.key'),NEW.id
+ FROM json_each(coldcat_fuzzy_signatures_v1(NEW.name_fold,NEW.path_fold));
  INSERT INTO search_trigram(rowid,name,path) VALUES(NEW.id,NEW.name,NEW.path);
  INSERT INTO search_short(field,gram,path_id)
  SELECT json_extract(value,'$.field'),json_extract(value,'$.gram'),NEW.id
  FROM json_each(coldcat_short_grams(NEW.name,NEW.path));
 END;
 CREATE TRIGGER search_path_delete AFTER DELETE ON search_path BEGIN
+ INSERT INTO search_fold_trigram(search_fold_trigram,rowid,name_fold,path_fold)
+ VALUES('delete',OLD.id,OLD.name_fold,OLD.path_fold);
  INSERT INTO search_trigram(search_trigram,rowid,name,path)
  VALUES('delete',OLD.id,OLD.name,OLD.path);
 END;
@@ -92,6 +122,24 @@ CREATE TRIGGER immutable_search_path_delete BEFORE DELETE ON search_path
  WHEN EXISTS(SELECT 1 FROM observation o JOIN snapshot s ON s.id=o.snapshot_id
  WHERE o.path=OLD.path AND s.state='complete')
  BEGIN SELECT RAISE(ABORT,'complete snapshot search index is immutable'); END;
+CREATE TRIGGER immutable_fuzzy_signature_delete BEFORE DELETE ON search_fuzzy_signature
+ WHEN EXISTS(SELECT 1 FROM search_path WHERE id=OLD.path_id)
+ BEGIN SELECT RAISE(ABORT,'delete fuzzy postings through their owning path'); END;
+CREATE TRIGGER immutable_fuzzy_signature_update BEFORE UPDATE ON search_fuzzy_signature
+ BEGIN SELECT RAISE(ABORT,'fuzzy postings are immutable'); END;
+CREATE TRIGGER immutable_fuzzy_signature_insert BEFORE INSERT ON search_fuzzy_signature
+ WHEN EXISTS(SELECT 1 FROM observation o JOIN search_path p ON p.path=o.path
+ JOIN snapshot s ON s.id=o.snapshot_id WHERE p.id=NEW.path_id AND s.state='complete')
+ BEGIN SELECT RAISE(ABORT,'complete snapshot fuzzy index is immutable'); END;
+CREATE TRIGGER immutable_fold_short_delete BEFORE DELETE ON search_fold_short
+ WHEN EXISTS(SELECT 1 FROM search_path WHERE id=OLD.path_id)
+ BEGIN SELECT RAISE(ABORT,'delete folded postings through their owning path'); END;
+CREATE TRIGGER immutable_fold_short_update BEFORE UPDATE ON search_fold_short
+ BEGIN SELECT RAISE(ABORT,'folded postings are immutable'); END;
+CREATE TRIGGER immutable_fold_short_insert BEFORE INSERT ON search_fold_short
+ WHEN EXISTS(SELECT 1 FROM observation o JOIN search_path p ON p.path=o.path
+ JOIN snapshot s ON s.id=o.snapshot_id WHERE p.id=NEW.path_id AND s.state='complete')
+ BEGIN SELECT RAISE(ABORT,'complete snapshot folded index is immutable'); END;
 CREATE TRIGGER immutable_search_short_delete BEFORE DELETE ON search_short
  WHEN EXISTS(SELECT 1 FROM search_path WHERE id=OLD.path_id)
  BEGIN SELECT RAISE(ABORT,'delete search postings through their owning path'); END;

@@ -394,7 +394,7 @@ holds ownership until requests have drained and the database closes. Stop the se
 before importing. `serve` defaults to `127.0.0.1:8080`; startup errors fail the command,
 and SIGINT/SIGTERM request graceful shutdown with a ten-second drain deadline.
 
-`internal/httpapi` implements readiness, disk management, exact/substring search,
+`internal/httpapi` implements readiness, disk management, exact/substring/fuzzy search,
 exact hash lookup, content lists/detail, content observation pages, disk snapshot pages, observation detail,
 and complete snapshot detail. See
 [openapi.json](openapi.json) for the implemented wire contract. IDs, byte counts and
@@ -465,7 +465,71 @@ Malformed/context-changed/invalid-anchor cursors return 400; a changed revision 
 409. Unchanged restart and failed-import recovery preserve cursors. SQL cancellation
 propagates, and an active in-session import blocks search.
 
-### Index publication and cleanup
+### Fuzzy matching
+
+`match=fuzzy` uses version-1 Unicode simple case-folding, preserving punctuation and
+whitespace. It does not normalize composed/decomposed Unicode or equate `ß` with `ss`.
+Original names and paths remain unchanged in responses. Exact/substring modes keep
+their existing case-sensitive semantics.
+
+Fuzzy search includes folded exact, prefix, and substring matches, followed by terms
+within one rune insertion, deletion, substitution, or adjacent transposition. Typos
+compare the entire selected basename or disk-relative path, not arbitrary substrings
+or individual path segments. Relevance is `exact`, `prefix`, `substring`, or `typo`,
+in that order; ties use original binary path then observation ID. Candidate unions
+deduplicate paths, not observations, so historical occurrences remain separate results.
+
+The shared distinct-path lexicon stores generated folded names/paths. Folded FTS5
+trigrams and explicit short postings retrieve literal matches. Version-1 deletion
+fingerprints and adjacent-swap probes retrieve typo candidates. A rolling 64-bit
+fingerprint allows linear generation/storage per term instead of materializing every
+full deletion string. Fingerprint collisions can only add candidates: the original
+folded term is always verified with a linear distance-one predicate. No observation
+or candidate collection is loaded wholesale into Go and no candidate cap is used.
+Index data is shared across observations of the same original path; distinct paths
+with the same basename currently have separate postings.
+
+Fuzzy postings are written in the same observation-batch transaction as existing
+search indexes. Publication requires fuzzy signatures and folded short postings for
+both fields. Cleanup cascades remove import-only postings and update folded FTS,
+while shared completed paths survive. Tests inject a fuzzy write failure after a
+committed batch and check both FTS indexes' integrity. Fuzzy cursors use a separate
+version/kind binding normalization and ranking v1; existing literal cursors keep their
+original format and both retain revision-bound restart/recovery semantics.
+
+This updates the pre-0.1 initial schema, not existing catalogs. Recreate an older
+development catalog before using these indexes; the workspace catalog has not been
+recreated or modified.
+
+Persisted fuzzy measurements can be reproduced with:
+
+```sh
+go test ./internal/database -run '^$' \
+  -bench BenchmarkSearchFuzzyPersisted -benchtime=20x -benchmem -v
+```
+
+The fixture uses 50,000 or 1,000,000 distinct paths and contents; construction can
+be expensive. On 2026-10-07, Linux amd64 / Go 1.27.1 / Ryzen 5 9600X, the 50,000-path
+fixture produced 1,990,000 signature postings and a 366,702,592-byte catalog in 51 s.
+It uses raw transactional fixture insertion and does not build directory aggregates;
+these are total catalog bytes, not incremental fuzzy-index bytes or streaming-import
+throughput. Warm means over 20 database calls were:
+
+| Fuzzy basename query | Time/op |
+| --- | ---: |
+| `reprot-0000005.txt` (adjacent-swap typo) | 0.76 ms |
+| `REPORT` (broad folded prefix) | 84.6 ms |
+| `a` (one-rune no-match) | 0.63 ms |
+| `xy` (two-rune no-match) | 0.69 ms |
+
+These do not establish p95, worst-case short-query fan-out, or a latency guarantee.
+Storage cost is substantial and remains an acceptance concern. The million-distinct-path
+case has not run. Larger distributions, HTTP latency, filesystem-cold behavior, indexed
+streaming-import overhead, and standalone recovery still require measurements and
+an agreed acceptance budget. Functionality is implemented; the final performance
+and frontend-handoff gate remains open.
+
+### Literal index publication and cleanup
 
 The initial schema contains a distinct-path lexicon (`search_path`) with indexed
 basename/path equality, an external-content case-sensitive FTS5 trigram index, and
@@ -561,15 +625,12 @@ The initial fuzzy spike establishes:
   a short-term probe took 1.3 microseconds. These exclude SQLite postings, observation
   expansion, HTTP, index persistence and exhaustive sorting of large candidate sets.
 
-The recommended next fuzzy strategy is a persisted, versioned folded name/path lexicon
-with distance-one deletion signatures and adjacent-swap probes, merged with folded
-exact/prefix/substring tiers and deterministic distance reranking. Define whether path
-typos compare whole paths or segments before implementation; the current prototype
-compares whole terms. Benchmark worst-case short-query fan-out, persisted storage/import
-cost and full ranked pagination before accepting this strategy. FTS5-only fuzzy search
-is ruled out by the recall tests. `match=fuzzy` currently returns 400; production fuzzy
-search remains pending. A short ADR for the search index, normalization/ranking,
-alternatives and consequences is proposed; no ADR has been created without approval.
+Production fuzzy search now follows that strategy using fixed-width persisted
+fingerprints, folded literal retrieval, and whole-term verification as described above.
+FTS5-only fuzzy search is ruled out by the recall tests. Broader persisted storage/import
+and query acceptance measurements remain pending. A short ADR for the search index,
+normalization/ranking, alternatives and consequences is proposed; no ADR has been
+created without approval.
 
 ## Verification and follow-on work
 

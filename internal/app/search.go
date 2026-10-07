@@ -45,6 +45,10 @@ func (a *App) Search(ctx context.Context, req SearchRequest) (base.SearchPage, e
 	if req.Limit == 0 {
 		req.Limit = 50
 	}
+	version, kind := 1, "search:rank:path:id"
+	if f.Match == "fuzzy" {
+		version, kind = 2, "search:fuzzy-v1:rank:path:id"
+	}
 	if err := database.ValidateSearchFilters(*f); err != nil {
 		return base.SearchPage{}, err
 	}
@@ -70,7 +74,7 @@ func (a *App) Search(ctx context.Context, req SearchRequest) (base.SearchPage, e
 		if err := decoder.Decode(new(any)); err != io.EOF {
 			return invalid()
 		}
-		if cursor.Version != 1 || cursor.Kind != "search:rank:path:id" || cursor.After.ID <= 0 ||
+		if cursor.Version != version || cursor.Kind != kind || cursor.After.ID <= 0 ||
 			cursor.Catalog.Revision < 0 || cursor.Limit != req.Limit ||
 			!reflect.DeepEqual(cursor.Filters, req.Filters) {
 			return invalid()
@@ -85,7 +89,7 @@ func (a *App) Search(ctx context.Context, req SearchRequest) (base.SearchPage, e
 		page.Items = page.Items[:req.Limit]
 		last := page.Items[len(page.Items)-1]
 		data, err := json.Marshal(searchCursor{
-			Version: 1, Kind: "search:rank:path:id", Catalog: page.Catalog,
+			Version: version, Kind: kind, Catalog: page.Catalog,
 			Filters: *f, Limit: req.Limit,
 			After: base.SearchAnchor{Relevance: last.Relevance,
 				ID: last.Observation.Id},

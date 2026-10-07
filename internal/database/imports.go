@@ -124,7 +124,12 @@ func (db *DB) PublishImport(ctx context.Context, req PublishImportRequest) (base
 		var missingSearchPaths bool
 		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
  SELECT 1 FROM observation o LEFT JOIN search_path p ON p.path=o.path
- WHERE o.snapshot_id=? AND p.id IS NULL)`, id).Scan(&missingSearchPaths); err != nil {
+ WHERE o.snapshot_id=? AND (p.id IS NULL
+ OR NOT EXISTS(SELECT 1 FROM search_fuzzy_signature g WHERE g.path_id=p.id AND g.field='name')
+ OR NOT EXISTS(SELECT 1 FROM search_fuzzy_signature g WHERE g.path_id=p.id AND g.field='path')
+ OR NOT EXISTS(SELECT 1 FROM search_fold_short g WHERE g.path_id=p.id AND g.field='name')
+ OR NOT EXISTS(SELECT 1 FROM search_fold_short g WHERE g.path_id=p.id AND g.field='path')))`,
+			id).Scan(&missingSearchPaths); err != nil {
 			return err
 		}
 		if missingSearchPaths {

@@ -16,6 +16,12 @@ import (
 )
 
 func TestSearchHTTPWorkflow(t *testing.T) {
+	for _, match := range []string{"substring", "fuzzy"} {
+		t.Run(match, func(t *testing.T) { testSearchHTTPWorkflow(t, match) })
+	}
+}
+
+func testSearchHTTPWorkflow(t *testing.T, match string) {
 	path := filepath.Join(t.TempDir(), "catalog.sqlite")
 	db, err := database.Open(path)
 	if err != nil {
@@ -84,18 +90,22 @@ func TestSearchHTTPWorkflow(t *testing.T) {
 		}
 	}
 	var page searchPageDTO
-	get("/api/v1/search?q=report&limit=1", 200, &page, "/api/v1/search")
+	searchURL, relevance := "/api/v1/search?q=report&", "prefix"
+	if match == "fuzzy" {
+		searchURL, relevance = "/api/v1/search?q=REPROT.txt&match=fuzzy&", "typo"
+	}
+	get(searchURL+"limit=1", 200, &page, "/api/v1/search")
 	if len(page.Items) != 1 || page.NextCursor == nil {
 		t.Fatalf("search page: %+v", page)
 	}
 	first := page.Items[0]
 	if first.Observation.Path != "backup/report.txt" || first.Content.LocationCount != "4" ||
 		first.Content.DiskCount != "3" || first.Content.Size == nil || *first.Content.Size != "0" ||
-		first.Observation.MTime != nil || first.Relevance != "prefix" || !first.IsCurrent {
+		first.Observation.MTime != nil || first.Relevance != relevance || !first.IsCurrent {
 		t.Fatalf("search result: %+v", first)
 	}
 	cursor := *page.NextCursor
-	get("/api/v1/search?q=report&limit=1&cursor="+url.QueryEscape(cursor), 200,
+	get(searchURL+"limit=1&cursor="+url.QueryEscape(cursor), 200,
 		&page, "/api/v1/search")
 	if page.Items[0].Observation.ID == first.Observation.ID {
 		t.Fatal("pagination repeated observation")
@@ -146,7 +156,7 @@ func TestSearchHTTPWorkflow(t *testing.T) {
 		t.Fatal("directory membership changed catalog-wide counts")
 	}
 	for _, query := range []string{
-		"", "q=", "q=a&q=b", "q=a&field=bad", "q=a&match=fuzzy",
+		"", "q=", "q=a&q=b", "q=a&field=bad", "q=a&match=bad",
 		"q=a&disk_id=0", "q=a&snapshot_id=-1", "q=a&directory=foo",
 		"q=a&scope=bad", "q=a&limit=201", "q=a&cursor=bad", "q=a&unknown=x",
 		"q=a&other_replicas=-1", "q=a&other_replicas=0&min_other_replicas=0",
@@ -192,7 +202,7 @@ func TestSearchHTTPWorkflow(t *testing.T) {
 	}
 	a = app.New(db)
 	server = httptest.NewServer(New(a))
-	get("/api/v1/search?q=report&limit=1&cursor="+url.QueryEscape(cursor), 200,
+	get(searchURL+"limit=1&cursor="+url.QueryEscape(cursor), 200,
 		&page, "/api/v1/search")
 	file := filepath.Join(t.TempDir(), "next.cshd")
 	if err := os.WriteFile(file, []byte(",sha256,"+fixtureSHA256AB+" newest/report.txt\n"), 0600); err != nil {
@@ -204,7 +214,7 @@ func TestSearchHTTPWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	var failure errorDTO
-	get("/api/v1/search?q=report&limit=1&cursor="+url.QueryEscape(cursor), 409, &failure, "")
+	get(searchURL+"limit=1&cursor="+url.QueryEscape(cursor), 409, &failure, "")
 	if failure.Error.Code != "stale_cursor" {
 		t.Fatalf("stale cursor: %+v", failure)
 	}

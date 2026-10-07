@@ -92,6 +92,48 @@ func TestSearchMatchingScopesAndReplicas(t *testing.T) {
 		current.Items[0].Content.CurrentLocationCount != 4 {
 		t.Fatalf("replicas: %+v", current.Items[0])
 	}
+	fuzzy := search(base.SearchFilters{Query: "REPROT", Match: "fuzzy"})
+	if len(fuzzy.Items) != 4 {
+		t.Fatalf("fuzzy current matches: %+v", fuzzy.Items)
+	}
+	for _, item := range fuzzy.Items {
+		if item.Relevance != "typo" || !item.IsCurrent {
+			t.Fatalf("fuzzy relevance/context: %+v", item)
+		}
+	}
+	for _, test := range []struct {
+		f    base.SearchFilters
+		want int
+	}{
+		{base.SearchFilters{Query: "REPORT", Match: "fuzzy"}, 6},
+		{base.SearchFilters{Query: "REPROT", Match: "fuzzy", ContentFilters: base.ContentFilters{
+			Scope: base.ScopeHistory}}, 8},
+		{base.SearchFilters{Query: "REPROT", Match: "fuzzy", ContentFilters: base.ContentFilters{
+			DiskID: disks[0], Directory: "foo"}}, 2},
+		{base.SearchFilters{Query: "REPROT", Match: "fuzzy", SnapshotID: old.Id}, 0},
+		{base.SearchFilters{Query: "REPROT", Match: "fuzzy", SnapshotID: old.Id,
+			ContentFilters: base.ContentFilters{Scope: base.ScopeHistory}}, 1},
+	} {
+		page := search(test.f)
+		if len(page.Items) != test.want {
+			t.Fatalf("fuzzy %+v: got %d want %d", test.f, len(page.Items), test.want)
+		}
+		if test.f.SnapshotID == old.Id && len(page.Items) > 0 &&
+			page.Items[0].Content.CurrentLocationCount != 0 {
+			t.Fatal("historical-only fuzzy match has current locations")
+		}
+	}
+	for _, metric := range []base.ReplicaMetric{base.ReplicaDisks, base.ReplicaLocations} {
+		bound := int64(2)
+		if metric == base.ReplicaLocations {
+			bound = 3
+		}
+		page := search(base.SearchFilters{Query: "REPROT", Match: "fuzzy",
+			ContentFilters: base.ContentFilters{ReplicaMetric: metric, OtherReplicas: &bound}})
+		if len(page.Items) != 3 {
+			t.Fatalf("fuzzy replica filter %s: %+v", metric, page.Items)
+		}
+	}
 	for _, scope := range []base.Scope{base.ScopeCurrent, base.ScopeHistory} {
 		request := SearchRequest{Filters: base.SearchFilters{Query: "report",
 			ContentFilters: base.ContentFilters{Scope: scope}}, Limit: 1}
@@ -176,6 +218,12 @@ func TestSearchMatchingScopesAndReplicas(t *testing.T) {
 }
 
 func TestSearchCursorDoesNotEmbedLongImportedPaths(t *testing.T) {
+	for _, match := range []string{"substring", "fuzzy"} {
+		t.Run(match, func(t *testing.T) { testSearchLongPaths(t, match) })
+	}
+}
+
+func testSearchLongPaths(t *testing.T, match string) {
 	db, err := database.Open(filepath.Join(t.TempDir(), "catalog.sqlite"))
 	if err != nil {
 		t.Fatal(err)
@@ -198,7 +246,7 @@ func TestSearchCursorDoesNotEmbedLongImportedPaths(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	req := SearchRequest{Filters: base.SearchFilters{Query: "report"}, Limit: 1}
+	req := SearchRequest{Filters: base.SearchFilters{Query: "report", Match: match}, Limit: 1}
 	first, err := a.Search(t.Context(), req)
 	if err != nil || first.Items[0].Observation.Path != longPath ||
 		len(first.NextCursor) > 16384 || first.NextCursor == "" {
@@ -212,6 +260,12 @@ func TestSearchCursorDoesNotEmbedLongImportedPaths(t *testing.T) {
 }
 
 func TestSearchPaginationRecoveryAndValidation(t *testing.T) {
+	for _, match := range []string{"substring", "fuzzy"} {
+		t.Run(match, func(t *testing.T) { testSearchRecovery(t, match) })
+	}
+}
+
+func testSearchRecovery(t *testing.T, match string) {
 	path := filepath.Join(t.TempDir(), "catalog.sqlite")
 	db, err := database.Open(path)
 	if err != nil {
@@ -234,7 +288,7 @@ func TestSearchPaginationRecoveryAndValidation(t *testing.T) {
 	if _, err := a.Import(t.Context(), reqImport); err != nil {
 		t.Fatal(err)
 	}
-	req := SearchRequest{Filters: base.SearchFilters{Query: "report"}, Limit: 1}
+	req := SearchRequest{Filters: base.SearchFilters{Query: "report", Match: match}, Limit: 1}
 	first, err := a.Search(t.Context(), req)
 	if err != nil || first.NextCursor == "" {
 		t.Fatalf("first: %+v %v", first, err)
@@ -251,7 +305,7 @@ func TestSearchPaginationRecoveryAndValidation(t *testing.T) {
 		t.Fatalf("third: %+v %v", third, err)
 	}
 	for _, f := range []base.SearchFilters{
-		{}, {Query: "x", Field: "invalid"}, {Query: "x", Match: "fuzzy"},
+		{}, {Query: "x", Field: "invalid"}, {Query: "x", Match: "invalid"},
 		{Query: "\xff"}, {Query: "x\x00"}, {Query: "x", SnapshotID: -1},
 		{Query: "x", ContentFilters: base.ContentFilters{Directory: "foo"}},
 		{Query: "x", ContentFilters: base.ContentFilters{DiskID: disk, Directory: "../foo"}},
