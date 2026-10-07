@@ -186,10 +186,19 @@ lookups have query-plan tests.
 
 After observation batches finish, the database builds this index in a separate transaction
 while the snapshot is still importing. Recursive SQL enumerates ancestors and groups content
-membership; Go streams directory rows and fingerprint entries rather than retaining whole
-inventories or manifests. Fingerprints are built bottom-up. Observation batches remain
+membership; directory identities are deduplicated before walking their parents, and immediate
+file parents are extracted directly instead of expanding their ancestors again. Size/count
+summaries use one snapshot-wide update. Go streams directory rows and fingerprint entries
+rather than retaining whole inventories or manifests. Fingerprints and maximum known mtimes
+are built bottom-up from immediate files and completed child directories. Mtimes are not part
+of the fingerprint encoding. Observation batches remain
 bounded at 5,000; the derived-index transaction can be larger and its database/journal cost
 must be distinguished from streaming Go memory. Membership storage grows with file depth.
+
+After observation batching, paired five-iteration import runs measured directory construction
+at 0.294 s before these build changes and 0.185 s afterward on the 10,000-file nested fixture.
+Total import time fell from 0.620 s to 0.515 s. The shallow 50,000-file fixture fell from
+1.643 s to 1.505 s. These changes do not alter the persisted schema or fingerprint version.
 
 Publication requires a successful directory-build marker, a root, completed fingerprints,
 and indexed file membership. Observation changes and staged-size mutations (including deletion

@@ -3,11 +3,30 @@ package database
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
+	"database/sql/driver"
 	"encoding/binary"
 	"fmt"
 	"hash"
 	"strings"
+	"unicode/utf8"
+
+	"modernc.org/sqlite"
 )
+
+func init() {
+	sqlite.MustRegisterDeterministicScalarFunction("coldcat_dirname", 1,
+		func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
+			path, ok := args[0].(string)
+			if !ok || !utf8.ValidString(path) {
+				return nil, fmt.Errorf("invalid UTF-8 directory path")
+			}
+			if at := strings.LastIndexByte(path, '/'); at >= 0 {
+				return path[:at], nil
+			}
+			return "", nil
+		})
+}
 
 const directorySchema = `
 CREATE TABLE directory (
@@ -87,16 +106,6 @@ const directoryAncestors = `WITH RECURSIVE ancestors(observation_id,content_id,p
  substr(rest,instr(rest,'/')+1) FROM ancestors WHERE instr(rest,'/')>0
 ) `
 
-func directoryParent(path string) any {
-	if path == "" {
-		return nil
-	}
-	if at := strings.LastIndexByte(path, '/'); at >= 0 {
-		return path[:at]
-	}
-	return ""
-}
-
 func (db *DB) BuildDirectories(ctx context.Context, snapshotID int64) error {
 	return db.TransactionContext(ctx, func(tx *Tx) error {
 		var state string
@@ -108,30 +117,13 @@ func (db *DB) BuildDirectories(ctx context.Context, snapshotID int64) error {
 			return fmt.Errorf("%w: directory build requires importing snapshot", ErrConflict)
 		}
 
-		if _, err := tx.ExecContext(ctx, `INSERT INTO directory(snapshot_id,path,parent_path)
- VALUES(?,'',NULL)`, snapshotID); err != nil {
-			return err
-		}
-		rows, err := tx.QueryContext(ctx, directoryAncestors+`SELECT DISTINCT path
- FROM ancestors WHERE path!=''`, snapshotID)
-		if err != nil {
-			return err
-		}
-		for rows.Next() {
-			var path string
-			if err := rows.Scan(&path); err != nil {
-				rows.Close()
-				return err
-			}
-			if _, err := tx.ExecContext(ctx, `INSERT INTO directory(snapshot_id,path,parent_path)
- VALUES(?,?,?)`, snapshotID, path, directoryParent(path)); err != nil {
-				rows.Close()
-				return err
-			}
-		}
-		err = rows.Err()
-		rows.Close()
-		if err != nil {
+		if _, err := tx.ExecContext(ctx, `WITH RECURSIVE ancestors(path) AS (
+ VALUES('')
+ UNION SELECT coldcat_dirname(path) FROM observation WHERE snapshot_id=?
+ UNION SELECT coldcat_dirname(path) FROM ancestors WHERE path!=''
+ ) INSERT INTO directory(snapshot_id,path,parent_path)
+ SELECT ?,path,CASE WHEN path='' THEN NULL ELSE coldcat_dirname(path) END FROM ancestors`,
+			snapshotID, snapshotID); err != nil {
 			return err
 		}
 
@@ -140,13 +132,17 @@ func (db *DB) BuildDirectories(ctx context.Context, snapshotID int64) error {
 			snapshotID, snapshotID); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx, directoryAncestors+`INSERT INTO directory_file
- SELECT observation_id,?,path,CASE WHEN path='' THEN rest ELSE path||'/'||rest END
- FROM ancestors WHERE instr(rest,'/')=0`, snapshotID, snapshotID); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO directory_file
+ SELECT id,?,coldcat_dirname(path),path FROM observation WHERE snapshot_id=?`,
+			snapshotID, snapshotID); err != nil {
 			return err
 		}
 
-		rows, err = tx.QueryContext(ctx, `SELECT path FROM directory WHERE snapshot_id=?
+		if err := buildDirectorySummaries(ctx, tx, snapshotID); err != nil {
+			return err
+		}
+
+		rows, err := tx.QueryContext(ctx, `SELECT path FROM directory WHERE snapshot_id=?
  ORDER BY length(path) DESC,path`, snapshotID)
 		if err != nil {
 			return err
@@ -156,9 +152,6 @@ func (db *DB) BuildDirectories(ctx context.Context, snapshotID int64) error {
 			var path string
 			if err := rows.Scan(&path); err != nil {
 				return err
-			}
-			if err := buildDirectorySummary(ctx, tx, snapshotID, path); err != nil {
-				return fmt.Errorf("directory %q: %w", path, err)
 			}
 			if err := buildDirectoryFingerprint(ctx, tx, snapshotID, path); err != nil {
 				return err
@@ -173,8 +166,8 @@ func (db *DB) BuildDirectories(ctx context.Context, snapshotID int64) error {
 	})
 }
 
-func buildDirectorySummary(ctx context.Context, tx *Tx, snapshotID int64, path string) error {
-	_, err := tx.ExecContext(ctx, `UPDATE directory SET
+func buildDirectorySummaries(ctx context.Context, tx *Tx, snapshotID int64) error {
+	_, err := tx.ExecContext(ctx, `UPDATE directory AS d SET
  (file_count,content_count,known_bytes,unknown_size_file_count,
  unique_content_known_bytes,unknown_size_content_count)=(
  SELECT COALESCE(SUM(occurrences),0),COUNT(*),COALESCE(SUM(size*occurrences),0),
@@ -182,12 +175,9 @@ func buildDirectorySummary(ctx context.Context, tx *Tx, snapshotID int64, path s
  COALESCE(SUM(size),0),COUNT(*) FILTER(WHERE size IS NULL) FROM (
  SELECT dc.occurrences,COALESCE(c.size,p.size) AS size FROM directory_content dc
  JOIN content c ON c.id=dc.content_id
- LEFT JOIN pending_size p ON p.content_id=c.id AND p.snapshot_id=?
- WHERE dc.snapshot_id=? AND dc.directory_path=?)),
- max_known_mtime=(SELECT MAX(mtime) FROM observation
- WHERE snapshot_id=? AND path>=? AND path<?)
- WHERE snapshot_id=? AND path=?`, snapshotID, snapshotID, path,
-		snapshotID, directoryPrefix(path), directoryUpper(path), snapshotID, path)
+ LEFT JOIN pending_size p ON p.content_id=c.id AND p.snapshot_id=d.snapshot_id
+ WHERE dc.snapshot_id=d.snapshot_id AND dc.directory_path=d.path))
+ WHERE d.snapshot_id=?`, snapshotID)
 	return err
 }
 
@@ -215,11 +205,11 @@ func fingerprintField(h hash.Hash, data []byte) {
 }
 
 func buildDirectoryFingerprint(ctx context.Context, tx *Tx, snapshotID int64, path string) error {
-	rows, err := tx.QueryContext(ctx, `SELECT path,kind,algorithm,digest FROM (
- SELECT f.path,'file' AS kind,c.hash_type AS algorithm,c.hash AS digest
+	rows, err := tx.QueryContext(ctx, `SELECT path,kind,algorithm,digest,mtime FROM (
+  SELECT f.path,'file' AS kind,c.hash_type AS algorithm,c.hash AS digest,o.mtime AS mtime
  FROM directory_file f JOIN observation o ON o.id=f.observation_id
  JOIN content c ON c.id=o.content_id WHERE f.snapshot_id=? AND f.directory_path=?
- UNION ALL SELECT path,'directory','directory-v1',fingerprint FROM directory
+  UNION ALL SELECT path,'directory','directory-v1',fingerprint,max_known_mtime FROM directory
  WHERE snapshot_id=? AND parent_path=?) ORDER BY path,kind`,
 		snapshotID, path, snapshotID, path)
 	if err != nil {
@@ -228,14 +218,19 @@ func buildDirectoryFingerprint(ctx context.Context, tx *Tx, snapshotID int64, pa
 	defer rows.Close()
 	h := sha256.New()
 	fingerprintField(h, []byte("coldcat-directory-v1"))
+	var maxMTime sql.NullString
 	for rows.Next() {
 		var entryPath, kind, algorithm string
 		var digest []byte
-		if err := rows.Scan(&entryPath, &kind, &algorithm, &digest); err != nil {
+		var mtime sql.NullString
+		if err := rows.Scan(&entryPath, &kind, &algorithm, &digest, &mtime); err != nil {
 			return err
 		}
 		if digest == nil {
 			return fmt.Errorf("directory %q has unfinished child fingerprint", path)
+		}
+		if mtime.Valid && (!maxMTime.Valid || mtime.String > maxMTime.String) {
+			maxMTime = mtime
 		}
 		for _, data := range [][]byte{
 			[]byte(kind), []byte(strings.TrimPrefix(entryPath, directoryPrefix(path))),
@@ -248,8 +243,9 @@ func buildDirectoryFingerprint(ctx context.Context, tx *Tx, snapshotID int64, pa
 		return err
 	}
 
-	_, err = tx.ExecContext(ctx, `UPDATE directory SET fingerprint_version=1,fingerprint=?
- WHERE snapshot_id=? AND path=?`, h.Sum(nil), snapshotID, path)
+	_, err = tx.ExecContext(ctx, `UPDATE directory
+ SET fingerprint_version=1,fingerprint=?,max_known_mtime=?
+  WHERE snapshot_id=? AND path=?`, h.Sum(nil), maxMTime, snapshotID, path)
 	return err
 }
 
