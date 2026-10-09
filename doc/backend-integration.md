@@ -125,9 +125,25 @@ Existing specialized acceptance tests retain the semantic and pagination coverag
 | Directory browsing, comparisons and coverage | `TestDirectoryHTTPWorkflowAndPagination`, `TestDirectoryComparisonHTTPContract` |
 | Cursor binding, restart/import/recovery behavior | `TestDirectoryCursorRequestBinding`, `TestHTTPPaginationAfterRestartAndImports`, `TestHTTPIncompleteVisibilityRecoveryAndCancellation`, `TestDuplicateImportPreservesCursorAcrossReopen` |
 
-The final gate remains **open**. Observation/distinct-path limits and latency/storage/import/
-recovery budgets need approval. Filesystem-cold and history-heavy measurements remain open;
-warm serial means are not p95. Broad search, replica-filter no-match and large filtered
-directory comparisons have documented slow cases. This handoff audit neither removes nor
-accepts those limits; follow the active acceptance sequence in
-[coldcat-backend-api.md](coldcat-backend-api.md) before frontend work.
+The contract/integration handoff slice is **complete**, but the final backend gate remains
+**open**. Completed warm evidence includes the three-disk
+[current HTTP workflow](backend-foundation.md#warm-http-workflow-measurement-harness),
+[five-snapshot HTTP workflow](backend-foundation.md#warm-history-heavy-http-workflow-harness),
+and bounded five-disk [history comparisons](backend-foundation.md#history-heavy-directory-comparisons).
+The balanced 3/12-disk, one/five-snapshot
+[distribution harness](../internal/httpapi/distribution_workflow_benchmark_test.go) and its
+small-fixture correctness audit are committed; the 50,000-current-observation matrix was
+measured, while larger-scale measurements remain open. Consult the canonical results and
+remaining acceptance work in [backend-foundation.md](backend-foundation.md) and the
+[active acceptance sequence](coldcat-backend-api.md#active-acceptance-sequence), rather than
+treating every history-heavy measurement as unfinished. Warm serial means are not p95.
+
+Remaining gates include filesystem-cold acceptance evidence, broader importer and disk/history
+distributions, larger history comparisons, true peak RSS/journal storage, and explicit approval
+of observation/distinct-path limits and latency/storage/import/recovery budgets. Sampled heap
+and journal growth and transaction API durations do not establish those peak bounds. Broad
+search, replica-filter no-match and large filtered directory comparisons have documented slow
+cases that must be improved or explicitly accepted; this audit does neither. Rerun required
+`go test ./...`, `go test -race ./...`, and `go vet ./...` after implementation changes and
+record their results before closing the gate. In-progress cold, RSS and optimization work is
+not accepted by this handoff; follow the active acceptance sequence before frontend work.
