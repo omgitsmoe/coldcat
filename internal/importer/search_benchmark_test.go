@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -48,9 +49,14 @@ func startImportHeapSampler() func() importHeapSample {
 			}
 		}
 	}()
+	var once sync.Once
+	var result importHeapSample
 	return func() importHeapSample {
-		close(stop)
-		return <-done
+		once.Do(func() {
+			close(stop)
+			result = <-done
+		})
+		return result
 	}
 }
 
@@ -199,6 +205,9 @@ func TestImportHeapSampler(t *testing.T) {
 	if result.samples < 2 || result.peak == 0 {
 		t.Fatalf("missing initial/final samples: %+v", result)
 	}
+	if again := stop(); again != result {
+		t.Fatalf("repeated stop: %+v, want %+v", again, result)
+	}
 }
 
 func BenchmarkSearchIndexedImport(b *testing.B) {
@@ -210,6 +219,8 @@ func BenchmarkSearchIndexedImport(b *testing.B) {
 				var elapsed, ingestion, directories, publishing time.Duration
 				var peak uint64
 				var samples, catalogBytes int64
+				var journalPeak, walPeak, shmPeak int64
+				var journalSamples int64
 				for b.Loop() {
 					b.StopTimer()
 					path := filepath.Join(b.TempDir(), "catalog.sqlite")
@@ -224,6 +235,9 @@ func BenchmarkSearchIndexedImport(b *testing.B) {
 					}
 					var directoriesAt, publishingAt time.Time
 					stopSampler := startImportHeapSampler()
+					b.Cleanup(func() { stopSampler() })
+					stopJournalSampler := startImportJournalSampler(path)
+					b.Cleanup(func() { stopJournalSampler() })
 					b.StartTimer()
 					started := time.Now()
 					result, importErr := Import(b.Context(), db, Request{
@@ -241,6 +255,14 @@ func BenchmarkSearchIndexedImport(b *testing.B) {
 					finished := time.Now()
 					b.StopTimer()
 					memory := stopSampler()
+					journal := stopJournalSampler()
+					if journal.err != nil {
+						b.Fatal(journal.err)
+					}
+					journalPeak = max(journalPeak, journal.journal)
+					walPeak = max(walPeak, journal.wal)
+					shmPeak = max(shmPeak, journal.shm)
+					journalSamples += int64(journal.samples)
 					peak = max(peak, memory.peak)
 					samples += int64(memory.samples)
 					elapsed += finished.Sub(started)
@@ -268,6 +290,10 @@ func BenchmarkSearchIndexedImport(b *testing.B) {
 				b.ReportMetric(float64(peak), "sampled-heap-bytes")
 				b.ReportMetric(float64(samples)/float64(b.N), "heap-samples/op")
 				b.ReportMetric(float64(catalogBytes)/float64(b.N), "catalog-bytes/op")
+				b.ReportMetric(float64(journalPeak), "sampled-journal-bytes")
+				b.ReportMetric(float64(walPeak), "sampled-wal-bytes")
+				b.ReportMetric(float64(shmPeak), "sampled-shm-bytes")
+				b.ReportMetric(float64(journalSamples)/float64(b.N), "journal-samples/op")
 				if !fail {
 					b.ReportMetric(ingestion.Seconds()/float64(b.N), "ingestion-s/op")
 					b.ReportMetric(directories.Seconds()/float64(b.N), "directories-s/op")

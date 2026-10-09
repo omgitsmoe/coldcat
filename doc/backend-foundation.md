@@ -1124,8 +1124,52 @@ cases preserve an empty accessible catalog despite the large remaining file.
 The approximately 6.3 MB sampled heap at the larger scale is encouraging for this
 fixture but neither proves bounded peak memory nor predicts arbitrary inventories.
 
-These measurements do not close transaction/journal growth, peak RSS, representative
+These heap measurements do not close transaction/journal growth, peak RSS, representative
 multi-disk/history-heavy imports, filesystem-cold workloads, or acceptance budgets.
+
+### Sampled import journal growth
+
+The same `BenchmarkSearchIndexedImport` cases now sample the catalog's `-journal`,
+`-wal`, and `-shm` sidecars every 10 ms, with initial/final samples. Sampling starts
+after catalog initialization and disk creation and stops after `Import` returns,
+including deferred cleanup on failure. It excludes post-import integrity checks and
+catalog close. Production batch sizes, journal mode, and transaction boundaries are
+unchanged; all instrumentation is test-only.
+
+Metrics report the maximum sampled apparent file size (`os.Stat().Size()`) of each
+sidecar across benchmark iterations, not allocated disk blocks, cumulative write
+traffic, or a combined simultaneous disk-space peak. Missing sidecars are normal
+and contribute zero for that sample; other stat errors fail the benchmark. Polling
+can miss short-lived journals or brief peaks, so these are sampled maxima, not proven
+peak storage bounds. No journal size is attributed to a specific transaction or
+phase. The `journal-samples/op` metric counts sampling rounds over the three paths.
+Both samplers stop and join on benchmark cleanup as well as normal completion.
+
+Reproduce with the commands in the preceding section. The following runs used
+Linux amd64, Go 1.27.1, AMD Ryzen 5 9600X, benchmark parallelism 4, and one iteration
+per case on 2026-10-09. The two scales ran serially without concurrent project checks.
+The fixture and correctness assertions are unchanged.
+
+| Files / outcome | Total seconds | Sampled journal bytes | Journal samples | Sampled WAL bytes | Sampled SHM bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 50,000 / success | 1.335 | 6,458,248 | 135 | 0 | 0 |
+| 50,000 / late failure + cleanup | 1.221 | 25,641,288 | 124 | 0 | 0 |
+| 1,000,000 / success | 32.71 | 134,397,136 | 3,273 | 0 | 0 |
+| 1,000,000 / late failure + cleanup | 31.54 | 534,899,248 | 3,156 | 0 | 0 |
+
+Sampled heap maxima were 4,491,504 / 5,376,016 bytes for small success/failure cases
+and 6,148,296 / 6,408,216 bytes for large cases. Final catalog sizes were unchanged
+from the earlier measurements: 42,717,184 / 32,681,984 bytes at 50,000 files and
+878,825,472 / 672,092,160 bytes at one million. Failed-import cleanup leaves reusable
+SQLite pages; those catalog sizes are not surviving live-data sizes.
+
+Total durations are close to the earlier heap-only samples (1.364 / 1.242 and
+33.62 / 31.70 seconds), but separate runs with different contention do not isolate
+sampler overhead. Sampling adds work to the operation, and these one-iteration
+results are not latency p95 or an acceptance decision. Zero WAL/SHM maxima mean no
+nonzero sizes were observed, not that polling proves those files never existed.
+Exact transaction durations, true peak journal storage, peak RSS, broader import
+distributions, filesystem-cold workloads, and approved budgets remain open.
 
 ## Verification and follow-on work
 

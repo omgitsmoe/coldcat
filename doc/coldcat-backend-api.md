@@ -146,7 +146,7 @@ Use the existing application layer as the shared backend:
 - [x] Configure and test per-connection SQLite foreign keys. Acquire Windows/Unix exclusive catalog ownership before opening/migration/recovery and hold it for the session; reject competing sessions and simultaneous in-session imports/catalog queries.
 - [x] Exercise server/import overlap through the server's shared initialization path, including competing server/import child-process nonzero exits. SQLite write locking alone does not enforce this contract because reads may still be allowed.
 - [x] Keep bounded batch commits initially.
-- [ ] Measure transaction duration and journal growth before changing to a single import-wide transaction; WAL is not a requirement for concurrent import/read access in this scope.
+- [ ] **Partial:** sampled journal growth measured for full-index successful imports and late-failure cleanup at 50,000/1,000,000 files; exact transaction durations and true peak journal storage remain open. Do not change to a single import-wide transaction on these samples alone; WAL is not a requirement for concurrent import/read access in this scope.
 
 ## 4. CLI surface
 
@@ -323,8 +323,15 @@ extractors, thumbnails, and Wails remain deferred.
    for failure plus cleanup, with maximum sampled Go heap of 6.23/6.32 MB and final
    catalog files of 878.8/672.1 MB (cleanup leaves reusable SQLite pages).
    Sampled Go heap is not RSS or a proven memory bound; phase timing is not transaction
-   timing. Journal growth, exact transaction durations, and broader import distributions
-   remain open. Results and reproduction commands are in `backend-foundation.md`.
+   timing. Exact transaction durations and broader import distributions remain open.
+   **Sampled journal growth measured:** the same success/late-failure cases now poll
+   rollback-journal, WAL and SHM apparent file sizes every 10 ms through import return,
+   including failure cleanup. Serial one-iteration million-file runs observed maximum
+   rollback-journal sizes of 134.4/534.9 MB, with no nonzero WAL/SHM samples; total
+   durations were 32.71/31.54 seconds. Polling can miss brief peaks, file sizes are not
+   allocated storage or cumulative writes, and these runs do not isolate instrumentation
+   overhead or approve a transaction-policy change. True peak journal storage remains
+   open. Results and reproduction commands are in `backend-foundation.md`.
    **Standalone full-index recovery measured:**
    `BenchmarkFullIndexRecovery` covers 50,000/1,000,000 abandoned observations before
    and after directory construction, with completed-data preservation and index-integrity
