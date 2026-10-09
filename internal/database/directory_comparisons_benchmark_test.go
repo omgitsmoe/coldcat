@@ -131,7 +131,28 @@ func checkComparisonReplicas(
 	t testing.TB, page base.DirectoryReplicaPage, count, contents int, name string,
 ) {
 	t.Helper()
+	checkComparisonReplicasAt(t, page, count, contents, name, 0, false)
+}
+
+func checkComparisonReplicasAt(
+	t testing.TB, page base.DirectoryReplicaPage, count, contents int, name string,
+	offset int, historical bool,
+) {
+	t.Helper()
 	checkComparisonSelection(t, page.Selection, count, contents, name)
+	if historical && name != "empty" {
+		if len(page.Items) == 0 {
+			t.Fatal("missing current same-disk replica of historical source")
+		}
+		item := page.Items[0]
+		if item.Disk.Id != 1 || item.Snapshot.Id != base.SnapshotId(offset+1) ||
+			item.Path != "tree" || !item.SameDisk || !item.WholeTreeEqual ||
+			item.RetainedFileCount != page.Selection.RetainedFileCount ||
+			item.ExcludedFileCount != page.Selection.ExcludedFileCount {
+			t.Fatalf("unexpected same-disk replica: %+v", item)
+		}
+		page.Items = page.Items[1:]
+	}
 	want := 2
 	if name == "unfiltered" {
 		want = 1
@@ -148,7 +169,7 @@ func checkComparisonReplicas(
 			path = "filtered"
 			excluded++
 		}
-		if item.Disk.Id != base.DiskId(i+2) || item.Snapshot.Id != base.SnapshotId(i+2) ||
+		if item.Disk.Id != base.DiskId(i+2) || item.Snapshot.Id != base.SnapshotId(offset+i+2) ||
 			item.Path != path || item.SameDisk || item.WholeTreeEqual != (i == 0) ||
 			item.RetainedFileCount != page.Selection.RetainedFileCount ||
 			item.ExcludedFileCount != excluded {
@@ -159,6 +180,13 @@ func checkComparisonReplicas(
 
 func checkComparisonCoverage(
 	t testing.TB, page base.DirectoryCoveragePage, count, contents int, name string,
+) {
+	t.Helper()
+	checkComparisonCoverageAt(t, page, count, contents, name, 0)
+}
+
+func checkComparisonCoverageAt(
+	t testing.TB, page base.DirectoryCoveragePage, count, contents int, name string, offset int,
 ) {
 	t.Helper()
 	checkComparisonSelection(t, page.Selection, count, contents, name)
@@ -177,7 +205,7 @@ func checkComparisonCoverage(
 			files, distinct = files*4/5, distinct*4/5
 		}
 		missing := page.Selection.RetainedFileCount - files
-		if item.Disk.Id != base.DiskId(i+2) || item.Snapshot.Id != base.SnapshotId(i+2) ||
+		if item.Disk.Id != base.DiskId(i+2) || item.Snapshot.Id != base.SnapshotId(offset+i+2) ||
 			item.CoveredFileCount != files || item.MissingFileCount != missing ||
 			item.CoveredContentCount != distinct ||
 			item.MissingContentCount != page.Selection.ContentCount-distinct ||

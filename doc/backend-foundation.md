@@ -334,7 +334,8 @@ The initial 50,000-file warm comparison measurement on the same Linux/Ryzen syst
 547 ms for an unfiltered verified replica and 401 ms for coverage across one other disk.
 These costs include source selection and complete manifest/content verification; no interactive
 latency budget has yet been agreed. The five-disk filtered comparison measurements below
-extend this baseline; broader distributions and history-heavy comparisons remain pending.
+extend this baseline; the bounded history-heavy comparison measurements follow them.
+Broader distributions remain pending.
 
 #### Five-disk filtered comparisons
 
@@ -387,7 +388,7 @@ Filtered replica queries cannot eliminate candidates using the unfiltered finger
 this fixture exercises that cost and verifies both the exact and filtered-only copies.
 Coverage retains repeated-file multiplicity while probing destination content membership.
 Even an empty selection scans the source to apply filters. Slow cases remain visible;
-larger candidate-directory counts, history-heavy workloads, cold measurements, and agreed
+larger candidate-directory counts, broader history-heavy workloads, cold measurements, and agreed
 latency limits are still required before closing performance acceptance.
 The million-source-file command took 2,600.6 seconds overall, including fixture creation
 and untimed warm-up queries. Its filtered replica calls took roughly 7.7 minutes each,
@@ -395,6 +396,73 @@ with about 5.4 GB cumulatively allocated per call. Even unfiltered and empty com
 are slow at this scale. The increase is much larger than the 20-fold increase in source
 files; these single-iteration results do not establish why. Profiling and explicitly
 approved limitations or improvements are needed before treating this scale as interactive.
+
+#### History-heavy directory comparisons
+
+`BenchmarkDirectoryHistoryComparisons` reuses the five-disk roles above, with
+50,000 source files and 10,000 distinct source contents per snapshot. It retains
+one or five complete snapshots per disk, captured on successive days. Each generation
+has unchanged paths/content membership to isolate retained-history costs while keeping
+the current inventory fixed. The catalogs contain 160,001 current observations and
+160,001/800,005 total historical observations, respectively, across 5/25 snapshots.
+The single-snapshot current and oldest source cases intentionally query the same source.
+
+Both source choices compare against current destination inventories only. With five
+generations, the oldest source additionally matches the current source disk's `tree`
+as a same-disk replica; coverage still excludes that disk. Thus historical-source
+replica calls have one more verified match than current-source calls, and should not
+be interpreted as a pure history-overhead comparison between source choices.
+
+`TestDirectoryHistoryComparisonBenchmarkFixture` checks the shared fixture at 100
+source files, independently verifies observation/snapshot counts and latest snapshot
+IDs, and checks replica identities, selection totals and per-disk coverage for all
+four existing selections. `TestDirectoryHistoryComparisonOldOnlyDestination` adds
+two older complete inventories imported later, containing a source and matching tree
+absent from every current disk. Both unfiltered and blocked-log queries must return
+no replicas and zero coverage, proving that retained destination history is not counted.
+
+```sh
+go test ./internal/database -run '^$' \
+  -bench '^BenchmarkDirectoryHistoryComparisons/50000/' \
+  -benchtime=3x -benchmem -v -timeout=30m
+```
+
+Fixture creation, directory construction, closure, one validation/warm-up call per
+case, and per-iteration result assertions are untimed. Timed calls include database
+query/result assembly. Search triggers remain disabled, so this is a directory-only
+fixture, not production import-throughput or end-to-end HTTP evidence. Allocation
+metrics are cumulative Go allocations per query, not retained heap or RSS.
+
+Measured on Linux amd64 / AMD Ryzen 5 9600X, Go 1.27.1, benchmark GOMAXPROCS=4,
+with three iterations per case. Full test/vet checks briefly overlapped the start
+of the run; the final focused race check ran afterward. The complete command took
+70.46 seconds, including untimed fixture creation and warm-up.
+
+| Snapshots per disk | Source | Selection | Replicas | Coverage | Replicas B/op | Coverage B/op |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| 1 | Current | Unfiltered | 574.50 ms | 424.16 ms | 81,575,581 | 42,567,541 |
+| 1 | Current | Block logs | 2056.37 ms | 370.90 ms | 279,194,245 | 37,491,429 |
+| 1 | Oldest | Unfiltered | 597.82 ms | 417.52 ms | 81,577,864 | 42,566,976 |
+| 1 | Oldest | Block logs | 2038.04 ms | 366.22 ms | 279,198,725 | 37,491,098 |
+| 5 | Current | Unfiltered | 575.61 ms | 429.46 ms | 81,575,874 | 42,566,970 |
+| 5 | Current | Block logs | 2003.22 ms | 371.59 ms | 279,197,333 | 37,491,477 |
+| 5 | Oldest | Unfiltered | 998.66 ms | 427.66 ms | 143,357,826 | 42,567,141 |
+| 5 | Oldest | Block logs | 2458.97 ms | 380.95 ms | 340,463,957 | 37,493,338 |
+
+At this bounded scale, current-source means remain similar with five times the
+retained observations; this is not proof that history overhead is negligible at
+other distributions. Historical-source replica calls are more expensive and allocate
+more because they also verify the current same-disk tree. Blocked-log replicas still
+take about 2.0–2.46 seconds, so slow cases remain explicit. These warm serial means
+are not filesystem-cold latency, p95, statistical significance or approved budgets.
+Larger candidate-directory counts, changed/deleted-content history distributions,
+million-source-file history measurements and the final backend gate remain open.
+
+`go test ./...`, `go vet ./...`, and the final focused
+`go test -race -p 1 ./internal/database -run '^TestDirectory(History)?Comparison' -timeout=30m`
+passed after the harness changes. Production behavior and schema are unchanged.
+
+#### Initial directory build and browsing measurements
 
 On Linux amd64 / Ryzen 5 9600X, the warm single-iteration measurements were:
 
@@ -690,7 +758,8 @@ These are warm serial means, not p95, filesystem-cold results, concurrent-load
 measurements, or an acceptance decision. Comparing equal total-observation scales
 against `BenchmarkHTTPWorkflow` does not isolate history overhead: this fixture has
 one fifth as many current observations and substantially fewer distinct paths.
-History-heavy directory comparisons, other disk/history distributions, cold measurements,
+The bounded history-heavy directory comparisons are described above; other disk/history
+distributions, cold measurements,
 approved budgets, transaction/journal measurements, and the final backend gate remain open.
 
 ## Filename and path search

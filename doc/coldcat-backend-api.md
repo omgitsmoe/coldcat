@@ -274,7 +274,7 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 - [x] Test application/import cancellation propagation and actionable catalog-lock errors; verify database-session recovery on reopen after seeded interruption or cleanup failure.
 - [x] Test HTTP pagination across unchanged reopen/restart and successful offline imports; failed imports preserve cursors, and server startup recovers seeded interrupted state before readiness. Child-process interrupted imports additionally verify application pagination after recovery and invalidation after subsequent publication.
 - [x] Run `go test ./...`, `go test -race ./...`, and `go vet ./...` with the configured Go 1.27.1 toolchain; all passed for the completed foundation. Packages/tests also cross-compiled for Windows amd64 and macOS arm64; runtime tests ran on Linux.
-- [ ] **Partial:** focused content, exact/substring search, directory queries/build/recovery/comparisons, initial fuzzy spike, and search-indexed import benchmarks have run. Initial exact-replica and coverage measurements use 50,000 files. A five-disk fixture now measures filtered replicas and coverage with exact/filtered-only copies and complementary partial-content disks; results and scale definitions are in `backend-foundation.md`. Broader distributions, history-heavy comparisons, and cold measurements remain. No `justfile` currently exists; adopt its commands if one is introduced.
+- [ ] **Partial:** focused content, exact/substring search, directory queries/build/recovery/comparisons, initial fuzzy spike, and search-indexed import benchmarks have run. Initial exact-replica and coverage measurements use 50,000 files. A five-disk fixture now measures filtered replicas and coverage with exact/filtered-only copies and complementary partial-content disks; bounded history-heavy comparisons also cover one/five snapshots per disk at 50,000 source files. Results and scale definitions are in `backend-foundation.md`. Broader distributions, larger history-heavy comparisons, and cold measurements remain. No `justfile` currently exists; adopt its commands if one is introduced.
 - [x] Document schema initialization, pre-0.1 reset policy, import publication/cleanup/recovery, locking, and query semantics in `doc/backend-foundation.md`.
 - [ ] Final backend gate: the principal workflow and every planned endpoint are exercised by contract tests; measured search behavior is acceptable; OpenAPI examples are usable by a future frontend.
 
@@ -355,8 +355,19 @@ extractors, thumbnails, and Wails remain deferred.
    406/634 ms for history broad first/second pages, and 2469 ms for current replica-filter
    no-match. These are warm serial measurements, not cold performance, p95 or budget
    approval; equal total-observation scales do not mean equal current result-set sizes.
-   History-heavy directory comparisons and broader disk/history distributions remain
-   open alongside the other acceptance gaps. See `backend-foundation.md`.
+   **Bounded history-heavy directory comparisons measured:**
+   `BenchmarkDirectoryHistoryComparisons` holds 160,001 current observations fixed
+   across five disks, retaining one/five snapshots per disk (160,001/800,005 total
+   historical observations). Sixteen cases measure current/oldest source inventories,
+   unfiltered/blocked-log selection and replicas/coverage. Shared small fixtures verify
+   current-only destination selection, historical-only copies/content exclusion and
+   the current same-disk replica of an older source. Three-iteration five-snapshot
+   means are 576/999 ms for current/oldest unfiltered replicas, 2003/2459 ms for
+   blocked-log replicas, and 372–429 ms for coverage. Fixture construction, warm-up
+   and assertions are untimed; search indexing is excluded. These are warm serial
+   means, not cold results, p95 or acceptance approval. Broader disk/history
+   distributions, larger history-heavy comparisons and the other acceptance gaps
+   remain open. See `backend-foundation.md`.
 5. **Close handoff:** audit endpoint/primary-workflow contract coverage and OpenAPI examples,
    document integration setup (including same-origin serving or explicit development CORS),
    and rerun required correctness checks after any implementation changes. Record unresolved
