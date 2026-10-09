@@ -102,13 +102,25 @@ type comparisonRecord struct {
 	size      sql.NullInt64
 }
 
+func comparisonRecordQuery(root, after string) (string, string) {
+	lower, operator := directoryPrefix(root), ">="
+	if after >= lower {
+		lower, operator = after, ">"
+	}
+
+	// Separate lower bounds let SQLite seek to the prefix and rescan earlier pages.
+	query := `SELECT o.path,o.content_id,c.hash_type,c.hash,c.size
+ FROM observation o JOIN content c ON c.id=o.content_id
+ WHERE o.snapshot_id=? AND o.path` + operator + `? AND o.path<?
+ ORDER BY o.path LIMIT ?`
+	return query, lower
+}
+
 func comparisonRecords(
 	ctx context.Context, tx *Tx, snapshotID base.SnapshotId, root, after string, limit int,
 ) ([]comparisonRecord, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT o.path,o.content_id,c.hash_type,c.hash,c.size
- FROM observation o JOIN content c ON c.id=o.content_id
- WHERE o.snapshot_id=? AND o.path>=? AND o.path<? AND o.path>?
- ORDER BY o.path LIMIT ?`, snapshotID, directoryPrefix(root), directoryUpper(root), after, limit)
+	query, lower := comparisonRecordQuery(root, after)
+	rows, err := tx.QueryContext(ctx, query, snapshotID, lower, directoryUpper(root), limit)
 	if err != nil {
 		return nil, err
 	}
