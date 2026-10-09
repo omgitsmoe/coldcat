@@ -592,7 +592,106 @@ These are warm serial means, not p95, filesystem-cold results, concurrent-load
 measurements, or an acceptance decision. Allocation counts cover both the HTTP
 client and server in the same process, not server-only memory or RSS. No cache
 eviction or catalog reopening is used to imply filesystem-cold behavior. Approved
-budgets, history-heavy workloads, and the final backend handoff gate remain open.
+budgets, broader history-heavy workloads, and the final backend handoff gate remain open.
+
+### Warm history-heavy HTTP workflow harness
+
+`BenchmarkHTTPHistoryWorkflow` in `internal/httpapi/history_workflow_benchmark_test.go`
+extends the warm HTTP measurements with five retained complete snapshots per disk
+across three disks. Its scale is **total historical observations**, not current
+observations or distinct paths. Each generation contributes one fifth of the total;
+the latest generation alone supplies current catalog totals.
+
+| Fixture | Historical observations | Current observations | Distinct paths | Historical distinct contents |
+| --- | ---: | ---: | ---: | ---: |
+| Correctness test | 520 | 104 | 105 | 178 |
+| Small benchmark | 50,000 | 10,000 | 10,001 | 17,994 |
+| Large benchmark | 1,000,000 | 200,000 | 200,001 | 359,994 |
+
+Capture times increase by one second per generation. As in the current-only fixture,
+disk 0 holds all background files and two target copies; each other disk holds one
+target copy. Every generation has four target observations, so the target has four
+current locations on three disks and 20 historical observations. Historical scoped
+location counts also remain four because the same disk/path pairs recur.
+
+For M current observations, disk 0 has M-4 background files. Background index i
+normally uses `archive/report-XXXXXXX.txt` and hash identity i+1. Every fifth index
+(i divisible by five) changes identity by adding generation*M, while other identities
+remain stable. Index zero is a special deletion/replacement: the first four generations
+use `archive/retired-report.txt` with shared identity 5*M+1; the latest generation
+uses `archive/report-0000000.txt` with identity 4*M+1. Thus retained history includes
+unchanged files, changed contents at stable paths, and a historical-only content.
+All hashes are full-length SHA-256 identities; sizes are 4096 bytes and mtimes are known.
+This remains a skewed synthetic distribution, not a representative disk/history mix.
+
+`TestHTTPHistoryWorkflowBenchmarkFixture` exhausts small-fixture broad and selective
+search pages in both scopes, verifies snapshot/path/hash sets and observation-ID
+uniqueness, checks independent stable/changed/retired identity examples, and follows
+all target content-observation pages. It asserts the independent distribution totals
+above, current/history flags, capture context, scope, current replica counts, and zero
+current locations for retired content. The same imported fixture builder checks current
+catalog totals, the primary workflow, and target/retired summaries at benchmark scales.
+
+Cases measure current/history exact and selective substring searches (limit 1), broad
+first/second pages (limit 50), content detail, and first observation pages (limit 2).
+Additional cases cover current replica-filter no-match, history's second observation
+page and historical-only filename search, and the current four-request workflow.
+The no-match filter requires three other disks in a catalog containing only three.
+No history-scope redundancy filter is issued because replica bounds require current scope.
+
+Fixture construction, real application imports, loopback server startup, cursor discovery,
+and explicit warm-up calls are untimed. Requests are serial and timed end-to-end through
+the existing reusable HTTP client, including routing, SQL, DTO/JSON work, transfer,
+body reads, decoding, and bounded assertions. Exhaustive checks run outside timing.
+Allocations include client and server in one process, not server-only memory or RSS.
+
+Reproduce with:
+
+```sh
+go test ./internal/httpapi -run 'TestHTTP(History)?WorkflowBenchmarkFixture' -count=1
+go test ./internal/httpapi -run '^$' -bench '^BenchmarkHTTPHistoryWorkflow/50000/' -benchtime=20x -benchmem -v -timeout=30m
+go test ./internal/httpapi -run '^$' -bench '^BenchmarkHTTPHistoryWorkflow/1000000/' -benchtime=20x -benchmem -v -timeout=30m
+```
+
+On 2026-10-09, Linux amd64 / AMD Ryzen 5 9600X, Go 1.27.1 with GOMAXPROCS=4,
+one 20-iteration run per scale produced these means. The scales ran separately,
+with no overlapping benchmark or correctness-check commands.
+
+| Case | 50,000 historical (ms/op) | 1,000,000 historical (ms/op) |
+| --- | ---: | ---: |
+| Current exact search | 0.866 | 0.831 |
+| Current selective substring | 0.955 | 0.951 |
+| Current broad first page | 40.753 | 742.747 |
+| Current broad second page | 54.266 | 978.137 |
+| Current replica-filter no-match | 125.825 | 2468.997 |
+| Current content detail | 0.123 | 0.120 |
+| Current first observation page | 0.228 | 0.225 |
+| History exact search | 0.870 | 0.978 |
+| History selective substring | 0.983 | 1.005 |
+| History broad first page | 23.393 | 406.332 |
+| History broad second page | 37.449 | 633.567 |
+| History content detail | 0.144 | 0.170 |
+| History first observation page | 0.208 | 0.230 |
+| History second observation page | 0.217 | 0.248 |
+| Historical-only exact search | 0.754 | 0.908 |
+| Current complete four-request workflow | 1.482 | 1.502 |
+
+At million historical observations, the complete workflow allocated 97,496 bytes
+and 1,153 allocations per operation. Current broad pages allocated 474,486–488,181
+bytes and 3,382–3,445 allocations. The no-match mean remains multi-second despite
+only 200,000 current observations; current broad pagination and historical broad
+search also remain explicit latency concerns. Narrow-query differences between
+scales are not evidence of an improvement. No production queries were changed.
+
+`go test ./...`, `go vet ./...`, and the final focused
+`go test -race -p 1 ./internal/httpapi -timeout=30m` passed after harness changes.
+
+These are warm serial means, not p95, filesystem-cold results, concurrent-load
+measurements, or an acceptance decision. Comparing equal total-observation scales
+against `BenchmarkHTTPWorkflow` does not isolate history overhead: this fixture has
+one fifth as many current observations and substantially fewer distinct paths.
+History-heavy directory comparisons, other disk/history distributions, cold measurements,
+approved budgets, transaction/journal measurements, and the final backend gate remain open.
 
 ## Filename and path search
 

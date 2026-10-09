@@ -341,8 +341,22 @@ extractors, thumbnails, and Wails remain deferred.
    1.438 ms for the complete four-request workflow, 1931 ms for broad first-page search,
    2979 ms for its second page, and 2582 ms for replica-filter no-match. These are warm
    serial means, not p95 or an acceptance decision. Filesystem-cold measurements,
-   history-heavy workloads, approved budgets and optimization/acceptance of slow cases
+   broader history-heavy workloads, approved budgets and optimization/acceptance of slow cases
    remain open. See `backend-foundation.md` for fixture details and reproduction commands.
+   **History-heavy warm HTTP measurements complete:** `BenchmarkHTTPHistoryWorkflow` retains five
+   snapshots per disk across three disks, with 50,000/1,000,000 total historical
+   observations and 10,000/200,000 current observations. It measures current/history
+   exact/selective/broad searches and second pages, content and observation reads,
+   current replica-filter no-match, historical-only search, and the current primary
+   workflow. The small correctness fixture exhausts search and observation pagination,
+   checks stable/changed/deleted identities, and confirms history never inflates current
+   replicas. Twenty-iteration million-historical-observation means were 1.502 ms for
+   the current four-request workflow, 743/978 ms for current broad first/second pages,
+   406/634 ms for history broad first/second pages, and 2469 ms for current replica-filter
+   no-match. These are warm serial measurements, not cold performance, p95 or budget
+   approval; equal total-observation scales do not mean equal current result-set sizes.
+   History-heavy directory comparisons and broader disk/history distributions remain
+   open alongside the other acceptance gaps. See `backend-foundation.md`.
 5. **Close handoff:** audit endpoint/primary-workflow contract coverage and OpenAPI examples,
    document integration setup (including same-origin serving or explicit development CORS),
    and rerun required correctness checks after any implementation changes. Record unresolved
