@@ -333,6 +333,16 @@ extractors, thumbnails, and Wails remain deferred.
 4. **Validate interactive behavior:** measure end-to-end HTTP search and follow-up reads,
    including warm and filesystem-cold behavior. Closing/reopening SQLite alone does not
    establish filesystem-cold performance. Compare results against the agreed limits.
+   **Warm HTTP measurements complete:** `BenchmarkHTTPWorkflow` exercises real loopback
+   requests at 50,000/1,000,000 total current observations across three disks, including
+   exact/selective/broad search, second-page search, replica-filter no-match, content
+   detail, location pages, and search → content → all locations. The small shared fixture
+   verifies counts, identities and pagination. Twenty-iteration million-scale means were
+   1.438 ms for the complete four-request workflow, 1931 ms for broad first-page search,
+   2979 ms for its second page, and 2582 ms for replica-filter no-match. These are warm
+   serial means, not p95 or an acceptance decision. Filesystem-cold measurements,
+   history-heavy workloads, approved budgets and optimization/acceptance of slow cases
+   remain open. See `backend-foundation.md` for fixture details and reproduction commands.
 5. **Close handoff:** audit endpoint/primary-workflow contract coverage and OpenAPI examples,
    document integration setup (including same-origin serving or explicit development CORS),
    and rerun required correctness checks after any implementation changes. Record unresolved

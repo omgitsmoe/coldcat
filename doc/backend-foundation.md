@@ -529,6 +529,71 @@ nonempty decoded hexadecimal identities, including abbreviated identities in
 existing catalogs. Exact algorithm-specific digest lengths are enforced on imports;
 lookup validation and existing catalog rows are unchanged.
 
+### Warm HTTP workflow measurement harness
+
+`BenchmarkHTTPWorkflow` in `internal/httpapi/workflow_benchmark_test.go` sends serial
+requests through a real loopback `httptest.NewServer` using a reusable HTTP client.
+Each scale denotes total current observations: 50,000 or 1,000,000, across three
+complete disk inventories with no retained history. There are N distinct paths and
+N-3 distinct contents. The source disk holds N-2 observations, including two copies
+of the target content; each other disk holds one copy under a different root.
+All files have a known size of 4096 bytes and a known mtime. Background filenames
+are `report-XXXXXXX.txt`; the target is `keepsake-report.txt` at four locations.
+This is a deliberately skewed search fixture, not a representative multi-disk load.
+
+Fixture files are streamed to disk and imported through the application API before
+the HTTP server starts. Setup, imports, server startup, cursor preparation, and
+explicit warm-up calls are untimed. Timed operations include HTTP routing, database
+queries, DTO conversion, JSON encoding, loopback transfer, client body reads and
+JSON decoding. The complete workflow also checks target identities/counts and
+location uniqueness; its allocation/timing totals include those assertions.
+`TestHTTPWorkflowBenchmarkFixture` checks the same harness at small scale, including
+case-insensitive search, pagination and replica-filter no-match behavior. Fixture
+creation checks the catalog's total file/content/disk counts at every scale.
+
+Cases measure exact filename search and selective `KEEPSAKE` substring search with
+limit 1, broad `REPORT` search with limit 50, its second page, and a broad no-match
+filter requiring three other disks. Content detail and the first two-location page
+are measured separately. The complete workflow follows a search result's content
+ID, reads its detail, and traverses both two-location pages: four requests total.
+
+Reproduce with:
+
+```sh
+go test ./internal/httpapi -run '^$' -bench '^BenchmarkHTTPWorkflow/50000/' -benchtime=20x -benchmem -v
+go test ./internal/httpapi -run '^$' -bench '^BenchmarkHTTPWorkflow/1000000/' -benchtime=20x -benchmem -v -timeout=30m
+```
+
+On 2026-10-09, Linux amd64 / AMD Ryzen 5 9600X, Go 1.27.1 with GOMAXPROCS=4,
+one 20-iteration run per scale produced these means. The 50,000-observation run
+overlapped correctness checks; the million-observation run had no overlapping
+test/check commands. Treat the small differences between narrow-query means as
+noise, not a scaling improvement.
+
+| Case | 50,000 (ms/op) | 1,000,000 (ms/op) |
+| --- | ---: | ---: |
+| Exact search | 0.885 | 0.782 |
+| Selective substring | 0.901 | 0.881 |
+| Broad first page | 102.781 | 1931.100 |
+| Broad second page | 165.562 | 2979.083 |
+| Replica-filter no-match | 131.362 | 2582.104 |
+| Content detail | 0.114 | 0.118 |
+| First location page | 0.205 | 0.190 |
+| Complete four-request workflow | 1.425 | 1.438 |
+
+At million scale, complete workflows allocated about 96 KB and 1,138 allocations
+per operation; broad pages allocated about 507–515 KB and 3,213–3,275 allocations.
+Broad queries and replica-filter no-match cases remain explicit multi-second
+performance limits; this measurement task does not optimize or accept them.
+`go test ./...`, `go vet ./...`, and the final focused
+`go test -race -p 1 ./internal/httpapi -timeout=30m` passed after harness changes.
+
+These are warm serial means, not p95, filesystem-cold results, concurrent-load
+measurements, or an acceptance decision. Allocation counts cover both the HTTP
+client and server in the same process, not server-only memory or RSS. No cache
+eviction or catalog reopening is used to imply filesystem-cold behavior. Approved
+budgets, history-heavy workloads, and the final backend handoff gate remain open.
+
 ## Filename and path search
 
 `GET /api/v1/search` returns observations with content, disk, complete-snapshot context,
