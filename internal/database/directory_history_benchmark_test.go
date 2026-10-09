@@ -148,7 +148,12 @@ func TestDirectoryHistoryComparisonOldOnlyDestination(t *testing.T) {
 }
 
 func BenchmarkDirectoryHistoryComparisons(b *testing.B) {
-	const count = 50000
+	for _, count := range []int{50000, 200000} {
+		benchmarkDirectoryHistoryComparisons(b, count)
+	}
+}
+
+func benchmarkDirectoryHistoryComparisons(b *testing.B, count int) {
 	b.Run(fmt.Sprint(count), func(b *testing.B) {
 		for _, generations := range []int{1, 5} {
 			b.Run(fmt.Sprintf("snapshots_%d", generations), func(b *testing.B) {
