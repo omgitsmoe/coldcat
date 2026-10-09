@@ -213,6 +213,8 @@
         "summary": "Check database/session readiness",
         "responses": {
           "200": {"description": "Ready", "content": {"application/json": {"schema": {"type": "object", "required": ["status"], "properties": {"status": {"const": "ready", "type": "string"}}}, "example": {"status": "ready"}}}},
+          "400": {"$ref": "#/components/responses/Invalid"},
+          "405": {"$ref": "#/components/responses/ReadOnlyMethod"},
           "503": {"$ref": "#/components/responses/Unavailable"}
         }
       }
@@ -234,7 +236,7 @@
         ],
         "responses": {
           "200": {"description": "Content page with applied filters and catalog revision", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ContentPage"}, "examples": {
-            "twoOtherDisks": {"value": {"scope": "current", "revision": "3", "filters": {"disk_id": null, "directory": "", "replica_metric": "disks", "other_replicas": "2", "min_other_replicas": null, "max_other_replicas": null}, "items": [{"id": "1", "hash": {"algorithm": "sha256", "hex": "ab"}, "size": "0", "scope": "current", "location_count": "4", "disk_count": "3", "observation_count": "4", "current_location_count": "4", "current_disk_count": "3"}], "next_cursor": null}},
+            "twoOtherDisks": {"value": {"scope": "current", "revision": "3", "filters": {"disk_id": null, "directory": "", "replica_metric": "disks", "other_replicas": "2", "min_other_replicas": null, "max_other_replicas": null}, "items": [{"id": "1", "hash": {"algorithm": "sha256", "hex": "abababababababababababababababababababababababababababababababab"}, "size": "0", "scope": "current", "location_count": "4", "disk_count": "3", "observation_count": "4", "current_location_count": "4", "current_disk_count": "3"}], "next_cursor": null}},
             "empty": {"value": {"scope": "current", "revision": "0", "filters": {"disk_id": null, "directory": "", "replica_metric": "disks", "other_replicas": null, "min_other_replicas": null, "max_other_replicas": null}, "items": [], "next_cursor": null}}
           }}}},
           "400": {"$ref": "#/components/responses/Invalid"},
@@ -252,13 +254,14 @@
         "description": "Different algorithms never establish equivalence. Hex is case-insensitive on input, lowercase on output. Accepts the hash lengths currently accepted by the importer.",
         "parameters": [
           {"name": "hash_type", "in": "query", "required": true, "schema": {"$ref": "#/components/schemas/Algorithm"}, "example": "sha256"},
-          {"name": "hash", "in": "query", "required": true, "schema": {"type": "string", "pattern": "^(?:[0-9a-fA-F]{2})+$"}, "example": "AB"},
+          {"name": "hash", "in": "query", "required": true, "schema": {"type": "string", "pattern": "^(?:[0-9a-fA-F]{2})+$"}, "example": "ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB"},
           {"$ref": "#/components/parameters/Scope"}
         ],
         "responses": {
           "200": {"$ref": "#/components/responses/Content"},
           "400": {"$ref": "#/components/responses/Invalid"},
           "404": {"$ref": "#/components/responses/NotFound"},
+          "405": {"$ref": "#/components/responses/ReadOnlyMethod"},
           "503": {"$ref": "#/components/responses/Unavailable"},
           "500": {"$ref": "#/components/responses/Internal"}
         }
@@ -272,6 +275,7 @@
           "200": {"$ref": "#/components/responses/Content"},
           "400": {"$ref": "#/components/responses/Invalid"},
           "404": {"$ref": "#/components/responses/NotFound"},
+          "405": {"$ref": "#/components/responses/ReadOnlyMethod"},
           "503": {"$ref": "#/components/responses/Unavailable"},
           "500": {"$ref": "#/components/responses/Internal"}
         }
@@ -298,6 +302,7 @@
           }}}},
           "400": {"$ref": "#/components/responses/Invalid"},
           "404": {"$ref": "#/components/responses/NotFound"},
+          "405": {"$ref": "#/components/responses/ReadOnlyMethod"},
           "409": {"description": "Inventory changed since the cursor was issued; restart pagination", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "stale_cursor", "message": "cursor belongs to a different inventory revision"}}}}},
           "503": {"$ref": "#/components/responses/Unavailable"},
           "500": {"$ref": "#/components/responses/Internal"}
@@ -310,9 +315,16 @@
         "description": "Other counts exclude the observation's disk/path or disk only where currently present for that content. Historical-only contents have zero other replicas. Embedded content uses current scope.",
         "parameters": [{"$ref": "#/components/parameters/ID"}],
         "responses": {
-          "200": {"description": "Observation detail", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ObservationSummary"}}}},
+          "200": {"description": "Observation detail", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ObservationSummary"}, "example": {
+            "observation": {"id": "1", "content_id": "1", "snapshot_id": "1", "path": "docs/report.txt", "mtime": null},
+            "snapshot": {"id": "1", "disk_id": "1", "state": "complete", "captured_at": "2026-10-01T12:00:00Z", "imported_at": "2026-10-06T12:00:00Z", "capture_provenance": "explicit", "input_path": "/inventories/source.cshd", "input_format": "cshd", "file_count": "1", "content_count": "1"},
+            "disk": {"id": "1", "label": "source", "serial": "", "capacity": "100"},
+            "content": {"id": "1", "hash": {"algorithm": "sha256", "hex": "abababababababababababababababababababababababababababababababab"}, "size": "0", "scope": "current", "location_count": "2", "disk_count": "2", "observation_count": "2", "current_location_count": "2", "current_disk_count": "2"},
+            "other_location_count": "1", "other_disk_count": "1"
+          }}}},
           "400": {"$ref": "#/components/responses/Invalid"},
           "404": {"$ref": "#/components/responses/NotFound"},
+          "405": {"$ref": "#/components/responses/ReadOnlyMethod"},
           "503": {"$ref": "#/components/responses/Unavailable"},
           "500": {"$ref": "#/components/responses/Internal"}
         }
@@ -371,7 +383,7 @@
         "parameters": [{"$ref": "#/components/parameters/ID"}],
         "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/UpdateDisk"}, "example": {"label": "renamed archive", "notes": null}}}},
         "responses": {
-          "200": {"description": "Updated disk detail", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DiskDetail"}}}},
+          "200": {"description": "Updated disk detail", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DiskDetail"}, "example": {"id": "1", "label": "renamed archive", "notes": null, "serial": null, "capacity": "1000000000000", "latest_snapshot": null, "cataloged": null}}}},
           "400": {"$ref": "#/components/responses/Invalid"},
           "404": {"$ref": "#/components/responses/NotFound"},
           "405": {"$ref": "#/components/responses/DiskDetailMethod"},
@@ -411,9 +423,10 @@
         "summary": "Read a complete inventory's provenance and counters",
         "parameters": [{"$ref": "#/components/parameters/ID"}],
         "responses": {
-          "200": {"description": "Complete snapshot", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Snapshot"}}}},
+          "200": {"description": "Complete snapshot", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Snapshot"}, "example": {"id": "1", "disk_id": "1", "state": "complete", "captured_at": "2026-10-01T12:00:00Z", "imported_at": "2026-10-06T12:00:00Z", "capture_provenance": "explicit", "input_path": "/inventories/source.cshd", "input_format": "cshd", "file_count": "1", "content_count": "1"}}}},
           "400": {"$ref": "#/components/responses/Invalid"},
           "404": {"$ref": "#/components/responses/NotFound"},
+          "405": {"$ref": "#/components/responses/ReadOnlyMethod"},
           "503": {"$ref": "#/components/responses/Unavailable"},
           "500": {"$ref": "#/components/responses/Internal"}
         }
@@ -431,13 +444,14 @@
       "Scope": {"name": "scope", "in": "query", "schema": {"type": "string", "enum": ["current", "history"], "default": "current"}}
     },
     "responses": {
+      "ReadOnlyMethod": {"description": "Only GET and HEAD are allowed", "headers": {"Allow": {"schema": {"type": "string", "const": "GET, HEAD"}}}, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "method_not_allowed", "message": "method not allowed"}}}}},
       "DiskCollectionMethod": {"description": "Allowed methods: GET, HEAD, POST", "headers": {"Allow": {"schema": {"type": "string", "const": "GET, HEAD, POST"}}}, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
       "DiskDetailMethod": {"description": "Allowed methods: GET, HEAD, PATCH", "headers": {"Allow": {"schema": {"type": "string", "const": "GET, HEAD, PATCH"}}}, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
       "DiskConflict": {"description": "Label already belongs to another disk", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "conflict", "message": "request conflicts with catalog state"}}}}},
       "StaleCursor": {"description": "Inventory changed; restart pagination", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "stale_cursor", "message": "cursor belongs to a different inventory revision"}}}}},
       "TooLarge": {"description": "Body exceeds 65536 bytes", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "request_too_large", "message": "request body exceeds 65536 bytes"}}}}},
       "UnsupportedMedia": {"description": "Content-Type must be application/json", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "unsupported_media_type", "message": "Content-Type must be application/json"}}}}},
-      "Content": {"description": "Content summary. Observation count always includes all complete historical observations. Unknown size is null, known zero is string 0.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Content"}, "example": {"id": "1", "hash": {"algorithm": "sha256", "hex": "ab"}, "size": "0", "scope": "current", "location_count": "4", "disk_count": "3", "observation_count": "4", "current_location_count": "4", "current_disk_count": "3"}}}},
+      "Content": {"description": "Content summary. Observation count always includes all complete historical observations. Unknown size is null, known zero is string 0.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Content"}, "example": {"id": "1", "hash": {"algorithm": "sha256", "hex": "abababababababababababababababababababababababababababababababab"}, "size": "0", "scope": "current", "location_count": "4", "disk_count": "3", "observation_count": "4", "current_location_count": "4", "current_disk_count": "3"}}}},
       "Invalid": {"description": "Invalid or mismatched request/cursor", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "invalid_request", "message": "invalid request: limit must be between 1 and 200"}}}}},
       "NotFound": {"description": "Resource absent or visible only in an incomplete inventory", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "not_found", "message": "resource not found"}}}}},
       "Unavailable": {"description": "Catalog/session unavailable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}, "example": {"error": {"code": "catalog_unavailable", "message": "catalog is unavailable"}}}}},

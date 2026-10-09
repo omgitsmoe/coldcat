@@ -347,6 +347,14 @@ extractors, thumbnails, and Wails remain deferred.
    document integration setup (including same-origin serving or explicit development CORS),
    and rerun required correctness checks after any implementation changes. Record unresolved
    limits explicitly; do not mark the gate complete solely because benchmarks ran.
+   **Contract/integration handoff slice complete:** `TestOpenAPIEndpointHandoff` exercises
+   all 19 documented operations with a small imported two-disk fixture, checks success
+   payloads against their declared schemas, and verifies common 400/405 errors and Allow
+   headers. Success examples are required for every operation; missing examples/statuses
+   and unusable short SHA-256 examples were corrected. [Backend integration](backend-integration.md)
+   documents setup, primary reads, pagination, errors, ownership and same-origin/CORS
+   constraints, and maps specialized semantic contract tests. No frontend or CORS feature
+   was added. Performance approval, remaining measurements and the final gate remain open.
 
 ## 7. Future snapshot comparison and UI-driven imports
 
