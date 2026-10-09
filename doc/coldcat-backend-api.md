@@ -146,7 +146,7 @@ Use the existing application layer as the shared backend:
 - [x] Configure and test per-connection SQLite foreign keys. Acquire Windows/Unix exclusive catalog ownership before opening/migration/recovery and hold it for the session; reject competing sessions and simultaneous in-session imports/catalog queries.
 - [x] Exercise server/import overlap through the server's shared initialization path, including competing server/import child-process nonzero exits. SQLite write locking alone does not enforce this contract because reads may still be allowed.
 - [x] Keep bounded batch commits initially.
-- [ ] **Partial:** sampled journal growth measured for full-index successful imports and late-failure cleanup at 50,000/1,000,000 files; exact transaction durations and true peak journal storage remain open. Do not change to a single import-wide transaction on these samples alone; WAL is not a requirement for concurrent import/read access in this scope.
+- [ ] **Partial:** sampled journal growth and transaction API boundary durations measured for full-index successful imports and late-failure cleanup at 50,000/1,000,000 files; true peak journal storage and broader import distributions remain open. These durations include begin through completed commit/rollback, not SQLite lock-hold time. Do not change to a single import-wide transaction on these samples alone; WAL is not a requirement for concurrent import/read access in this scope.
 
 ## 4. CLI surface
 
@@ -323,7 +323,8 @@ extractors, thumbnails, and Wails remain deferred.
    for failure plus cleanup, with maximum sampled Go heap of 6.23/6.32 MB and final
    catalog files of 878.8/672.1 MB (cleanup leaves reusable SQLite pages).
    Sampled Go heap is not RSS or a proven memory bound; phase timing is not transaction
-   timing. Exact transaction durations and broader import distributions remain open.
+   timing. Transaction API boundary durations are measured separately below; broader
+   import distributions remain open.
    **Sampled journal growth measured:** the same success/late-failure cases now poll
    rollback-journal, WAL and SHM apparent file sizes every 10 ms through import return,
    including failure cleanup. Serial one-iteration million-file runs observed maximum
@@ -332,6 +333,16 @@ extractors, thumbnails, and Wails remain deferred.
    allocated storage or cumulative writes, and these runs do not isolate instrumentation
    overhead or approve a transaction-policy change. True peak journal storage remains
    open. Results and reproduction commands are in `backend-foundation.md`.
+   **Full-index transaction boundary timing measured:** a generated test-only Go overlay
+   wraps the unchanged transaction body, including completed commit/rollback and deferred
+   failure cleanup. `BenchmarkImportTransactions` verifies transaction counts and phase
+   boundaries with the same success/late-failure fixtures. One-iteration million-file runs
+   measured 203/202 transactions, 32.37/42.82 seconds in transaction bodies, and
+   32.73/43.20 seconds total import time. Successful directory/publication transactions
+   took 10.41/4.954 seconds; failure cleanup took 17.61 seconds. These are API wall-clock
+   durations, not engine lock-hold measurements, p95, cold performance or acceptance.
+   Production behavior is unchanged; overhead is not isolated. True peak storage and
+   broader import distributions remain open. See `backend-foundation.md`.
    **Standalone full-index recovery measured:**
    `BenchmarkFullIndexRecovery` covers 50,000/1,000,000 abandoned observations before
    and after directory construction, with completed-data preservation and index-integrity

@@ -1168,8 +1168,77 @@ Total durations are close to the earlier heap-only samples (1.364 / 1.242 and
 sampler overhead. Sampling adds work to the operation, and these one-iteration
 results are not latency p95 or an acceptance decision. Zero WAL/SHM maxima mean no
 nonzero sizes were observed, not that polling proves those files never existed.
-Exact transaction durations, true peak journal storage, peak RSS, broader import
-distributions, filesystem-cold workloads, and approved budgets remain open.
+Transaction API durations are measured separately below. True peak journal storage,
+peak RSS, broader import distributions, filesystem-cold workloads, and approved budgets
+remain open.
+
+### Full-index import transaction durations
+
+`BenchmarkImportTransactions` reuses the indexed streaming-import fixture and integrity
+assertions above: fresh temporary catalogs, unique unknown-size SHA-256 contents and
+distinct `archive/report-*.txt` paths, default 5,000-file batches, with either successful
+publication or a malformed record after all files have committed. Search and directory
+indexes use production code. Setup/catalog opening, fixture writing, post-import integrity
+checks and catalog close are excluded from import and transaction metrics.
+
+The harness generates a Go `-overlay` replacement for `internal/database/db.go`; no
+tracked production source or transaction semantics change. The replacement wraps the
+unchanged `TransactionContext` body with a per-DB observer, enabled only during `Import`.
+This also observes deferred cleanup, which uses a separate background context. Each
+duration starts immediately before calling the original body and ends after it returns,
+including `BeginTx`, SQL work, completed `Commit` or deferred `Rollback`, and the
+post-commit no-op rollback. These are exact boundary measurements of transaction API
+wall-clock duration, not SQLite write-lock hold time or individual engine/fsync timings.
+Modernc's exposed commit/rollback hooks were not used: there is no corresponding exposed
+begin hook, and the commit hook runs before commit completion.
+
+The observer records duration/error pairs after timing stops. Assertions require the
+expected transaction count and successful completion of every observed transaction;
+progress callbacks verify the batch/directory/publication boundaries before assigning
+stage labels. The late parse error itself is not a failed transaction: all batches and
+its cleanup transaction commit successfully. Small tagged tests exercise both outcomes
+and explicit rollback. Observer changes and import execution are serial on each DB.
+The overlay rejects changed source anchors rather than silently measuring another path.
+
+Reproduce from the repository root using the Go toolchain:
+
+```sh
+go run ./scripts/measure-import-transactions -run 'Test(ImportTransactionTimingFixture|TransactionTimingRollback)$' -count=1 -v
+go run ./scripts/measure-import-transactions -run '^$' -bench '^BenchmarkImportTransactions/' -benchtime=1x -benchmem -v -timeout=30m
+```
+
+Temporary overlays are created under `/tmp/opencode` (this directory must exist).
+The `transactiontiming` build tag requires this generated overlay; it is deliberately
+absent from ordinary `go test ./...` builds. To select one scale, replace the benchmark
+pattern with `^BenchmarkImportTransactions/50000/` or `/1000000/`. The benchmark timer
+and allocation metrics surround `Import`, not fixture construction or validation.
+
+Serial one-iteration samples on 2026-10-09 used Linux amd64, Go 1.27.1, AMD Ryzen 5
+9600X and benchmark parallelism 4. This slice ran no concurrent project checks or
+heap/journal samplers; unrelated container activity was not controlled. Values below
+are rounded benchmark outputs, not a latency distribution.
+
+| Files / outcome | Import s | Transactions | Transaction total s | Setup s | Batch total s | Maximum batch s | Directory s | Publication s | Cleanup s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 50,000 / success | 1.350 | 13 | 1.332 | 0.002263 | 0.6721 | 0.07497 | 0.4512 | 0.2068 | — |
+| 50,000 / late failure + cleanup | 1.212 | 12 | 1.195 | 0.001979 | 0.6640 | 0.07457 | — | — | 0.5291 |
+| 1,000,000 / success | 32.73 | 203 | 32.37 | 0.001919 | 17.01 | 0.1112 | 10.41 | 4.954 | — |
+| 1,000,000 / late failure + cleanup | 43.20 | 202 | 42.82 | 0.002049 | 25.21 | 0.2372 | — | — | 17.61 |
+
+Batch totals cover 10/200 separate transactions, not one import-wide transaction.
+Setup, directory construction, publication and cleanup each represent one transaction
+where present. The largest measured transaction in each case was directory construction
+or cleanup, not a batch. Total import time additionally includes parsing/digest work,
+ownership/progress handling and observer overhead outside these boundaries.
+
+Timing and recording add overhead; these samples do not isolate it against an uninstrumented
+control. The million-file late-failure run was slower than the earlier journal-sampled
+run; separate executions cannot attribute that difference to instrumentation or establish
+a regression. Unknown sizes, one disk and one shallow directory do not represent shared
+size enrichment, long/deep paths, repeated contents or history-heavy imports. These
+measurements close the transaction-boundary timing slice for this fixture only, not true
+peak storage, cold performance, approved limits or the backend acceptance gate. They do
+not justify changing transaction policy.
 
 ## Verification and follow-on work
 
