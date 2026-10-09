@@ -311,8 +311,20 @@ extractors, thumbnails, and Wails remain deferred.
    observations). At the larger scale, filtered replicas take about 7.7 minutes, coverage
    about 42–43 seconds, and empty comparisons about 38 seconds. These slow cases remain
    unresolved performance limits, not an acceptance decision.
-   This does not close the history-heavy or filesystem-cold workload gaps, establish full-index
-   import costs, or approve an interactive latency budget. See `backend-foundation.md`.
+   This does not close the history-heavy or filesystem-cold workload gaps or approve an
+   interactive latency budget. See `backend-foundation.md`.
+   **Full-index streaming-import measurement harness extended:**
+   `BenchmarkSearchIndexedImport` now covers 50,000/1,000,000 distinct files with successful
+   publication and late parse failure after committed batches. It reports phase durations,
+   total input throughput, final catalog bytes, and Go heap sampled throughout the operation,
+   including directory building, publication, and cleanup. Shared small-test/benchmark
+   assertions check publication/cleanup, search, directory summaries, and index integrity.
+   One-iteration million-file samples took 33.62 seconds for success and 31.70 seconds
+   for failure plus cleanup, with maximum sampled Go heap of 6.23/6.32 MB and final
+   catalog files of 878.8/672.1 MB (cleanup leaves reusable SQLite pages).
+   Sampled Go heap is not RSS or a proven memory bound; phase timing is not transaction
+   timing. Journal growth, exact transaction durations, and broader import distributions
+   remain open. Results and reproduction commands are in `backend-foundation.md`.
    **Standalone full-index recovery measured:**
    `BenchmarkFullIndexRecovery` covers 50,000/1,000,000 abandoned observations before
    and after directory construction, with completed-data preservation and index-integrity

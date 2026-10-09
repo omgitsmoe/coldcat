@@ -832,6 +832,68 @@ were disproportionate. FTS5 alone does not provide typo tolerance; the current c
 explicitly drops that capability rather than claiming equivalent recall. ADR 0001 records
 the approved replacement, normalization, short-query restriction, and consequences.
 
+### Full-index streaming import scale and memory sampling
+
+`BenchmarkSearchIndexedImport` now covers 50,000 and 1,000,000 files, each with
+successful publication and a malformed final record after every valid file has
+committed. It uses the production 5,000-record batches and search/directory indexes.
+The disk-backed fixture has distinct SHA-256 contents and paths, shallow `archive/`
+directories, and unknown sizes/mtimes. Fixture generation is incremental, not a
+whole-inventory Go allocation. The late parse failure exercises ingestion and cleanup,
+not cleanup after completed directory construction; standalone recovery covers that
+separate interruption point.
+
+Input generation, catalog initialization, disk creation, correctness checks, and
+catalog close are outside the timed section. Success reports ingestion, directory
+construction, publication, total duration, and input files/second. Failure reports
+the complete parse-and-cleanup duration, not successful import throughput or an
+isolated cleanup duration. Phase durations are not individual transaction durations.
+
+A test-only sampler reads `runtime.MemStats.HeapAlloc` every 10 ms, plus initial/final
+samples, throughout the import call, including directory building, publication, and
+failure cleanup. The reported maximum is absolute process-wide sampled Go heap:
+it includes the harness and retained allocations, is not peak RSS, can miss brief
+peaks, and does not establish a memory bound. Sampling adds overhead to timings and
+allocation totals. Sample counts are reported so short runs remain interpretable.
+Final catalog bytes are measured after close; failed-import cleanup can leave free
+SQLite pages in that file, so file size is not the size of surviving live records.
+
+Both the benchmark and a small multi-batch test assert publication/cleanup outcomes,
+inventory revision, root summaries, exact/substring search, foreign keys, and FTS
+integrity. Assertions and integrity checks run after import ownership is released
+and outside the measured operation. Failure checks all import-owned tables are empty.
+
+Reproduce instrumented one-iteration measurements with:
+
+```sh
+go test ./internal/importer -run '^$' -bench '^BenchmarkSearchIndexedImport/50000/' -benchtime=1x -benchmem -v
+go test ./internal/importer -run '^$' -bench '^BenchmarkSearchIndexedImport/1000000/' -benchtime=1x -benchmem -v -timeout=30m
+```
+
+Measured on 2026-10-09, Linux amd64, Go 1.27.1, AMD Ryzen 5 9600X, benchmark
+parallelism 4, one iteration per case. The million-file run briefly overlapped
+correctness/vet checks and the start of the focused race check; treat these as
+instrumented operational samples, not isolated-machine comparisons or latency p95.
+
+| Files / outcome | Total seconds | Input files/s | Sampled heap bytes | Heap samples | Final catalog bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 50,000 / success | 1.364 | 36,669 | 5,603,240 | 138 | 42,717,184 |
+| 50,000 / late failure + cleanup | 1.242 | 40,261 | 4,514,656 | 126 | 32,681,984 |
+| 1,000,000 / success | 33.62 | 29,743 | 6,225,928 | 3,364 | 878,825,472 |
+| 1,000,000 / late failure + cleanup | 31.70 | 31,542 | 6,320,280 | 3,172 | 672,092,160 |
+
+Successful-import phase seconds (ingestion / directories / publication) were
+0.6965 / 0.4653 / 0.2017 at 50,000 files and 19.29 / 9.778 / 4.557 at one million.
+Cumulative timed Go allocations were 123,294,680 / 90,357,448 bytes for the small
+success/failure cases and 2,574,837,272 / 1,861,021,520 bytes for the large cases;
+these are allocation traffic, not simultaneously resident memory. The failure
+cases preserve an empty accessible catalog despite the large remaining file.
+The approximately 6.3 MB sampled heap at the larger scale is encouraging for this
+fixture but neither proves bounded peak memory nor predicts arbitrary inventories.
+
+These measurements do not close transaction/journal growth, peak RSS, representative
+multi-disk/history-heavy imports, filesystem-cold workloads, or acceptance budgets.
+
 ## Verification and follow-on work
 
 ### Content lists and redundancy
