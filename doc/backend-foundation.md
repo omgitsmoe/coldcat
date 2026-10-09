@@ -560,7 +560,60 @@ finishing cleanup ran at 17,313 input files/s (about 2.89 seconds); the benchmar
 catalog access with revision zero afterward. Sampled Go heap was about 3.81 / 3.71 MB;
 this is neither peak RSS nor a bound on SQLite memory. Inputs use synthetic short paths
 and unique SHA-256 contents, so these results do not predict the user's 84,000-line
-inventory throughput. Actual import memory/journal, recovery, and HTTP acceptance remain.
+inventory throughput. Actual import memory/journal and HTTP acceptance remain. Standalone
+full-index recovery measurements are described next.
+
+### Full-index interrupted-import recovery
+
+Run startup recovery with production search triggers and directory indexing enabled:
+
+```sh
+go test ./internal/database -run '^TestFullIndexRecovery$' -count=1
+go test ./internal/database -run '^$' \
+  -bench '^BenchmarkFullIndexRecovery/' -benchtime=1x -benchmem -v
+```
+
+The fixture retains one completed snapshot with one unknown-size file and abandons
+50,000 or 1,000,000 observations in a newer snapshot on the same disk. The abandoned
+snapshot shares the completed file's path once and its content every tenth record;
+all other paths and contents are import-owned. Paths have 100 nested directory buckets.
+Observations are committed in batches of 5,000, with all production search triggers
+enabled. A pending size for the shared content must never enrich completed metadata
+during recovery. Two interruption stages cover ingestion before directory construction
+and fully built directories before publication.
+
+Fixture construction, verification, and closing are untimed. The timed operation is
+`OpenContext`, including exclusive locking, SQLite opening, schema/foreign-key checks,
+and abandoned-import cleanup. Verification checks completed data, directory summaries,
+inventory revision, staging/orphan removal, exact/substring searches, and FTS
+external-content integrity. The small `TestFullIndexRecovery` exercises the same fixture
+and assertions without requiring benchmark-scale data in the normal test suite.
+
+Measurements use Go 1.27.1 on Linux amd64, an AMD Ryzen 5 9600X host, with a
+four-CPU container quota and an 8 GiB memory limit. Each case uses one measured
+iteration (`-benchtime=1x`), not a latency distribution. The ordinary tests and vet
+check ran concurrently near the start of the benchmark run; the race suite runs
+separately afterward. Results are diagnostic samples, not isolated acceptance runs.
+
+| Abandoned observations | Interruption stage | Open/recovery seconds | Observations/s | Catalog bytes before/after | Go allocated bytes/op |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 50,000 | Before directories | 2.810 | 17,791 | 36,569,088 / 36,569,088 | 18,424 |
+| 50,000 | Directories built | 1.687 | 29,640 | 52,473,856 / 52,473,856 | 13,256 |
+| 1,000,000 | Before directories | 21.176 | 47,223 | 736,456,704 / 736,456,704 | 45,192 |
+| 1,000,000 | Directories built | 33.646 | 29,721 | 1,060,134,912 / 1,060,139,008 | 13,128 |
+
+All four cases passed recovery verification. The full run, including untimed fixture
+construction and validation, took 153.4 seconds. Do not infer relative stage costs from
+the 50,000-observation samples: the earlier case also competed with correctness checks.
+
+This models persisted incomplete snapshots after committed work, not abrupt-process
+termination or hot-journal crash recovery; those correctness contracts have separate
+process tests. Reopening does not evict the OS filesystem cache. Reported allocations
+are cumulative Go allocations during opening/recovery, not peak heap or RSS. SQLite
+reuses freed pages without shrinking the catalog; the last case even grew by one
+4 KiB page. Before/after bytes describe file length, not live index storage.
+These measurements do not establish an acceptance
+budget, filesystem-cold latency, or behavior for large retained multi-disk histories.
 
 ### Historical fuzzy measurements (removed implementation)
 

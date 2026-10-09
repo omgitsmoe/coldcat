@@ -266,7 +266,7 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 ### Milestone E — performance, recovery, and backend handoff
 
 - [ ] Agree a target catalog size and interactive latency budget; a suggested initial benchmark is one million observations, with results tracked for both cold and warm queries.
-- [ ] **Partial:** exact/substring search, pagination, directory query/build/enrichment costs and directory-only recovery measured at 50,000/1,000,000 observations; search-and-directory-indexed streaming import and late-failure cleanup measured at 50,000 files; test-only fuzzy candidate/reranking latency measured for 50,000 distinct names and persisted fuzzy latency/storage measured for 50,000/1,000,000 distinct paths. Full-index standalone recovery, filesystem-cold queries, and broader multi-disk distributions remain. Directory measurements cover wide/deep/high-duplicate trees; see `backend-foundation.md`.
+- [ ] **Partial:** exact/substring search, pagination, directory query/build/enrichment costs, directory-only recovery, and full-index standalone recovery measured at 50,000/1,000,000 observations; search-and-directory-indexed streaming import and late-failure cleanup measured at 50,000 files; test-only fuzzy candidate/reranking latency measured for 50,000 distinct names and persisted fuzzy latency/storage measured for 50,000/1,000,000 distinct paths. Filesystem-cold queries and broader multi-disk distributions remain. Full-index recovery covers interruption before directory construction and after completed directory construction, preserving a completed snapshot and shared content/search paths. Directory measurements cover wide/deep/high-duplicate trees; see `backend-foundation.md`.
 - [x] Check query plans for latest-snapshot selection and observation content/snapshot/path lookups (`TestQueryIndexes`).
 - [x] Check exact hash lookup and content observation-page indexes; add focused 50,000-observation warm-query benchmarks for hash lookup and first/deep pages.
 - [x] Check content-list keyset and observation query indexes. Benchmark current/history first/deep pages, disk/directory membership and both redundancy metrics at 50,000 and 1,000,000 observations; document the catalog-wide cost of no-match bounds in `backend-foundation.md`. An agreed latency budget and cold-query measurements remain pending.
@@ -303,8 +303,12 @@ extractors, thumbnails, and Wails remain deferred.
    storage, import, and recovery. Keep limits proposed until explicitly approved. Existing slow
    cases must be accepted as documented limitations or improved, not silently omitted.
 3. **Measure remaining operational costs:** full-index streaming import and late-failure cleanup
-   memory, transaction duration/journal growth, standalone interrupted-import recovery, and
-   representative multi-disk/history-heavy and filtered-comparison workloads.
+   memory, transaction duration/journal growth, and representative multi-disk/history-heavy
+   and filtered-comparison workloads. **Standalone full-index recovery measured:**
+   `BenchmarkFullIndexRecovery` covers 50,000/1,000,000 abandoned observations before
+   and after directory construction, with completed-data preservation and index-integrity
+   assertions. Measurements include catalog opening and use one iteration per case;
+   they are not filesystem-cold results or an acceptance decision. See `backend-foundation.md`.
 4. **Validate interactive behavior:** measure end-to-end HTTP search and follow-up reads,
    including warm and filesystem-cold behavior. Closing/reopening SQLite alone does not
    establish filesystem-cold performance. Compare results against the agreed limits.
