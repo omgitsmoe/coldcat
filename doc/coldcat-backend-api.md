@@ -274,7 +274,7 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 - [x] Test application/import cancellation propagation and actionable catalog-lock errors; verify database-session recovery on reopen after seeded interruption or cleanup failure.
 - [x] Test HTTP pagination across unchanged reopen/restart and successful offline imports; failed imports preserve cursors, and server startup recovers seeded interrupted state before readiness. Child-process interrupted imports additionally verify application pagination after recovery and invalidation after subsequent publication.
 - [x] Run `go test ./...`, `go test -race ./...`, and `go vet ./...` with the configured Go 1.27.1 toolchain; all passed for the completed foundation. Packages/tests also cross-compiled for Windows amd64 and macOS arm64; runtime tests ran on Linux.
-- [ ] **Partial:** focused content, exact/substring search, directory queries/build/recovery/comparisons, initial fuzzy spike, and search-indexed import benchmarks have run. Initial exact-replica and coverage measurements use 50,000 files; filtered and broader multi-disk distributions remain. No `justfile` currently exists; adopt its commands if one is introduced.
+- [ ] **Partial:** focused content, exact/substring search, directory queries/build/recovery/comparisons, initial fuzzy spike, and search-indexed import benchmarks have run. Initial exact-replica and coverage measurements use 50,000 files. A five-disk fixture now measures filtered replicas and coverage with exact/filtered-only copies and complementary partial-content disks; results and scale definitions are in `backend-foundation.md`. Broader distributions, history-heavy comparisons, and cold measurements remain. No `justfile` currently exists; adopt its commands if one is introduced.
 - [x] Document schema initialization, pre-0.1 reset policy, import publication/cleanup/recovery, locking, and query semantics in `doc/backend-foundation.md`.
 - [ ] Final backend gate: the principal workflow and every planned endpoint are exercised by contract tests; measured search behavior is acceptable; OpenAPI examples are usable by a future frontend.
 
@@ -304,7 +304,16 @@ extractors, thumbnails, and Wails remain deferred.
    cases must be accepted as documented limitations or improved, not silently omitted.
 3. **Measure remaining operational costs:** full-index streaming import and late-failure cleanup
    memory, transaction duration/journal growth, and representative multi-disk/history-heavy
-   and filtered-comparison workloads. **Standalone full-index recovery measured:**
+   and filtered-comparison workloads. **Filtered multi-disk comparisons measured:**
+   the five-disk directory-only benchmark covers unfiltered, blocked-log, allowed-text,
+   and empty selections, checking counts and identities against a small correctness fixture.
+   Runs cover 50,000 and 1,000,000 source observations (160,001 and 3,010,001 catalog
+   observations). At the larger scale, filtered replicas take about 7.7 minutes, coverage
+   about 42–43 seconds, and empty comparisons about 38 seconds. These slow cases remain
+   unresolved performance limits, not an acceptance decision.
+   This does not close the history-heavy or filesystem-cold workload gaps, establish full-index
+   import costs, or approve an interactive latency budget. See `backend-foundation.md`.
+   **Standalone full-index recovery measured:**
    `BenchmarkFullIndexRecovery` covers 50,000/1,000,000 abandoned observations before
    and after directory construction, with completed-data preservation and index-integrity
    assertions. Measurements include catalog opening and use one iteration per case;

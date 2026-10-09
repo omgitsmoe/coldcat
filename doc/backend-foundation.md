@@ -333,8 +333,68 @@ full streaming import with both search and directory indexes.
 The initial 50,000-file warm comparison measurement on the same Linux/Ryzen system took
 547 ms for an unfiltered verified replica and 401 ms for coverage across one other disk.
 These costs include source selection and complete manifest/content verification; no interactive
-latency budget has yet been agreed. Filtered comparisons and broader multi-disk distributions
-remain important follow-up measurements.
+latency budget has yet been agreed. The five-disk filtered comparison measurements below
+extend this baseline; broader distributions and history-heavy comparisons remain pending.
+
+#### Five-disk filtered comparisons
+
+`BenchmarkDirectoryFilteredComparisons` uses a source tree, an exact copy under a renamed
+root, a copy with changed and extra logs, and two complementary partial-content disks.
+The partial disks store contents under unrelated names: together they cover the source,
+but neither alone is complete. Twenty percent of source files are root-level or nested
+logs. All sizes are known (four bytes), and content identities repeat across source files.
+The fixture has 10,000 distinct source contents at both benchmark scales.
+
+Counts in benchmark names denote **source observations**, not total catalog observations:
+50,000 source files produce 160,001 catalog observations; 1,000,000 produce 3,010,001.
+Search triggers are disabled for fixture construction, as in the other isolated directory
+benchmarks. These catalogs are for directory-query measurements only, not search tests or
+production import-throughput measurements. `TestDirectoryComparisonBenchmarkFixture`
+checks the same fixture at small scale, including replica identities, whole-tree versus
+filtered equality, selection counts, byte totals, complementary partial coverage, and
+explicit empty comparisons. Expected counts are calculated independently of glob selection.
+
+```sh
+go test ./internal/database -run '^$' \
+  -bench '^BenchmarkDirectoryFilteredComparisons/50000/' -benchtime=3x -benchmem -v
+go test ./internal/database -run '^$' \
+  -bench '^BenchmarkDirectoryFilteredComparisons/1000000/' -benchtime=1x -benchmem -v
+```
+
+Measured on Linux amd64 / AMD Ryzen 5 9600X, Go 1.27.1, with benchmark GOMAXPROCS=4.
+Each case performs an untimed validation/warm-up call before timing. Fixture construction
+and catalog closure are excluded; timed calls include result assertions. The 50,000-file
+numbers are means over three iterations; test/vet checks briefly overlapped the start of
+that run. The million-file run uses one iteration per case and no concurrent project checks.
+An initial million-file attempt hit a 120-second command timeout during its first replica
+case and produced no timings; the retry removes that command timeout.
+Neither run establishes filesystem-cold latency, HTTP latency, p95, peak live heap, or RSS.
+`B/op` measures cumulative Go allocation per call, not retained memory. These measurements
+are not an approved interactive budget or a backend acceptance decision.
+
+| Source files | Selection | Replicas | Coverage | Replicas B/op | Coverage B/op |
+| --- | --- | --- | --- | --- | --- |
+| 50,000 | Unfiltered | 571 ms | 423 ms | 81,582,858 | 42,567,637 |
+| 50,000 | Block `**/*.log` | 2,043 ms | 370 ms | 279,200,421 | 37,491,125 |
+| 50,000 | Allow `**/*.txt` | 2,041 ms | 369 ms | 277,995,696 | 37,491,104 |
+| 50,000 | Block `**` (empty) | 137 ms | 141 ms | 17,013,650 | 17,014,330 |
+| 1,000,000 | Unfiltered | 151.60 s | 43.43 s | 1,624,640,616 | 849,369,424 |
+| 1,000,000 | Block `**/*.log` | 462.72 s | 42.68 s | 5,398,246,520 | 747,851,760 |
+| 1,000,000 | Allow `**/*.txt` | 461.80 s | 42.43 s | 5,397,055,304 | 747,845,376 |
+| 1,000,000 | Block `**` (empty) | 37.61 s | 37.88 s | 338,557,080 | 338,558,672 |
+
+Filtered replica queries cannot eliminate candidates using the unfiltered fingerprint;
+this fixture exercises that cost and verifies both the exact and filtered-only copies.
+Coverage retains repeated-file multiplicity while probing destination content membership.
+Even an empty selection scans the source to apply filters. Slow cases remain visible;
+larger candidate-directory counts, history-heavy workloads, cold measurements, and agreed
+latency limits are still required before closing performance acceptance.
+The million-source-file command took 2,600.6 seconds overall, including fixture creation
+and untimed warm-up queries. Its filtered replica calls took roughly 7.7 minutes each,
+with about 5.4 GB cumulatively allocated per call. Even unfiltered and empty comparisons
+are slow at this scale. The increase is much larger than the 20-fold increase in source
+files; these single-iteration results do not establish why. Profiling and explicitly
+approved limitations or improvements are needed before treating this scale as interactive.
 
 On Linux amd64 / Ryzen 5 9600X, the warm single-iteration measurements were:
 
