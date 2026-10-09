@@ -42,7 +42,16 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 	folded := searchFold(f.Query)
 	var source string
 	var args []any
-	if f.Match == "exact" {
+	if limit == 0 && after.ID > 0 {
+		// Anchor validation needs one path, not the full FTS posting list;
+		// the folded predicate below still verifies substring membership.
+		source = "SELECT p.* FROM search_path p WHERE p.path=?"
+		args = []any{after.Path}
+		if f.Match == "exact" {
+			source += " AND " + column + "=?"
+			args = append(args, folded)
+		}
+	} else if f.Match == "exact" {
 		source = "SELECT p.* FROM search_path p WHERE " + column + "=?"
 		args = []any{folded}
 	} else {
@@ -50,24 +59,36 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
  CROSS JOIN search_path p ON p.id=t.rowid WHERE search_trigram MATCH ?`
 		args = []any{f.Field + `_fold:"` + strings.ReplaceAll(folded, `"`, `""`) + `"`}
 	}
-	ranked := `retrieved_paths AS MATERIALIZED (` + source + `),
- ranked_paths AS MATERIALIZED (SELECT p.*,
+	var ranked string
+	if f.Match == "exact" {
+		// Constant rank and inlining preserve the exact index's path order.
+		ranked = `ranked_paths AS NOT MATERIALIZED (SELECT p.*,0 AS rank FROM (` + source + `) p)`
+	} else {
+		ranked = `retrieved_paths AS NOT MATERIALIZED (` + source + `),
+ ranked_paths AS NOT MATERIALIZED (SELECT p.*,
  CASE WHEN ` + column + `=? THEN 0 WHEN substr(` + column + `,1,length(?))=?
  THEN 1 ELSE 2 END AS rank FROM retrieved_paths p WHERE instr(` + column + `,?)>0)`
-	args = append(args, folded, folded, folded, folded)
+		args = append(args, folded, folded, folded, folded)
+	}
 	query := currentSnapshots + `, ` + ranked + `,
  paths AS MATERIALIZED (SELECT p.* FROM ranked_paths p`
 	if limit > 0 {
 		// Each selected path has a qualifying observation after the anchor. Keeping
 		// limit+1 paths therefore preserves the entire next page without expanding
 		// every matching path into its historical observations before sorting.
-		query += ` WHERE (p.rank,p.path)>=(?,?) AND EXISTS (
+		query += ` WHERE (p.rank,p.path)>=(?,?)`
+		args = append(args, searchRank(after.Relevance), after.Path)
+		if f.Match == "exact" && after.ID > 0 {
+			query += ` AND p.path>=?`
+			args = append(args, after.Path)
+		}
+		query += ` AND EXISTS (
  SELECT 1 FROM observation o JOIN snapshot s ON s.id=o.snapshot_id
  LEFT JOIN current_snapshot cs ON cs.id=s.id
  WHERE o.path=p.path AND s.state='complete' AND (?='history' OR cs.id IS NOT NULL)
  AND (?=0 OR s.disk_id=?) AND (?=0 OR s.id=?)
  AND (?='' OR substr(o.path,1,length(?)+1)=?||'/') AND (p.rank,o.path,o.id)>(?,?,?)`
-		args = append(args, searchRank(after.Relevance), after.Path, f.Scope,
+		args = append(args, f.Scope,
 			f.DiskID, f.DiskID, f.SnapshotID, f.SnapshotID,
 			f.Directory, f.Directory, f.Directory,
 			searchRank(after.Relevance), after.Path, after.ID)
@@ -90,7 +111,13 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 				args = append(args, *bound.value)
 			}
 		}
-		query += `) ORDER BY p.rank,p.path LIMIT ?`
+		query += `) ORDER BY `
+		if f.Match == "exact" {
+			query += `p.path`
+		} else {
+			query += `p.rank,p.path`
+		}
+		query += ` LIMIT ?`
 		args = append(args, limit+1)
 	}
 	query += `), matches AS (
@@ -205,9 +232,9 @@ func (db *DB) Search(
 		}
 	}
 
-	query, args := searchCandidates(f)
 	rank := searchRank(after.Relevance)
 	if after.ID > 0 {
+		query, args := searchWindow(f, 0, after)
 		var valid bool
 		anchorArgs := append(append([]any{}, args...), after.ID, rank, after.Path)
 		if err := db.db.QueryRowContext(ctx, query+
@@ -219,7 +246,7 @@ func (db *DB) Search(
 			return result, fmt.Errorf("%w: invalid search cursor anchor", ErrValidation)
 		}
 	}
-	query, args = searchWindow(f, limit, after)
+	query, args := searchWindow(f, limit, after)
 	query += `, page AS MATERIALIZED (
  SELECT * FROM eligible WHERE (rank,path,id)>(?,?,?) ORDER BY rank,path,id LIMIT ?
  ), page_contents AS MATERIALIZED (SELECT DISTINCT content_id FROM page),
