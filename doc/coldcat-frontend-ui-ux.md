@@ -1,6 +1,8 @@
 # Coldcat frontend UI/UX improvement plan
 
-Status: owner-approved on 2026-10-10. Implementation has not started.
+Status: overall plan owner-approved on 2026-10-10. U01 baseline tooling and proposed visual
+specification are delivered; U01 visual approval is pending. No redesign implementation has
+started; U02 is blocked until the owner explicitly approves U01.
 
 **Direction: a compact, polished technical workspace—not a dashboard makeover.** Keep
 information density and keyboard efficiency, but introduce clearer hierarchy, consistent
@@ -136,6 +138,17 @@ the entire repository history.
 Implementation paths below are relative to `frontend/src/lib/` unless otherwise noted.
 
 ### U01 — Browser baseline and design specification
+
+**Progress (2026-10-10):** browser baseline/documentation work delivered; owner review required.
+Handoff: [visual specification, annotated layouts, observations and ownership map](ui-ux/u01/visual-specification.md),
+[18-capture manifest](ui-ux/u01/baseline/manifest.json), and
+`frontend/tests/visual/u01-baseline.spec.ts` / `frontend/playwright.u01.config.ts`.
+Capture uses isolated fixtures on the existing static browser host, not a live catalog.
+Validation passed: build, check (0 errors/warnings), lint, 143 unit tests, the 18-capture
+inspection test and 39 focused browser tests. Full deployed/backend checks were not run for U01.
+The specification includes explicit owner choices; agreed-layout/approved-specification
+acceptance is **not complete**. Do not start U02 or invent approval. Follow the owner's
+one-agent-at-a-time requirement for all later packages despite parallel opportunities below.
 
 **Priority:** P0  
 **Dependencies:** None  

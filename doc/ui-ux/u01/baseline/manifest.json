@@ -1,0 +1,246 @@
+{
+  "purpose": "U01 pre-redesign inspection; not golden assertions or real-backend acceptance",
+  "browser": "Chromium",
+  "version": "156.0.8078.4",
+  "locale": "en-US",
+  "timezone": "UTC",
+  "deviceScaleFactor": 1,
+  "searchFocus": "Explicitly focused query input at all widths for consistent capture state",
+  "fixtures": "tests/visual/u01-baseline.spec.ts",
+  "records": [
+    {
+      "scenario": "search",
+      "url": "/?q=report",
+      "file": "search-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "documentWidth": 1440,
+      "documentHeight": 1398,
+      "firstTableTop": 673.4375,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "disks",
+      "url": "/disks",
+      "file": "disks-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "documentWidth": 1440,
+      "documentHeight": 1956,
+      "firstTableTop": null,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "content-history",
+      "url": "/contents/1?scope=history",
+      "file": "content-history-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "documentWidth": 1440,
+      "documentHeight": 1542,
+      "firstTableTop": 1065.78125,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "directory-history",
+      "url": "/snapshots/1/directory?path=archive%2F2026%2F%E9%9B%AA+e%CC%81%2Fliteral+%3F%23%25+%3Creport%3E%2Fvery-long-directory-name-without-shortening%2Fnested-project-with-another-long-name",
+      "file": "directory-history-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "documentWidth": 1440,
+      "documentHeight": 2004,
+      "firstTableTop": 1641.25,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "search-empty",
+      "url": "/?q=absent",
+      "file": "search-empty-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "documentWidth": 1440,
+      "documentHeight": 900,
+      "firstTableTop": null,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "directory-error",
+      "url": "/snapshots/1/directory?path=archive%2F2026%2F%E9%9B%AA+e%CC%81%2Fliteral+%3F%23%25+%3Creport%3E%2Fvery-long-directory-name-without-shortening%2Fnested-project-with-another-long-name",
+      "file": "directory-error-1440.png",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "documentWidth": 1440,
+      "documentHeight": 1466,
+      "firstTableTop": 1103,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "search",
+      "url": "/?q=report",
+      "file": "search-1024.png",
+      "viewport": {
+        "width": 1024,
+        "height": 900
+      },
+      "documentWidth": 1024,
+      "documentHeight": 1619,
+      "firstTableTop": 767.4375,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "disks",
+      "url": "/disks",
+      "file": "disks-1024.png",
+      "viewport": {
+        "width": 1024,
+        "height": 900
+      },
+      "documentWidth": 1024,
+      "documentHeight": 1956,
+      "firstTableTop": null,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "content-history",
+      "url": "/contents/1?scope=history",
+      "file": "content-history-1024.png",
+      "viewport": {
+        "width": 1024,
+        "height": 900
+      },
+      "documentWidth": 1024,
+      "documentHeight": 1638,
+      "firstTableTop": 1065.78125,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "directory-history",
+      "url": "/snapshots/1/directory?path=archive%2F2026%2F%E9%9B%AA+e%CC%81%2Fliteral+%3F%23%25+%3Creport%3E%2Fvery-long-directory-name-without-shortening%2Fnested-project-with-another-long-name",
+      "file": "directory-history-1024.png",
+      "viewport": {
+        "width": 1024,
+        "height": 900
+      },
+      "documentWidth": 1024,
+      "documentHeight": 2184,
+      "firstTableTop": 1725.25,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "search-empty",
+      "url": "/?q=absent",
+      "file": "search-empty-1024.png",
+      "viewport": {
+        "width": 1024,
+        "height": 900
+      },
+      "documentWidth": 1024,
+      "documentHeight": 928,
+      "firstTableTop": null,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "directory-error",
+      "url": "/snapshots/1/directory?path=archive%2F2026%2F%E9%9B%AA+e%CC%81%2Fliteral+%3F%23%25+%3Creport%3E%2Fvery-long-directory-name-without-shortening%2Fnested-project-with-another-long-name",
+      "file": "directory-error-1024.png",
+      "viewport": {
+        "width": 1024,
+        "height": 900
+      },
+      "documentWidth": 1024,
+      "documentHeight": 1598,
+      "firstTableTop": 1139,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "search",
+      "url": "/?q=report",
+      "file": "search-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 900
+      },
+      "documentWidth": 768,
+      "documentHeight": 2027,
+      "firstTableTop": 791.4375,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "disks",
+      "url": "/disks",
+      "file": "disks-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 900
+      },
+      "documentWidth": 768,
+      "documentHeight": 2016,
+      "firstTableTop": null,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "content-history",
+      "url": "/contents/1?scope=history",
+      "file": "content-history-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 900
+      },
+      "documentWidth": 768,
+      "documentHeight": 1758,
+      "firstTableTop": 1089.78125,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "directory-history",
+      "url": "/snapshots/1/directory?path=archive%2F2026%2F%E9%9B%AA+e%CC%81%2Fliteral+%3F%23%25+%3Creport%3E%2Fvery-long-directory-name-without-shortening%2Fnested-project-with-another-long-name",
+      "file": "directory-history-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 900
+      },
+      "documentWidth": 768,
+      "documentHeight": 2472,
+      "firstTableTop": 1773.25,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "search-empty",
+      "url": "/?q=absent",
+      "file": "search-empty-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 900
+      },
+      "documentWidth": 768,
+      "documentHeight": 976,
+      "firstTableTop": null,
+      "headerHeight": 143
+    },
+    {
+      "scenario": "directory-error",
+      "url": "/snapshots/1/directory?path=archive%2F2026%2F%E9%9B%AA+e%CC%81%2Fliteral+%3F%23%25+%3Creport%3E%2Fvery-long-directory-name-without-shortening%2Fnested-project-with-another-long-name",
+      "file": "directory-error-768.png",
+      "viewport": {
+        "width": 768,
+        "height": 900
+      },
+      "documentWidth": 768,
+      "documentHeight": 1886,
+      "firstTableTop": 1187,
+      "headerHeight": 143
+    }
+  ]
+}
