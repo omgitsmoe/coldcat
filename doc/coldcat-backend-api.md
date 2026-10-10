@@ -314,7 +314,11 @@ For each milestone, first write behavioral acceptance tests, then implement the 
   its diagnostic test context, with pre-recovery preservation/integrity checks passing.
   Page-fetch/spill I/O is a substantial cost; no safe SQL fix or 30-second policy pass is
   established. Deep failure is undiagnosed and history failure remains unmeasured.
-  Publication-failure timing is unmeasured.
+  A test-only default/8/32 MiB cleanup-cache slice passed preservation at
+  32.527/31.475/28.701 seconds; only the last sample was below 30, with a substantial
+  RSS high-water increase and insufficient deadline margin/repetition for acceptance.
+  Cleanup-only cache policy needs an approved ADR and real deadline validation;
+  no production setting changed. Publication-failure timing is unmeasured.
 - [ ] Measure true **physical** journal peak using a suitable filesystem and validated
   allocation/free/reservation instrumentation. Blocked on that environment; logical VFS
   accounting or sampled apparent file lengths are not an approved replacement.
@@ -341,7 +345,12 @@ For each milestone, first write behavioral acceptance tests, then implement the 
     its test-only context does not close this failure. Profile evidence identifies page-fetch
     and dirty-page spill I/O as substantial extra cost, with filesystem/content-cardinality
     differences confounded against the synthetic fixture. Isolate cache/index-locality costs,
-    then reproduce only affected failures after a justified fix. Keep the 30-second policy unless
+    then reproduce only affected failures after a justified fix. The cache sensitivity slice
+    observed 32.527/31.475/28.701 seconds for default/8/32 MiB, with verified restoration and
+    pre-recovery integrity. The 32 MiB sample narrowly finished below 30 but raised lifetime
+    RSS HWM substantially; this is not a deadline-policy pass or approved memory budget.
+    Review the cleanup-only cache ADR proposal before any production implementation;
+    all-import cache changes are outside the evidence. Keep the 30-second policy unless
    an ADR proposal and user approval justify changing it. Publication-failure timing and
    distribution-specific RSS/transaction/journal evidence are unmeasured; select required
    operational measurements for the approved scope rather than expanding workloads indefinitely.

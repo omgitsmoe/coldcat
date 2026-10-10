@@ -1886,6 +1886,124 @@ This follow-up changes documentation only. Focused normal cleanup tests passed i
 seconds and cleanup-profile regression tests in 0.148 seconds. `go vet ./...` and diff
 checks passed. No race suite was repeated, and no additional million benchmark was run.
 
+#### Test-only cleanup cache sensitivity
+
+The next diagnostic slice adds `scripts/measure-cleanup-cache` and the Linux
+`cleanupcache`-tagged benchmark/tests. The runner generates a temporary Go overlay of
+`imports.go`; it extracts the existing cleanup transaction body unchanged and provides
+a benchmark-only cache wrapper. Neither the production file nor application API is
+modified. The tag alone cannot compile the benchmark; use the runner:
+
+```sh
+go run ./scripts/measure-cleanup-cache -run '^TestCleanupCacheFixture$' -count=1 -vet=all
+go run ./scripts/measure-cleanup-cache -run '^$' \
+  -bench '^BenchmarkDistributionCleanupCache/1000000/default$' -benchtime=1x \
+  -benchmem -v -cpuprofile=<profile-path> -outputdir=/tmp/opencode -timeout=30m
+# Separate guarded commands substitute /8MiB$ and /32MiB$; do not run an entire matrix.
+```
+
+For the timed cleanup only, the wrapper limits the fixture's application pool to one
+open/idle connection, obtains a pinned `sql.Conn`, and begins its transaction on that
+connection. Default leaves the current cache setting unchanged; 8/32 MiB executes
+`PRAGMA cache_size=-8192/-32768` through **that transaction's** `ExecContext`, then reads
+it back through the same transaction and fails on mismatch. The original cleanup SQL,
+triggers, foreign keys, atomic commit/rollback and diagnostic long context remain intact.
+After commit or rollback, it restores and verifies the original cache value on the pinned
+connection before releasing it. Restoration uses a separate five-second test-only context
+so caller cancellation cannot silently skip it; restoration/close errors join the cleanup
+error. This is not a production cancellation/connection-retirement policy. Pool limits
+remain at one until the fixture handle closes; baseline imports used the ordinary pool
+and cache, and do not receive the diagnostic setting. No cache-spill PRAGMA is changed.
+
+Small 5,000-file fixtures test all three configurations with distinct and shared completed
+paths, for both successful cleanup and an injected snapshot-delete failure after
+observation/staging deletion. A DELETE trigger
+checks `pragma_cache_size` on the executing cleanup connection. Tests also check restored
+cache/pool settings, full rollback table counts, FTS integrity and the existing independent
+read-only pre-recovery preservation checks. The fixture must commit at least one ingestion
+batch; an initial 100-file development fixture never reached the aborting cleanup trigger
+and was corrected to the production batch size. Overlay tests reject changed source anchors.
+Shared fixture setup/verification helpers preserve explicit per-iteration handle closure.
+
+On 2026-10-10 each million-input duplicate/shared configuration ran once, in its own process,
+serially without overlapping project checks, using Go 1.27.1/Linux amd64 on the AMD Ryzen
+5 9600X with four reported Go CPUs. **Each case constructed a fresh baseline and failed
+inventory**, not a rollback-reused catalog. Cleanup followed ordinary baseline/failed
+ingestion, so neither SQLite nor filesystem cache was deliberately cold. Settings were
+applied at cleanup start, not before fixture construction or prewarming. Case order was
+default, 8 MiB, 32 MiB; other container activity was not controlled. These are three
+individual observations, not paired repetitions, means, p95 or approved memory budgets.
+
+| Diagnostic setting | Previous/applied/restored cache_size | Cleanup s | Before cleanup VmHWM bytes | After cleanup VmHWM bytes | Sampled Go heap bytes | Heap samples | Package s |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Default | -2000 / -2000 / -2000 | 32.527010460 | 70,316,032 | 70,316,032 | 6,858,232 | 3,254 | 203.268 |
+| 8 MiB | -2000 / -8192 / -2000 | 31.475402346 | 69,382,144 | 77,041,664 | 9,168,176 | 3,149 | 191.611 |
+| 32 MiB | -2000 / -32768 / -2000 | 28.701046673 | 63,979,520 | 119,730,176 | 3,811,184 | 2,872 | 191.936 |
+
+Timing includes pinning, PRAGMA verification, cleanup commit and cache restoration, but
+not setup, sampler startup/shutdown, read-only verification or reopening. Go heap is
+sampled every 10 ms during cleanup, not SQLite's native cache or RSS. VmHWM is the Linux
+process **lifetime high-water mark**, read before/after cleanup; it includes untimed setup
+and is not a cleanup-only peak or current RSS delta. The 32 MiB case increased its HWM
+by 55,750,656 bytes; the cache-size setting is not a hard process-memory cap. These figures
+do not establish physical journal peak, cache hit rates, dirty-page counts or spill counts.
+
+All three cases passed cache-application/restoration assertions (`max_open=1`), pre-recovery
+read-only inspection and full completed-data/current-search/directory/FK/FTS checks. Default
+and 8 MiB exceeded 30 seconds; the 32 MiB observation was 1.299 seconds below it. The
+diagnostic context did not enforce that deadline, so **no actual production-deadline pass
+or safe production fix is claimed**. Default differs from the earlier 34.454-second profile
+by additional test instrumentation and ordinary run variation. No million success/deep/history
+case or synthetic million benchmark was repeated.
+
+CPU profiles sampled 16.82 / 17.18 / 17.30 cleanup seconds for default/8/32 MiB. Flat syscall
+samples were 6.04 / 5.93 / 5.84 seconds; cumulative pager-stress samples were 4.26 / 4.04 /
+4.19 seconds, `pwrite` 4.99 / 4.72 / 4.89, and `pread` 1.22 / 1.45 / 1.15. Pager-spill CPU
+work remains substantial; these samples do not prove fewer spills or attribute the single
+32 MiB wall-time improvement to one mechanism. No SQLite cache/spill counters were measured.
+
+Each outer command used a new workspace TMPDIR, an isolated child process group, a preflight
+and one-second available-space watchdog at 2,147,483,648 bytes, and the 30-minute harness
+timeout with no shorter outer deadline. All exited zero, without guard signals or retained
+temporary roots. Actual guard metadata was persisted during each run and before artifact
+copying. Logs/profiles remained under `/tmp/opencode`; generated binaries were copied across
+filesystems, hash-verified and then the owned workspace copies removed, not renamed.
+
+| Setting | Initial/minimum available bytes | Wrapper s | Guard samples | Local artifact directory under /tmp/opencode |
+| --- | --- | ---: | ---: | --- |
+| Default | 32,856,506,368 / 30,745,829,376 | 204.285 | 204 | `cleanup-cache-default-31652unn` |
+| 8 MiB | 32,856,506,368 / 30,745,735,168 | 192.624 | 192 | `cleanup-cache-8MiB-az88er54` |
+| 32 MiB | 32,856,506,368 / 30,740,508,672 | 192.289 | 192 | `cleanup-cache-32MiB-_p7noqei` |
+
+Each directory contains `output.log`, `metadata.json`, `cleanup.cpu` and `importer.test`.
+The one-case guard source is `/tmp/opencode/run-cleanup-cache-case.py`; these run artifacts
+are not repository deliverables. The user catalog and all pre-existing artifacts were untouched.
+
+**ADR proposal for review, not implementation:** consider a cleanup-only bounded cache target
+(32 MiB is a candidate, not an accepted value), scoped to one pinned cleanup connection
+while retaining atomic cleanup and the 30-second deadline. Context: two smaller diagnostic
+settings exceeded the deadline and one larger setting narrowly finished below it, with a
+substantial observed RSS high-water increase. Alternatives: keep the default and investigate
+SQL/index locality or filesystem I/O; test a different approved cleanup-only target; apply
+larger caches across imports/queries (not supported by this experiment and increases scope).
+Consequences: transient native memory can exceed the nominal cache target; pooling can
+multiply retained memory; restoring too early can change commit I/O; cancellation can leave
+a modified or unusable connection. A production design must pin the same connection through
+transaction completion and verified restoration, specify bounded restore context and error
+reporting, and retire/quarantine a connection if restoration cannot be verified rather than
+silently returning it to the pool. The test's pool-limit mutation must not become an unrelated
+global production limit. Approval must choose the memory envelope and deadline headroom,
+then validate real deadline cleanup/cancellation/restore-failure behavior on the selected
+scope. These one-sample results are insufficient to approve 32 MiB or an all-import policy.
+No ADR was created and no production cache/deadline/constraint policy changed. Deep-known
+failure remains undiagnosed and history late failure unmeasured; neither was run here.
+
+Final focused normal tests passed (importer 0.133 seconds, overlay harness 0.002 seconds),
+all 12 tagged cache correctness cases passed with `-vet=all` (3.418 seconds), and the refactored
+existing 50,000-input cleanup benchmark passed preservation checks (4.075 package seconds).
+`go vet ./...` and diff checks passed. No race suite was repeated: changes are test/harness
+code, and the heap sampler's existing synchronization is unchanged.
+
 ## Verification and follow-on work
 
 ### Final implementation checks

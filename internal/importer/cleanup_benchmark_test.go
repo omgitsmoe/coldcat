@@ -23,32 +23,8 @@ func BenchmarkDistributionCleanup(b *testing.B) {
 			input := writeDistributionInput(b, d, d.history, true)
 			for b.Loop() {
 				b.StopTimer()
-				c := openDistributionCatalog(b, d, baseline)
-				b.Cleanup(func() {
-					if err := closeCleanupCatalog(&c); err != nil {
-						b.Error(err)
-					}
-				})
-				_, err := c.raw.Exec(`CREATE TRIGGER hold_failed_import BEFORE DELETE ON observation
- BEGIN SELECT RAISE(ABORT,'profile fixture held'); END`)
-				if err != nil {
-					b.Fatal(err)
-				}
-				_, err = Import(b.Context(), c.db, Request{
-					DiskID: c.disk, Path: input, CapturedAt: time.Unix(10, 0),
-				})
-				if err == nil || !strings.Contains(err.Error(), "profile fixture held") ||
-					!strings.Contains(err.Error(), fmt.Sprintf("line %d", files+2)) {
-					b.Fatalf("fixture did not retain failed import: %v", err)
-				}
-				if _, err := c.raw.Exec("DROP TRIGGER hold_failed_import"); err != nil {
-					b.Fatal(err)
-				}
-				id := distributionCount(b, c.raw, "SELECT id FROM snapshot WHERE state='importing'")
-				if got := distributionCount(b, c.raw,
-					"SELECT COUNT(*) FROM observation WHERE snapshot_id=?", id); got != int64(files) {
-					b.Fatalf("failed fixture observations: %d, want %d", got, files)
-				}
+				c, id := prepareCleanupProfile(b, d, baseline, input)
+				deferCleanupCatalog(b, &c)
 				b.StartTimer()
 				pprof.Do(b.Context(), pprof.Labels("phase", "cleanup"), func(ctx context.Context) {
 					if err := c.db.CleanupImport(ctx, id); err != nil {
@@ -56,28 +32,88 @@ func BenchmarkDistributionCleanup(b *testing.B) {
 					}
 				})
 				b.StopTimer()
-				if err := closeCleanupCatalog(&c); err != nil {
-					b.Fatal(err)
-				}
-				if err := checkCleanupCatalogBeforeRecovery(b.Context(), d, c); err != nil {
-					b.Fatal(err)
-				}
-				c.db, err = database.OpenContext(b.Context(), c.path)
-				if err != nil {
-					b.Fatal(err)
-				}
-				c.raw, err = sql.Open("sqlite", c.path)
-				if err != nil {
-					b.Fatal(err)
-				}
-				assertDistributionImport(b, d, c, c.completed[0],
-					fmt.Errorf("line %d", files+2), "parse")
-				if err := closeCleanupCatalog(&c); err != nil {
-					b.Fatal(err)
-				}
+				verifyCleanupProfile(b, d, &c)
 				b.StartTimer()
 			}
 		})
+	}
+}
+
+func deferCleanupCatalog(tb testing.TB, c *distributionCatalog) {
+	tb.Helper()
+	tb.Cleanup(func() {
+		if err := closeCleanupCatalog(c); err != nil {
+			tb.Error(err)
+		}
+	})
+}
+
+func logCleanupProfileCounts(tb testing.TB, c distributionCatalog) {
+	tb.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for _, table := range []string{
+		"snapshot", "observation", "pending_size", "import_content", "content",
+		"search_path", "directory", "directory_file", "directory_content", "directory_build",
+	} {
+		var count int64
+		if err := c.raw.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&count); err != nil {
+			tb.Logf("before recovery %s: %v", table, err)
+		} else {
+			tb.Logf("before recovery %s rows: %d", table, count)
+		}
+	}
+}
+
+func prepareCleanupProfile(
+	tb testing.TB, d importDistribution, baseline []string, input string,
+) (distributionCatalog, int64) {
+	tb.Helper()
+	c := openDistributionCatalog(tb, d, baseline)
+	_, err := c.raw.Exec(`CREATE TRIGGER hold_failed_import BEFORE DELETE ON observation
+ BEGIN SELECT RAISE(ABORT,'profile fixture held'); END`)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	_, err = Import(tb.Context(), c.db, Request{
+		DiskID: c.disk, Path: input, CapturedAt: time.Unix(10, 0),
+	})
+	if err == nil || !strings.Contains(err.Error(), "profile fixture held") ||
+		!strings.Contains(err.Error(), fmt.Sprintf("line %d", d.files+2)) {
+		tb.Fatalf("fixture did not retain failed import: %v", err)
+	}
+	if _, err := c.raw.Exec("DROP TRIGGER hold_failed_import"); err != nil {
+		tb.Fatal(err)
+	}
+	id := distributionCount(tb, c.raw, "SELECT id FROM snapshot WHERE state='importing'")
+	if got := distributionCount(tb, c.raw,
+		"SELECT COUNT(*) FROM observation WHERE snapshot_id=?", id); got != int64(d.files) {
+		tb.Fatalf("failed fixture observations: %d, want %d", got, d.files)
+	}
+	return c, id
+}
+
+func verifyCleanupProfile(tb testing.TB, d importDistribution, c *distributionCatalog) {
+	tb.Helper()
+	if err := closeCleanupCatalog(c); err != nil {
+		tb.Fatal(err)
+	}
+	if err := checkCleanupCatalogBeforeRecovery(tb.Context(), d, *c); err != nil {
+		tb.Fatal(err)
+	}
+	var err error
+	c.db, err = database.OpenContext(tb.Context(), c.path)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	c.raw, err = sql.Open("sqlite", c.path)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	assertDistributionImport(tb, d, *c, c.completed[0],
+		fmt.Errorf("line %d", d.files+2), "parse")
+	if err := closeCleanupCatalog(c); err != nil {
+		tb.Fatal(err)
 	}
 }
 
