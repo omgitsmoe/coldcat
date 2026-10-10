@@ -10,7 +10,9 @@ test('browser evidence: settled typing, response render, bounded DOM and retaine
   await page.addInitScript(() => {
     const evidence = {
       handlers: [] as number[],
+      firstInputAt: 0,
       inputAt: 0,
+      firstRenderAt: 0,
       scheduled: [] as { continuation: boolean; afterLastInput: number; bodyWait: number }[],
       decodedAt: 0,
       renders: [] as number[],
@@ -22,6 +24,7 @@ test('browser evidence: settled typing, response render, bounded DOM and retaine
       'input',
       () => {
         started = performance.now();
+        if (!evidence.firstInputAt) evidence.firstInputAt = started;
         evidence.inputAt = started;
       },
       true,
@@ -58,7 +61,11 @@ test('browser evidence: settled typing, response render, bounded DOM and retaine
       if (!evidence.decodedAt || !document.querySelector('tbody tr')) return;
       const decoded = evidence.decodedAt;
       evidence.decodedAt = 0;
-      requestAnimationFrame(() => evidence.renders.push(performance.now() - decoded));
+      requestAnimationFrame(() => {
+        const rendered = performance.now();
+        if (!evidence.firstRenderAt) evidence.firstRenderAt = rendered;
+        evidence.renders.push(rendered - decoded);
+      });
     }).observe(document, { childList: true, subtree: true });
   });
   await page.route('**/healthz', (r) => r.fulfill({ json: { status: 'ready' } }));
@@ -132,10 +139,21 @@ test('browser evidence: settled typing, response render, bounded DOM and retaine
   await page.getByRole('button', { name: 'Clear', exact: true }).click();
   await expect(page.locator('tbody tr')).toHaveCount(0);
   await sample('cleared');
-  const evidence = await page.evaluate(() => Reflect.get(window, 'uiEvidence') as unknown);
+  const evidence = await page.evaluate(
+    () =>
+      Reflect.get(window, 'uiEvidence') as {
+        handlers: number[];
+        firstInputAt: number;
+        firstRenderAt: number;
+        scheduled: { continuation: boolean; afterLastInput: number; bodyWait: number }[];
+        renders: number[];
+        longTasks: { start: number; duration: number }[];
+      },
+  );
   expect(await page.evaluate(() => Reflect.get(window, 'uiEvidence').handlers.length)).toBe(6);
   expect(await page.evaluate(() => Reflect.get(window, 'uiEvidence').renders.length)).toBe(12);
   const report = {
+    repeat: info.repeatEachIndex + 1,
     browser: browser.version(),
     host: {
       platform: platform(),
@@ -162,4 +180,22 @@ test('browser evidence: settled typing, response render, bounded DOM and retaine
     body: JSON.stringify(report, null, 2),
     contentType: 'application/json',
   });
+  expect(Math.max(...evidence.handlers), 'every synchronous input span <50ms').toBeLessThan(50);
+  const settled = evidence.scheduled.filter((request) => !request.continuation);
+  expect(settled).toHaveLength(1);
+  expect(settled[0]!.afterLastInput, 'idle debounce lower bound').toBeGreaterThanOrEqual(150);
+  expect(settled[0]!.afterLastInput, 'idle debounce upper bound').toBeLessThanOrEqual(250);
+  for (const index of [0, 10, 11])
+    expect(evidence.renders[index], `single 50-row view ${index + 1}`).toBeLessThanOrEqual(50);
+  expect(Math.max(...evidence.renders.slice(1, 10)), 'bounded accumulation').toBeLessThanOrEqual(
+    100,
+  );
+  const initialLongTasks = evidence.longTasks.filter(
+    (task) =>
+      task.start < evidence.firstRenderAt && task.start + task.duration > evidence.firstInputAt,
+  );
+  expect(
+    initialLongTasks.filter((task) => task.duration > 50),
+    'initial input/first-render window',
+  ).toEqual([]);
 });

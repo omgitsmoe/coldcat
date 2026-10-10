@@ -1,8 +1,8 @@
 # Coldcat frontend plan
 
-Status: F0–F11a implemented, including the full deployed-Go real-browser operation matrix
-and revision/reconnection/write-reconciliation scenarios. F11b automated checks/evidence implemented,
-with manual assistive-technology feedback and target/budget agreement still pending; F12 pending;
+Status: F0–F11b complete within the approved scope, including the full deployed-Go real-browser
+operation matrix, revision/reconnection/write reconciliation and approved 20-run UI responsiveness
+checks. Accessibility is best effort by owner decision; no manual AT acceptance gate. F12 pending;
 backend gate unresolved. This is not release acceptance closure.
 The first-usable-slice real-backend harness precedes F7/comparisons; see the
 [core integration interface and coverage](../frontend/README.md#real-backend-core-integration-f11a-core).
@@ -14,6 +14,15 @@ backend gate, approved the full F0–F12 initial scope, npm, SvelteKit static SP
 Go hosting with an explicit asset directory, and desktop-only disableable type-to-search
 enabled by default. Creating the architecture ADR is explicitly approved. These approvals
 do not close or waive the backend gate.
+
+The owner's subsequent F11b decision on 2026-10-10 approved the documented Chromium/container
+measurement profile, input <50 ms, idle scheduling 200±50 ms, first/single 50-row render proxy
+≤50 ms and bounded accumulation ≤100 ms, with 20 fresh-context runs reporting max/p95.
+Initial browser support is Chromium desktop only; narrow-viewport tests are not mobile support.
+Accessibility is best effort (“don't test accessibility ... no extended checks”): no additional
+accessibility/screen-reader audit or manual AT acceptance requirement. Historical checks are
+evidence, not screen-reader success. This scope decision supersedes earlier manual-audit wording;
+it neither establishes hardware-general guarantees nor approves backend performance.
 
 [ADR 0002](adr/0002-static-browser-frontend.md) records the authorized architecture.
 [Frontend README](../frontend/README.md) defines setup, hosting and shared feature interfaces.
@@ -449,8 +458,9 @@ ordinary frontend correctness tests.
 - Empty filtered comparisons, filtered equality, and distributed coverage are correctly labeled.
 - Backend unavailable, page failure, stale cursor, and malformed response are explicit.
 - Filenames/labels containing markup render as text; clipboard/path encoding is safe.
-- Keyboard and screen-reader landmarks, visible focus, live status announcements, narrow
-  viewport, reduced motion, and high-contrast presentation receive automated/manual checks.
+- Existing keyboard/landmark/focus/live-status, narrow-viewport, reduced-motion and high-contrast
+  checks are retained as best-effort evidence. The revised owner scope requires no additional
+  accessibility/screen-reader/extended audits and does not claim assistive-technology success.
 
 ### Frontend performance evidence, not backend acceptance
 
@@ -656,16 +666,16 @@ full F11a revision/reconnect and later feature integration also run through `npm
 
 - **Implemented evidence:** deployed screen/state axe checks at desktop/320px, native keyboard
   and delayed-request behavior, bounded DOM/heap and instrumented Chromium measurements; see
-  [F11b evidence and required owner checklist](../frontend/tests/F11b-acceptance.md).
-  This package is **not accepted**: target hardware/budgets need owner agreement and subsequent
-  measurement; the required manual screen-reader checklist needs actual tester feedback or an
-  explicit unresolved release deferral. Automated checks do not establish spoken usability.
+  [F11b approved evidence and scope](../frontend/tests/F11b-acceptance.md).
+  **Complete under the revised owner scope:** approved profile/budgets passed in all 20 fresh
+  Chromium contexts; max/p95 and per-run evidence are committed. Accessibility remains best
+  effort, with no additional audit or manual AT gate and no claimed screen-reader success.
 - **Prerequisites:** integrated feature screens.
-- **Scope:** keyboard/manual screen-reader audit, automated accessibility checks, narrow
-  layout, reduced motion, delayed-backend responsiveness, bounded DOM/memory review, and
-  documented measurements. Fix focused defects with feature owners.
-- **Acceptance:** no inaccessible core action, no lost typing under slow responses, and
-  agreed UI checks pass without claiming backend performance approval.
+- **Scope:** retain prior best-effort keyboard/automated accessibility/narrow-layout/reduced-motion
+  evidence; complete only delayed-backend responsiveness, bounded DOM/memory and approved repeated
+  measurements. No extended accessibility/screen-reader checks after the owner scope decision.
+- **Acceptance:** no lost typing under slow responses and agreed profile-specific UI budgets
+  pass; accessibility is best effort, without claiming assistive-technology or backend approval.
 - **Context estimate:** 40–80k.
 
 ### F12 — release handoff and final checks
@@ -729,9 +739,10 @@ scripts and unexecuted checks are not evidence of completion.
 4. Confirm the desktop-only, disableable type-to-search default. Explicit search shortcuts
    and normal controls remain available regardless of this preference.
 
-Browser support and UI measurement thresholds can be finalized during F0/F11b. Proposed
-debounce, page size/retention, and wait-message thresholds are tuning values, not approved
-backend limits. Additional features require a separate scope decision.
+F11b finalized initial Chromium-desktop support and the profile-specific UI measurement budgets
+recorded above; all 20 approved runs passed. Debounce, page size/retention and wait-message
+thresholds are UI tuning values, not approved backend limits. Additional features require a
+separate scope decision.
 
 ### Completion checklist
 
@@ -744,7 +755,8 @@ backend limits. Additional features require a separate scope decision.
 - [ ] Numeric strings, null metadata, literal paths, and date meanings remain accurate.
 - [ ] Directory browsing, comparisons, and selected management/list features meet tests.
 - [ ] Back/reload/deep links work; pagination is bounded but later results remain reachable.
-- [ ] Keyboard/accessibility/responsive and agreed UI responsiveness checks pass.
+- [x] F11b best-effort keyboard/accessibility/responsive evidence and approved profile-specific
+      UI responsiveness checks are complete under the revised owner scope (no manual AT claim).
 - [ ] Static same-origin distribution and API precedence are tested; no public-safety claim.
 - [ ] Build/test/setup commands are reproducible and known limitations are documented.
 - [ ] Remaining backend performance decisions are explicitly approved, waived for this

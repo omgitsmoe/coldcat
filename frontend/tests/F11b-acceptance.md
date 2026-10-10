@@ -1,8 +1,19 @@
-# F11b evidence and owner acceptance checklist
+# F11b approved responsiveness evidence and scope
 
-Status: automated checks and bounded fixes implemented; **F11b acceptance pending**.
-No target hardware, performance budget, supported-browser policy, manual assistive-technology
-audit, backend performance acceptance, or F12 release approval is implied.
+Status: **F11b complete within the owner's revised scope**. The approved Chromium/container
+responsiveness budgets passed in 20 fresh contexts. F12 and backend acceptance remain separate.
+
+## Owner decisions (2026-10-10)
+
+- Approved the documented measured Chromium/container profile and input/scheduling/render
+  budgets below, with 20 fresh-context runs reporting max/p95. This is **not a hardware-general
+  guarantee** or backend performance approval.
+- Initial browser support: **Chromium, desktop only**. The narrow viewport was tested on desktop
+  Chromium; it does not establish real-mobile support. Other browsers are not approved targets.
+- Accessibility is **best effort**: “don't test accessibility it's on a best-effort basis but
+  no extended checks”. No additional accessibility, manual screen-reader or extended audit work
+  is required for F11b acceptance. Earlier automated/visual evidence is retained as historical
+  evidence only. No screen-reader success or WCAG conformance is claimed.
 
 ## Reproduce (from `frontend/`, sequential browser commands)
 
@@ -10,22 +21,75 @@ audit, backend performance acceptance, or F12 release approval is implied.
 npm run check
 npm run lint
 npm run test:unit
-npm run test:e2e
-npx playwright test --config playwright.deployed.config.ts tests/real/accessibility.spec.ts
-npx playwright test tests/browser/responsiveness.spec.ts --reporter=json > /tmp/opencode/ui-evidence.json
+npm run build
+npx playwright test tests/browser/responsiveness.spec.ts --repeat-each=20 --reporter=json > /tmp/opencode/ui-evidence.json
+node scripts/summarize-responsiveness.mjs /tmp/opencode/ui-evidence.json /tmp/opencode/ui-summary.json
 ```
 
-Build before the focused deployed command if not running `test:e2e` first. The deployed audit
-uses F11a's owned disposable Go catalog/static hosting, not the workspace catalog. The timing
-test uses a built-static test host and intercepted API, not backend performance measurements.
+Only the focused responsiveness test ran after the revised owner decision; accessibility
+suites were not rerun. The timing test uses a built-static test host and intercepted API,
+not backend performance measurements. Every Playwright repetition creates a fresh isolated
+page/context; one serial worker and zero retries. The summarizer rejects missing/failed/flaky/
+skipped runs, retries, inconsistent profiles, incorrect structural bounds or budget failures.
 Playwright JSON attachments retain the full timing/heap report; default reporters may not write
 inline evidence to separate files. Suites share `test-results/`; do not run them concurrently.
 
-Verified for this change: `check` (zero errors/warnings), `lint`, 143 unit tests, all 74 mocked
+Previously verified at `78bdd22`: `check` (zero errors/warnings), `lint`, 143 unit tests, all 74 mocked
 browser tests and all 29 deployed real-browser tests (`npm run test:deployed`, 18/18 exposed
 operations). No Go race checks or backend benchmarks were run.
 
-## Behavior coverage and fixes
+Revised-scope checks: production build, 20 focused responsiveness runs, `check` (zero
+errors/warnings), `lint`, 10 focused search/traversal unit tests, and summarizer rejection probes
+for missing runs, failed runs, failed input budget and inconsistent browser profiles. No
+accessibility suites, Go race checks or backend benchmarks were rerun.
+
+## Approved repeated measurement
+
+Run began **2026-10-10 23:03:12 UTC**, duration **351.5 s**. **20/20 passed**, zero retries,
+skips or flaky results. Application sources remain at `78bdd22`; measurement instrumentation
+adds explicit budget assertions and first-input/first-render long-task window boundaries.
+The [committed evidence](evidence/f11b-responsiveness.json) records the full baseline commit,
+measurement-test SHA-256, profile, per-run input/render/body-wait vectors, long-task/GC intervals
+and heap/DOM samples. All numbers below are rounded to 0.1 ms; checks use unrounded values.
+
+P95 is **nearest rank 19 of 20 per-run worst-case values**, not a pooled-event statistic or
+population tail guarantee. Scheduling has one settled request per run.
+
+| Approved check                                            | Max (ms) | P95 (ms) | Result              |
+| --------------------------------------------------------- | -------: | -------: | ------------------- |
+| Every synchronous input span <50 ms                       |      1.3 |      1.3 | Pass                |
+| Idle final-input scheduling 200±50 ms                     |    201.1 |    200.9 | Pass; minimum 200.6 |
+| First/single 50-row response-text → rAF ≤50 ms            |     31.4 |     30.8 | Pass                |
+| Bounded accumulation (pages 2–10, up to 500 rows) ≤100 ms |     94.7 |     88.7 | Pass                |
+| No >50 ms long task in initial-input/first-render window  |        0 |        0 | Pass; none observed |
+
+All runs retained the structural request/DOM bounds: one settled initial query, twelve
+explicit page requests, no per-result/preload calls, and 0 → 50 → 500 → 50 → 50 → 0 displayed
+rows across the recorded milestones. Ten-page retained-data behavior remains covered by the
+existing traversal unit tests. Heap/DOM/CDP listeners are descriptive evidence, not byte budgets
+or leak proof. The approved budgets do not require all later traversal tasks to be <50 ms:
+later task per-run maxima had **max 65 ms / p95 61 ms**, disclosed without asserting causation.
+Mocked body wait per-run maxima were **1263.7 ms / p95 1263.2 ms**, separate from debounce/render.
+
+Exact approved profile: Playwright 1.64.0 headless Chromium **156.0.8078.4**, Linux
+**7.2.6-arch2-1**, AMD Ryzen 5 9600X; 12 exposed logical CPUs and 32,750,096,384 host memory
+bytes, container cap **4 CPU equivalents** (`cpu.max=400000 100000`) and **8 GiB**
+(`memory.max=8589934592`). Viewport **1280×720**, no CPU throttle/extensions, production static
+build, Unicode DTO fixture, 50 rows/page, 12 pages, every mock response held 1200 ms, explicit
+GC at six heap/DOM milestones. Fresh context does not imply a filesystem-cold browser/asset cache.
+
+### Measurement interpretation
+
+Input spans cover document-capture → window-bubble around synchronous app handling, not total
+input-to-paint. Response-text → next rAF includes JSON parsing, contract validation, state/DOM
+updates; it is a **pre-paint proxy**, not scan-out latency. The entire initial-input through
+first-rAF window is checked conservatively for >50 ms tasks, without claiming attribution.
+Continuation `afterLastInput` values are elapsed time since typing, not debounce samples.
+GC/CDP instrumentation is invasive; memory reports V8 used heap rather than RSS/full renderer
+memory. This bounded fixture/profile evidence is neither a large-catalog/backend benchmark nor
+a guarantee across devices/payloads. No additional accessibility checks were run.
+
+## Historical best-effort behavior coverage and fixes (`78bdd22`)
 
 - `real/accessibility.spec.ts`: 13 screen/state audits at **1280×900 and 320×900**: search,
   content, observation, contents/hash lookup, disk list/create, disk detail/edit, inventory,
@@ -50,7 +114,7 @@ operations). No Go race checks or backend benchmarks were run.
   screenshot inspection and automated keyboard exercise are **not a manual screen-reader audit**.
   Actual OS high-contrast settings, touch/input methods and other browsers remain unverified.
 
-## Recorded browser measurement (2026-10-10)
+## Historical preliminary browser measurement (before budget agreement)
 
 One instrumented sample; descriptive evidence, not p95 or acceptance. Built production assets,
 Playwright 1.64.0 headless Chromium **156.0.8078.4**, Linux **7.2.6-arch2-1**, AMD Ryzen 5 9600X,
@@ -95,45 +159,10 @@ These values are fixture-specific V8 used heap, **not RSS, full renderer memory 
 GC is invasive and may change timing. No catalog-sized preload or speculative continuation
 occurred. A small fixture and one traversal cannot establish a memory budget for every payload.
 
-## Required owner decisions (do not mark accepted until answered)
+## F12 handoff
 
-1. **Target/browser/profile:** approve the documented container/Chromium profile as the UI target,
-   or provide the actual minimum target device (CPU/RAM/OS), browser/version, viewport and throttle
-   profile. Confirm supported browsers separately; Chromium-only evidence cannot approve others.
-2. **Budget before acceptance:** proposed _for discussion_, on the approved target:
-   every measured synchronous input span <50 ms; one settled query after 200±50 ms when idle;
-   response-text → next-rAF ≤50 ms for first/single 50-row views; ≤100 ms for the explicitly bounded
-   500-row accumulation view; no >50 ms task attributable to initial input/first 50-row render.
-   Later accumulation tasks above 50 ms are disclosed, not silently waived. Keep structural
-   limits (10 pages, default ≤500 displayed rows, ≤50 in single-page mode, no per-result/preload
-   calls). Memory remains descriptive unless an owner specifies a payload/profile and byte budget.
-   Decide repetitions/statistic (suggest 20 fresh-context runs reporting max and p95), then rerun
-   **after** agreement. Current evidence does not retroactively approve this proposal.
-3. **Required manual assistive-technology check:** provide a tester and preferred screen-reader/
-   browser/OS, or explicitly defer it as an unresolved release limitation. Optional extra device,
-   touch/IME and visual audits can wait for feedback; the plan's manual screen-reader audit cannot
-   be claimed done without a real tester. Checklist:
-   - Landmarks/headings identify Search, navigation, content identity, locations and directory.
-   - Labels, scope/history, literal path/hash/date meanings and table headers are spoken clearly
-     at desktop and narrow layouts; each row's action can be distinguished in context.
-   - Keyboard-only search → content → locations → observation → directory and Back/return works;
-     focus is visible/meaningful, no trap, no shortcut interfering with reader navigation. Try
-     disabling type-to-search; native controls remain sufficient.
-   - Loading/extended wait, loaded/page count, empty, failure, stale cursor and clipboard feedback
-     are announced once/usefully without losing typing/focus or reading stale results as current.
-   - Disk create/edit labels, errors, conflict/draft retention and uncertain-write reconciliation
-     are reachable/understandable; do not resubmit an uncertain write blindly.
-   - Rule add/remove/Apply/Cancel and comparison results are understandable; historical sources,
-     filtered equality and distributed coverage do not sound like a complete backup guarantee.
-     Return AT/browser/OS versions, pass/fail per item, failing route/action, exact spoken behavior,
-     expected behavior and reproducible steps. Actual speech/focus feedback may require further
-     bounded fixes even though axe passes.
-
-Suggested required prompt to owner:
-
-> Which minimum hardware/browser/profile should F11b target, and do you agree to the proposed
-> input/scheduling/50-row/500-row budgets and 20-run max/p95 protocol above (or specify changes)?
-> Who can run the screen-reader checklist, on which AT/browser/OS? If unavailable, do you want
-> to explicitly defer that required manual audit as an unresolved release limitation? Optional
-> extra device/visual checks can wait. F11b remains pending until these decisions and the agreed
-> checks are complete; this does not approve backend performance or start F12.
+No F11b owner decision remains outstanding under the revised scope. F12 can consume the approved
+Chromium-desktop statement, best-effort accessibility limitation and measured-profile evidence.
+F12's final release checks and independent backend gate decisions are **not performed or closed**
+by this package. Do not reintroduce manual AT acceptance as an F11b prerequisite or describe
+historical automated checks as screen-reader success.

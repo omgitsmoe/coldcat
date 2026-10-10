@@ -1,0 +1,2218 @@
+{
+  "schema": 1,
+  "applicationBaseline": "78bdd222efdf3f53b97855c14d5406cadfc8a96e",
+  "measurementTestSHA256": "f4f7983999307ad1cdec09c7f80066fbe5ed840b44b16ff2ef078e51401ba950",
+  "startedAt": "2026-10-10T23:03:12.223Z",
+  "durationMS": 351465.156,
+  "runs": 20,
+  "freshContextPerRun": "Playwright default isolated page/context fixture; serial worker, no retries",
+  "browser": "156.0.8078.4",
+  "host": {
+    "platform": "linux",
+    "release": "7.2.6-arch2-1",
+    "cpu": "AMD Ryzen 5 9600X 6-Core Processor",
+    "logicalCPUs": 12,
+    "totalMemory": 32750096384
+  },
+  "container": { "cpuMax": "400000 100000", "memoryMax": "8589934592" },
+  "profile": {
+    "headless": true,
+    "viewport": { "width": 1280, "height": 720 },
+    "cpuThrottle": "none",
+    "backend": "intercepted 1200ms delay",
+    "pageSize": 50,
+    "pages": 12,
+    "forcedGC": true
+  },
+  "statistic": "Nearest-rank p95 across 20 per-run worst-case values (rank 19); scheduling is one value per run",
+  "units": "Timing milliseconds; heap bytes; DOM counters from Chromium CDP",
+  "approvedBudgets": {
+    "inputMaxExclusiveMS": 50,
+    "schedulingRangeMS": [150, 250],
+    "singleViewMaxMS": 50,
+    "accumulationMaxMS": 100,
+    "initialLongTaskMaxMS": 50
+  },
+  "budgetResult": "20/20 passed every budget; no retries, skipped runs or flaky results",
+  "summary": {
+    "inputMax": { "min": 0.9000000059604645, "max": 1.3000000044703484, "p95": 1.3000000044703484 },
+    "scheduling": {
+      "min": 200.60000000149012,
+      "max": 201.10000000149012,
+      "p95": 200.89999999850988
+    },
+    "firstRender": {
+      "min": 21.899999998509884,
+      "max": 31.399999998509884,
+      "p95": 30.799999997019768
+    },
+    "singleViewMax": {
+      "min": 21.899999998509884,
+      "max": 31.399999998509884,
+      "p95": 30.799999997019768
+    },
+    "accumulationMax": {
+      "min": 74.10000000149012,
+      "max": 94.69999999552965,
+      "p95": 88.69999999552965
+    },
+    "bodyWaitMax": {
+      "min": 1257.6999999955297,
+      "max": 1263.7000000029802,
+      "p95": 1263.1999999955297
+    },
+    "initialLongTaskMax": { "min": 0, "max": 0, "p95": 0 },
+    "traversalLongTaskMax": { "min": 56, "max": 65, "p95": 61 }
+  },
+  "measurements": [
+    {
+      "repeat": 1,
+      "metrics": {
+        "inputMax": 1.1000000014901161,
+        "scheduling": 200.70000000298023,
+        "firstRender": 27.600000001490116,
+        "singleViewMax": 27.600000001490116,
+        "accumulationMax": 80,
+        "bodyWaitMax": 1260.8000000044703,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 57
+      },
+      "handlers": [
+        1.1000000014901161, 0.5, 0.7000000029802322, 0.6000000014901161, 0.5, 0.3999999985098839
+      ],
+      "renders": [
+        27.600000001490116, 24.399999998509884, 29.100000001490116, 33.600000001490116,
+        41.899999998509884, 43.400000005960464, 51.69999999552965, 50.69999999552965,
+        54.19999999552965, 80, 18.69999999552965, 14.199999995529652
+      ],
+      "responseBodyWaits": [
+        1203.0999999940395, 1213.3000000044703, 1220.3999999985099, 1225, 1230.6000000014901, 1241,
+        1245.3000000044703, 1248.2000000029802, 1245.6000000014901, 1256.4000000059605,
+        1260.8000000044703, 1211.6000000014901
+      ],
+      "initialWindow": { "start": 56.600000001490116, "end": 1596 },
+      "longTasks": [
+        { "start": 12836.5, "duration": 53 },
+        { "start": 14093.30000000447, "duration": 55 },
+        { "start": 14302.89999999851, "duration": 57 }
+      ],
+      "gcIntervals": [
+        { "start": 48, "end": 52 },
+        { "start": 1971.3999999985099, "end": 1979.6000000014901 },
+        { "start": 14184.89999999851, "end": 14254.39999999851 },
+        { "start": 15885, "end": 15918.30000000447 },
+        { "start": 17328.10000000149, "end": 17339.89999999851 },
+        { "start": 17359.20000000298, "end": 17366 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2303656,
+            "totalSize": 3215360,
+            "embedderHeapUsedSize": 1309024,
+            "backingStorageSize": 166735
+          },
+          "dom": { "documents": 2, "nodes": 557, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3417000,
+            "totalSize": 4263936,
+            "embedderHeapUsedSize": 2329248,
+            "backingStorageSize": 169526
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11117804,
+            "totalSize": 12652544,
+            "embedderHeapUsedSize": 18175632,
+            "backingStorageSize": 172238
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4610320,
+            "totalSize": 7933952,
+            "embedderHeapUsedSize": 5051016,
+            "backingStorageSize": 171756
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4635348,
+            "totalSize": 5836800,
+            "embedderHeapUsedSize": 2595536,
+            "backingStorageSize": 170723
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3680392,
+            "totalSize": 4788224,
+            "embedderHeapUsedSize": 969824,
+            "backingStorageSize": 169380
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "metrics": {
+        "inputMax": 1.0999999940395355,
+        "scheduling": 200.69999999552965,
+        "firstRender": 31.399999998509884,
+        "singleViewMax": 31.399999998509884,
+        "accumulationMax": 88.5,
+        "bodyWaitMax": 1261.5,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 60
+      },
+      "handlers": [
+        1.0999999940395355, 0.5, 0.7999999970197678, 0.5, 0.7999999970197678, 0.3999999985098839
+      ],
+      "renders": [
+        31.399999998509884, 24.80000000447035, 31, 36.600000001490116, 43.599999994039536,
+        46.70000000298023, 55.600000001490116, 62.70000000298023, 71.79999999701977, 88.5,
+        21.399999998509884, 14.899999998509884
+      ],
+      "responseBodyWaits": [
+        1203.7000000029802, 1215.1999999955297, 1219.8000000044703, 1226.6999999955297,
+        1228.9000000059605, 1237.3999999985099, 1245.8999999985099, 1240.3999999985099,
+        1253.3999999985099, 1250.6000000014901, 1261.5, 1211
+      ],
+      "initialWindow": { "start": 73.70000000298023, "end": 1617 },
+      "longTasks": [
+        { "start": 11270.79999999702, "duration": 52 },
+        { "start": 12649.89999999851, "duration": 60 },
+        { "start": 14046.89999999851, "duration": 59 },
+        { "start": 14263.20000000298, "duration": 58 }
+      ],
+      "gcIntervals": [
+        { "start": 65.10000000149012, "end": 69.39999999850988 },
+        { "start": 1986.7999999970198, "end": 1995.6000000014901 },
+        { "start": 14142.60000000149, "end": 14206.79999999702 },
+        { "start": 15845.79999999702, "end": 15879 },
+        { "start": 17284.5, "end": 17296.20000000298 },
+        { "start": 17317.70000000298, "end": 17323.29999999702 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2487220,
+            "totalSize": 3215360,
+            "embedderHeapUsedSize": 775664,
+            "backingStorageSize": 166948
+          },
+          "dom": { "documents": 2, "nodes": 556, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3595808,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 2396448,
+            "backingStorageSize": 169727
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11258668,
+            "totalSize": 12390400,
+            "embedderHeapUsedSize": 18702760,
+            "backingStorageSize": 172434
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4587332,
+            "totalSize": 8196096,
+            "embedderHeapUsedSize": 5052216,
+            "backingStorageSize": 171810
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4600948,
+            "totalSize": 5574656,
+            "embedderHeapUsedSize": 2596320,
+            "backingStorageSize": 170718
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3661400,
+            "totalSize": 4788224,
+            "embedderHeapUsedSize": 970040,
+            "backingStorageSize": 169375
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 3,
+      "metrics": {
+        "inputMax": 1.1000000014901161,
+        "scheduling": 200.69999999552965,
+        "firstRender": 28.799999997019768,
+        "singleViewMax": 28.799999997019768,
+        "accumulationMax": 75.5,
+        "bodyWaitMax": 1262.6000000014901,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 60
+      },
+      "handlers": [
+        1.1000000014901161, 0.6000000014901161, 0.7000000029802322, 0.8000000044703484, 0.5,
+        0.3999999985098839
+      ],
+      "renders": [
+        28.799999997019768, 25, 30.600000001490116, 30.900000005960464, 34.899999998509884,
+        37.20000000298023, 49.5, 51.399999998509884, 55.79999999701977, 75.5, 20.5,
+        11.899999998509884
+      ],
+      "responseBodyWaits": [
+        1204.4000000059605, 1214.5, 1217.6999999955297, 1225.6999999955297, 1225.3000000044703,
+        1231.7000000029802, 1239.1000000014901, 1240.5, 1246.6000000014901, 1250.7000000029802,
+        1262.6000000014901, 1210
+      ],
+      "initialWindow": { "start": 57.5, "end": 1600.8999999985099 },
+      "longTasks": [
+        { "start": 14014.10000000149, "duration": 51 },
+        { "start": 14212.79999999702, "duration": 60 }
+      ],
+      "gcIntervals": [
+        { "start": 48.600000001490116, "end": 52.899999998509884 },
+        { "start": 1974, "end": 1982.6000000014901 },
+        { "start": 14116.19999999553, "end": 14164.29999999702 },
+        { "start": 15809.60000000149, "end": 15844.29999999702 },
+        { "start": 17245.29999999702, "end": 17255.60000000149 },
+        { "start": 17283.39999999851, "end": 17289.29999999702 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2303732,
+            "totalSize": 2953216,
+            "embedderHeapUsedSize": 727704,
+            "backingStorageSize": 166735
+          },
+          "dom": { "documents": 2, "nodes": 556, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3416960,
+            "totalSize": 4263936,
+            "embedderHeapUsedSize": 2327608,
+            "backingStorageSize": 169526
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11144748,
+            "totalSize": 12128256,
+            "embedderHeapUsedSize": 18173008,
+            "backingStorageSize": 172297
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4605276,
+            "totalSize": 8196096,
+            "embedderHeapUsedSize": 5049600,
+            "backingStorageSize": 171815
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4633856,
+            "totalSize": 5836800,
+            "embedderHeapUsedSize": 2593632,
+            "backingStorageSize": 170723
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3678848,
+            "totalSize": 4788224,
+            "embedderHeapUsedSize": 968536,
+            "backingStorageSize": 169380
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 4,
+      "metrics": {
+        "inputMax": 1.2999999970197678,
+        "scheduling": 200.60000000149012,
+        "firstRender": 28.200000002980232,
+        "singleViewMax": 28.200000002980232,
+        "accumulationMax": 79.89999999850988,
+        "bodyWaitMax": 1260.8000000044703,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 58
+      },
+      "handlers": [
+        1.2999999970197678, 0.5999999940395355, 0.8999999985098839, 0.5, 0.6000000014901161,
+        0.3999999985098839
+      ],
+      "renders": [
+        28.200000002980232, 20.600000001490116, 29.700000002980232, 34, 36.100000001490116,
+        39.70000000298023, 43.5, 53, 54.5, 79.89999999850988, 19.5, 13.200000002980232
+      ],
+      "responseBodyWaits": [
+        1203.7999999970198, 1213.0999999940395, 1217.1000000014901, 1222.7000000029802,
+        1226.8999999985099, 1231.8999999985099, 1239.7000000029802, 1242.0999999940395,
+        1247.9000000059605, 1256.5, 1260.8000000044703, 1214.2000000029802
+      ],
+      "initialWindow": { "start": 77.60000000149012, "end": 1618.6000000014901 },
+      "longTasks": [
+        { "start": 12780.10000000149, "duration": 52 },
+        { "start": 14037, "duration": 55 },
+        { "start": 14247.19999999553, "duration": 58 }
+      ],
+      "gcIntervals": [
+        { "start": 68.79999999701977, "end": 73.39999999850988 },
+        { "start": 1992.7999999970198, "end": 2000.6000000014901 },
+        { "start": 14127.69999999553, "end": 14193.39999999851 },
+        { "start": 15830.89999999851, "end": 15865.60000000149 },
+        { "start": 17266.39999999851, "end": 17277.89999999851 },
+        { "start": 17300.79999999702, "end": 17306 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2487220,
+            "totalSize": 3215360,
+            "embedderHeapUsedSize": 775664,
+            "backingStorageSize": 166948
+          },
+          "dom": { "documents": 2, "nodes": 556, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3595804,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 2395912,
+            "backingStorageSize": 169727
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11236744,
+            "totalSize": 12914688,
+            "embedderHeapUsedSize": 18652848,
+            "backingStorageSize": 172434
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4609896,
+            "totalSize": 8196096,
+            "embedderHeapUsedSize": 5050720,
+            "backingStorageSize": 171810
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4618920,
+            "totalSize": 5836800,
+            "embedderHeapUsedSize": 2595032,
+            "backingStorageSize": 170718
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3679444,
+            "totalSize": 4788224,
+            "embedderHeapUsedSize": 969288,
+            "backingStorageSize": 169375
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 5,
+      "metrics": {
+        "inputMax": 0.9000000059604645,
+        "scheduling": 200.89999999850988,
+        "firstRender": 25.899999998509884,
+        "singleViewMax": 25.899999998509884,
+        "accumulationMax": 94.69999999552965,
+        "bodyWaitMax": 1262,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 65
+      },
+      "handlers": [
+        0.9000000059604645, 0.6000000014901161, 0.6999999955296516, 0.6000000014901161, 0.5, 0.5
+      ],
+      "renders": [
+        25.899999998509884, 24.100000001490116, 31.200000002980232, 33.69999999552965,
+        35.29999999701977, 37.69999999552965, 54.899999998509884, 62.79999999701977,
+        67.39999999850988, 94.69999999552965, 21.399999998509884, 14
+      ],
+      "responseBodyWaits": [
+        1203.2000000029802, 1212.3999999985099, 1220.0999999940395, 1226.8000000044703,
+        1230.9000000059605, 1231.1000000014901, 1239.1000000014901, 1242.6000000014901,
+        1244.2000000029802, 1256, 1262, 1209.8999999985099
+      ],
+      "initialWindow": { "start": 54.79999999701977, "end": 1592.3999999985099 },
+      "longTasks": [
+        { "start": 11263.5, "duration": 52 },
+        { "start": 12641.20000000298, "duration": 56 },
+        { "start": 12770.5, "duration": 52 },
+        { "start": 14026.70000000298, "duration": 65 },
+        { "start": 14253.89999999851, "duration": 59 }
+      ],
+      "gcIntervals": [
+        { "start": 45.29999999701977, "end": 50.399999998509884 },
+        { "start": 1967, "end": 1973.2000000029802 },
+        { "start": 14128, "end": 14199.79999999702 },
+        { "start": 15847.39999999851, "end": 15879.20000000298 },
+        { "start": 17272.10000000149, "end": 17282.70000000298 },
+        { "start": 17309.39999999851, "end": 17315.79999999702 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2303772,
+            "totalSize": 2953216,
+            "embedderHeapUsedSize": 734896,
+            "backingStorageSize": 166735
+          },
+          "dom": { "documents": 2, "nodes": 557, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3417228,
+            "totalSize": 4263936,
+            "embedderHeapUsedSize": 2327880,
+            "backingStorageSize": 169585
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11117964,
+            "totalSize": 12390400,
+            "embedderHeapUsedSize": 18705128,
+            "backingStorageSize": 172356
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4606924,
+            "totalSize": 8196096,
+            "embedderHeapUsedSize": 5050976,
+            "backingStorageSize": 171815
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4635204,
+            "totalSize": 5836800,
+            "embedderHeapUsedSize": 2595136,
+            "backingStorageSize": 170723
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3680260,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 970040,
+            "backingStorageSize": 169380
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 6,
+      "metrics": {
+        "inputMax": 1.2000000029802322,
+        "scheduling": 200.80000000447035,
+        "firstRender": 28.80000000447035,
+        "singleViewMax": 28.80000000447035,
+        "accumulationMax": 76.89999999850988,
+        "bodyWaitMax": 1261.5,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 58
+      },
+      "handlers": [
+        1.2000000029802322, 0.5999999940395355, 0.5999999940395355, 0.5, 0.3999999985098839,
+        0.3999999985098839
+      ],
+      "renders": [
+        28.80000000447035, 20.30000000447035, 32.20000000298023, 34.600000001490116,
+        41.70000000298023, 44.899999998509884, 43.600000001490116, 51.30000000447035,
+        54.79999999701977, 76.89999999850988, 19.700000002980232, 11.400000005960464
+      ],
+      "responseBodyWaits": [
+        1203.5999999940395, 1214.2999999970198, 1215.2999999970198, 1226.8999999985099,
+        1231.5999999940395, 1237.4000000059605, 1246.7000000029802, 1240.1999999955297, 1246.5,
+        1261.5, 1259.7000000029802, 1209.8999999985099
+      ],
+      "initialWindow": { "start": 75.89999999850988, "end": 1614.6000000014901 },
+      "longTasks": [
+        { "start": 12810.29999999702, "duration": 58 },
+        { "start": 14072.10000000149, "duration": 51 },
+        { "start": 14293.70000000298, "duration": 57 }
+      ],
+      "gcIntervals": [
+        { "start": 66.89999999850988, "end": 71.70000000298023 },
+        { "start": 1985.8999999985099, "end": 1994.1000000014901 },
+        { "start": 14162.70000000298, "end": 14235.29999999702 },
+        { "start": 15890, "end": 15924.89999999851 },
+        { "start": 17323.39999999851, "end": 17332.20000000298 },
+        { "start": 17346.89999999851, "end": 17352 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2493068,
+            "totalSize": 3215360,
+            "embedderHeapUsedSize": 775680,
+            "backingStorageSize": 166948
+          },
+          "dom": { "documents": 2, "nodes": 556, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3601924,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 2396896,
+            "backingStorageSize": 169727
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11244808,
+            "totalSize": 12390400,
+            "embedderHeapUsedSize": 18208720,
+            "backingStorageSize": 172434
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4610100,
+            "totalSize": 7409664,
+            "embedderHeapUsedSize": 5051688,
+            "backingStorageSize": 171810
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4622680,
+            "totalSize": 5574656,
+            "embedderHeapUsedSize": 2595696,
+            "backingStorageSize": 170718
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3683200,
+            "totalSize": 4788224,
+            "embedderHeapUsedSize": 969416,
+            "backingStorageSize": 169375
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 7,
+      "metrics": {
+        "inputMax": 1.3000000044703484,
+        "scheduling": 200.79999999701977,
+        "firstRender": 30.5,
+        "singleViewMax": 30.5,
+        "accumulationMax": 83.70000000298023,
+        "bodyWaitMax": 1263.1999999955297,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 59
+      },
+      "handlers": [
+        1.3000000044703484, 0.6000000014901161, 0.8000000044703484, 0.6999999955296516, 0.5, 0.5
+      ],
+      "renders": [
+        30.5, 24.200000002980232, 30.5, 34.600000001490116, 35.899999998509884, 38.20000000298023,
+        51.600000001490116, 53.100000001490116, 55.600000001490116, 83.70000000298023,
+        21.80000000447035, 11.900000005960464
+      ],
+      "responseBodyWaits": [
+        1203.7000000029802, 1213.1999999955297, 1218.3000000044703, 1221.3999999985099,
+        1225.9000000059605, 1230.8999999985099, 1237.5, 1240.8999999985099, 1247.8999999985099,
+        1251.3999999985099, 1263.1999999955297, 1209.8999999985099
+      ],
+      "initialWindow": { "start": 76.10000000149012, "end": 1619.8000000044703 },
+      "longTasks": [
+        { "start": 14000, "duration": 58 },
+        { "start": 14198, "duration": 59 }
+      ],
+      "gcIntervals": [
+        { "start": 67, "end": 71.5 },
+        { "start": 1991.6000000014901, "end": 1999.6000000014901 },
+        { "start": 14089.60000000149, "end": 14153.90000000596 },
+        { "start": 15782.30000000447, "end": 15817.10000000149 },
+        { "start": 17215.40000000596, "end": 17224.40000000596 },
+        { "start": 17251.70000000298, "end": 17257 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2487220,
+            "totalSize": 3477504,
+            "embedderHeapUsedSize": 775664,
+            "backingStorageSize": 166948
+          },
+          "dom": { "documents": 2, "nodes": 556, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3594932,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 2395592,
+            "backingStorageSize": 169727
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11210616,
+            "totalSize": 12652544,
+            "embedderHeapUsedSize": 18612272,
+            "backingStorageSize": 172434
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4607136,
+            "totalSize": 7933952,
+            "embedderHeapUsedSize": 5051032,
+            "backingStorageSize": 171810
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4621180,
+            "totalSize": 5574656,
+            "embedderHeapUsedSize": 2595912,
+            "backingStorageSize": 170718
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3681700,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 969632,
+            "backingStorageSize": 169375
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 8,
+      "metrics": {
+        "inputMax": 1,
+        "scheduling": 200.60000000149012,
+        "firstRender": 30.799999997019768,
+        "singleViewMax": 30.799999997019768,
+        "accumulationMax": 76,
+        "bodyWaitMax": 1262.8999999985099,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 59
+      },
+      "handlers": [1, 0.5, 0.5999999940395355, 0.7999999970197678, 0.5, 0.3999999985098839],
+      "renders": [
+        30.799999997019768, 24.19999999552965, 29.899999998509884, 33.899999998509884,
+        43.20000000298023, 38.399999998509884, 47.30000000447035, 49.80000000447035,
+        56.899999998509884, 76, 22, 11.299999997019768
+      ],
+      "responseBodyWaits": [
+        1203.5, 1213.8000000044703, 1216.6000000014901, 1221.7999999970198, 1227,
+        1233.9000000059605, 1240.5, 1241.5, 1248.1999999955297, 1254.7000000029802,
+        1262.8999999985099, 1210.7000000029802
+      ],
+      "initialWindow": { "start": 53.100000001490116, "end": 1595.3999999985099 },
+      "longTasks": [
+        { "start": 12746.89999999851, "duration": 51 },
+        { "start": 14001.79999999702, "duration": 51 },
+        { "start": 14213.60000000149, "duration": 59 }
+      ],
+      "gcIntervals": [
+        { "start": 44.600000001490116, "end": 48.899999998509884 },
+        { "start": 1967.8999999985099, "end": 1974.5 },
+        { "start": 14092.60000000149, "end": 14156.5 },
+        { "start": 15812.79999999702, "end": 15846.69999999553 },
+        { "start": 17248.10000000149, "end": 17258.29999999702 },
+        { "start": 17283.5, "end": 17288.19999999553 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2303772,
+            "totalSize": 2953216,
+            "embedderHeapUsedSize": 1309952,
+            "backingStorageSize": 166735
+          },
+          "dom": { "documents": 2, "nodes": 557, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3416124,
+            "totalSize": 4263936,
+            "embedderHeapUsedSize": 2328136,
+            "backingStorageSize": 169526
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11112388,
+            "totalSize": 12652544,
+            "embedderHeapUsedSize": 18658888,
+            "backingStorageSize": 172238
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4608308,
+            "totalSize": 7933952,
+            "embedderHeapUsedSize": 5050088,
+            "backingStorageSize": 171756
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4621480,
+            "totalSize": 5312512,
+            "embedderHeapUsedSize": 2594480,
+            "backingStorageSize": 170723
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3681888,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 968768,
+            "backingStorageSize": 169380
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 9,
+      "metrics": {
+        "inputMax": 1.0999999940395355,
+        "scheduling": 200.70000000298023,
+        "firstRender": 27.399999998509884,
+        "singleViewMax": 27.399999998509884,
+        "accumulationMax": 75.29999999701977,
+        "bodyWaitMax": 1260.9000000059605,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 57
+      },
+      "handlers": [
+        1.0999999940395355, 0.6000000014901161, 0.7999999970197678, 0.5, 0.4000000059604645,
+        0.6000000014901161
+      ],
+      "renders": [
+        27.399999998509884, 19.599999994039536, 25.200000002980232, 30.200000002980232,
+        35.70000000298023, 42.600000001490116, 47.100000001490116, 54.70000000298023,
+        52.79999999701977, 75.29999999701977, 19.69999999552965, 11.5
+      ],
+      "responseBodyWaits": [
+        1204, 1211.6000000014901, 1215.6000000014901, 1221.5, 1225.7999999970198,
+        1231.5999999940395, 1239.1999999955297, 1241.8999999985099, 1244.3999999985099,
+        1256.1000000014901, 1260.9000000059605, 1211.1000000014901
+      ],
+      "initialWindow": { "start": 52.70000000298023, "end": 1591.6000000014901 },
+      "longTasks": [
+        { "start": 12729.10000000149, "duration": 53 },
+        { "start": 13985.5, "duration": 50 },
+        { "start": 14195.79999999702, "duration": 57 }
+      ],
+      "gcIntervals": [
+        { "start": 44.5, "end": 48.70000000298023 },
+        { "start": 1965.7000000029802, "end": 1973.3999999985099 },
+        { "start": 14074.5, "end": 14144.60000000149 },
+        { "start": 15785.70000000298, "end": 15821.60000000149 },
+        { "start": 17227.79999999702, "end": 17237 },
+        { "start": 17249.10000000149, "end": 17254.10000000149 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2303772,
+            "totalSize": 2953216,
+            "embedderHeapUsedSize": 1311456,
+            "backingStorageSize": 166735
+          },
+          "dom": { "documents": 2, "nodes": 557, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3417012,
+            "totalSize": 4263936,
+            "embedderHeapUsedSize": 2325896,
+            "backingStorageSize": 169526
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11132716,
+            "totalSize": 12390400,
+            "embedderHeapUsedSize": 18640536,
+            "backingStorageSize": 172297
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4621864,
+            "totalSize": 7933952,
+            "embedderHeapUsedSize": 5049992,
+            "backingStorageSize": 171815
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4634388,
+            "totalSize": 5836800,
+            "embedderHeapUsedSize": 2594224,
+            "backingStorageSize": 170723
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3679592,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 968512,
+            "backingStorageSize": 169380
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 10,
+      "metrics": {
+        "inputMax": 1.2000000029802322,
+        "scheduling": 200.70000000298023,
+        "firstRender": 25.700000002980232,
+        "singleViewMax": 25.700000002980232,
+        "accumulationMax": 77.29999999701977,
+        "bodyWaitMax": 1263.7000000029802,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 60
+      },
+      "handlers": [
+        1.2000000029802322, 0.7000000029802322, 0.6999999955296516, 0.5999999940395355, 0.5, 0.5
+      ],
+      "renders": [
+        25.700000002980232, 19.700000002980232, 29.299999997019768, 30.299999997019768,
+        35.600000001490116, 38.100000001490116, 47.399999998509884, 55.599999994039536,
+        55.20000000298023, 77.29999999701977, 20.19999999552965, 11.600000001490116
+      ],
+      "responseBodyWaits": [
+        1203.3999999985099, 1210.7999999970198, 1215.9000000059605, 1221.1000000014901,
+        1226.8999999985099, 1231.5, 1238.8999999985099, 1242.1000000014901, 1250.6999999955297,
+        1255.3999999985099, 1263.7000000029802, 1210.3999999985099
+      ],
+      "initialWindow": { "start": 76.69999999552965, "end": 1613.6000000014901 },
+      "longTasks": [
+        { "start": 12744.79999999702, "duration": 52 },
+        { "start": 14000.39999999851, "duration": 50 },
+        { "start": 14211.5, "duration": 60 }
+      ],
+      "gcIntervals": [
+        { "start": 67.5, "end": 72.29999999701977 },
+        { "start": 1990.7999999970198, "end": 1997.3999999985099 },
+        { "start": 14090.29999999702, "end": 14154 },
+        { "start": 15816.60000000149, "end": 15850.89999999851 },
+        { "start": 17247.89999999851, "end": 17258.10000000149 },
+        { "start": 17282.29999999702, "end": 17287.60000000149 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2487212,
+            "totalSize": 3215360,
+            "embedderHeapUsedSize": 775664,
+            "backingStorageSize": 166948
+          },
+          "dom": { "documents": 2, "nodes": 556, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3595812,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 2396488,
+            "backingStorageSize": 169727
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11236044,
+            "totalSize": 12390400,
+            "embedderHeapUsedSize": 18688000,
+            "backingStorageSize": 172434
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4583236,
+            "totalSize": 7671808,
+            "embedderHeapUsedSize": 5051048,
+            "backingStorageSize": 171810
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4596832,
+            "totalSize": 5836800,
+            "embedderHeapUsedSize": 2595568,
+            "backingStorageSize": 170718
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3657368,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 969288,
+            "backingStorageSize": 169375
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 11,
+      "metrics": {
+        "inputMax": 1.3000000044703484,
+        "scheduling": 200.80000000447035,
+        "firstRender": 26.400000005960464,
+        "singleViewMax": 26.400000005960464,
+        "accumulationMax": 77.20000000298023,
+        "bodyWaitMax": 1261.8999999985099,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 58
+      },
+      "handlers": [
+        1.3000000044703484, 0.5, 1, 0.6000000014901161, 0.6000000014901161, 0.6000000014901161
+      ],
+      "renders": [
+        26.400000005960464, 19, 25.100000001490116, 30.80000000447035, 34.600000001490116,
+        40.80000000447035, 48.899999998509884, 49.70000000298023, 55.69999999552965,
+        77.20000000298023, 19.399999998509884, 12.800000004470348
+      ],
+      "responseBodyWaits": [
+        1203.5999999940395, 1211.7999999970198, 1215.7999999970198, 1221.5, 1226.5,
+        1232.1999999955297, 1237.1000000014901, 1241.7999999970198, 1248.1000000014901,
+        1252.7999999970198, 1261.8999999985099, 1209.2999999970198
+      ],
+      "initialWindow": { "start": 76.89999999850988, "end": 1615.8000000044703 },
+      "longTasks": [{ "start": 14209.30000000447, "duration": 58 }],
+      "gcIntervals": [
+        { "start": 67.10000000149012, "end": 72.10000000149012 },
+        { "start": 1990.2000000029802, "end": 1996.7000000029802 },
+        { "start": 14092.60000000149, "end": 14159.39999999851 },
+        { "start": 15827.39999999851, "end": 15861.80000000447 },
+        { "start": 17264.20000000298, "end": 17273.20000000298 },
+        { "start": 17296.70000000298, "end": 17301.89999999851 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2493068,
+            "totalSize": 3215360,
+            "embedderHeapUsedSize": 775680,
+            "backingStorageSize": 166948
+          },
+          "dom": { "documents": 2, "nodes": 556, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3601656,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 2395816,
+            "backingStorageSize": 169727
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11225524,
+            "totalSize": 12390400,
+            "embedderHeapUsedSize": 18208296,
+            "backingStorageSize": 172493
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4582440,
+            "totalSize": 7671808,
+            "embedderHeapUsedSize": 5049448,
+            "backingStorageSize": 171869
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4596768,
+            "totalSize": 5574656,
+            "embedderHeapUsedSize": 2594168,
+            "backingStorageSize": 170718
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3657300,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 968016,
+            "backingStorageSize": 169375
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 12,
+      "metrics": {
+        "inputMax": 1.2000000029802322,
+        "scheduling": 200.89999999850988,
+        "firstRender": 23.200000002980232,
+        "singleViewMax": 23.200000002980232,
+        "accumulationMax": 74.10000000149012,
+        "bodyWaitMax": 1259,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 56
+      },
+      "handlers": [
+        1.2000000029802322, 0.5, 0.8000000044703484, 0.6000000014901161, 0.5, 0.3999999985098839
+      ],
+      "renders": [
+        23.200000002980232, 22.600000001490116, 29.799999997019768, 31.899999998509884,
+        37.20000000298023, 37.399999998509884, 44.69999999552965, 50.399999998509884,
+        56.100000001490116, 74.10000000149012, 20.399999998509884, 11.799999997019768
+      ],
+      "responseBodyWaits": [
+        1203.7999999970198, 1212.2000000029802, 1215.3999999985099, 1221.5, 1226, 1230, 1237.5,
+        1240.3000000044703, 1246.8999999985099, 1251.5999999940395, 1259, 1209.5
+      ],
+      "initialWindow": { "start": 77.5, "end": 1615.2000000029802 },
+      "longTasks": [{ "start": 14222, "duration": 56 }],
+      "gcIntervals": [
+        { "start": 68.5, "end": 73.10000000149012 },
+        { "start": 1992.5, "end": 1999.9000000059605 },
+        { "start": 14113.30000000447, "end": 14178.30000000447 },
+        { "start": 15825.90000000596, "end": 15861.10000000149 },
+        { "start": 17259.5, "end": 17268.60000000149 },
+        { "start": 17292.80000000447, "end": 17298.10000000149 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2487308,
+            "totalSize": 3215360,
+            "embedderHeapUsedSize": 775664,
+            "backingStorageSize": 166948
+          },
+          "dom": { "documents": 2, "nodes": 556, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3595892,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 2396160,
+            "backingStorageSize": 169727
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11232048,
+            "totalSize": 12390400,
+            "embedderHeapUsedSize": 18204896,
+            "backingStorageSize": 172405
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4609608,
+            "totalSize": 7671808,
+            "embedderHeapUsedSize": 5050504,
+            "backingStorageSize": 171781
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4618592,
+            "totalSize": 5574656,
+            "embedderHeapUsedSize": 2595696,
+            "backingStorageSize": 170718
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3679128,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 968456,
+            "backingStorageSize": 169375
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 13,
+      "metrics": {
+        "inputMax": 1.0999999940395355,
+        "scheduling": 200.70000000298023,
+        "firstRender": 25.899999998509884,
+        "singleViewMax": 25.899999998509884,
+        "accumulationMax": 82.69999999552965,
+        "bodyWaitMax": 1262.7000000029802,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 60
+      },
+      "handlers": [
+        1.0999999940395355, 0.8000000044703484, 0.7999999970197678, 0.5999999940395355, 0.5, 0.5
+      ],
+      "renders": [
+        25.899999998509884, 23.69999999552965, 27.80000000447035, 31.799999997019768,
+        34.29999999701977, 37.70000000298023, 46.29999999701977, 50.600000001490116,
+        54.79999999701977, 82.69999999552965, 19.5, 11.799999997019768
+      ],
+      "responseBodyWaits": [
+        1203, 1211.5, 1215.7999999970198, 1222.2000000029802, 1225, 1230.6000000014901, 1240,
+        1240.8999999985099, 1250.2000000029802, 1254.2000000029802, 1262.7000000029802,
+        1211.3999999985099
+      ],
+      "initialWindow": { "start": 57.80000000447035, "end": 1596.6000000014901 },
+      "longTasks": [
+        { "start": 12747.80000000447, "duration": 51 },
+        { "start": 14002.20000000298, "duration": 56 },
+        { "start": 14214.5, "duration": 60 }
+      ],
+      "gcIntervals": [
+        { "start": 49.399999998509884, "end": 53.70000000298023 },
+        { "start": 1973.3000000044703, "end": 1980.3000000044703 },
+        { "start": 14092.70000000298, "end": 14158 },
+        { "start": 15822, "end": 15856.80000000447 },
+        { "start": 17246.39999999851, "end": 17253.80000000447 },
+        { "start": 17267.70000000298, "end": 17273 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2303772,
+            "totalSize": 3215360,
+            "embedderHeapUsedSize": 1087552,
+            "backingStorageSize": 166735
+          },
+          "dom": { "documents": 2, "nodes": 556, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3417004,
+            "totalSize": 4263936,
+            "embedderHeapUsedSize": 2329120,
+            "backingStorageSize": 169526
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11114796,
+            "totalSize": 12390400,
+            "embedderHeapUsedSize": 18663792,
+            "backingStorageSize": 172297
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4598012,
+            "totalSize": 7409664,
+            "embedderHeapUsedSize": 5050968,
+            "backingStorageSize": 171815
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4607140,
+            "totalSize": 5574656,
+            "embedderHeapUsedSize": 2529952,
+            "backingStorageSize": 170723
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3659096,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 1035640,
+            "backingStorageSize": 169380
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 14,
+      "metrics": {
+        "inputMax": 1.1999999955296516,
+        "scheduling": 200.79999999701977,
+        "firstRender": 25.200000002980232,
+        "singleViewMax": 25.200000002980232,
+        "accumulationMax": 79.10000000149012,
+        "bodyWaitMax": 1262.1000000014901,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 58
+      },
+      "handlers": [1.1999999955296516, 0.5, 0.7999999970197678, 0.5, 0.6999999955296516, 0.5],
+      "renders": [
+        25.200000002980232, 20.100000001490116, 26.5, 29.700000002980232, 34.69999999552965,
+        37.29999999701977, 43.20000000298023, 49.900000005960464, 53.899999998509884,
+        79.10000000149012, 20.100000001490116, 11.600000001490116
+      ],
+      "responseBodyWaits": [
+        1203.5, 1212, 1215.6999999955297, 1221.5, 1225.6000000014901, 1230.1000000014901,
+        1238.7999999970198, 1238.2999999970198, 1246.2000000029802, 1252.8999999985099,
+        1262.1000000014901, 1210.8999999985099
+      ],
+      "initialWindow": { "start": 76.60000000149012, "end": 1614.5 },
+      "longTasks": [
+        { "start": 14008.79999999702, "duration": 50 },
+        { "start": 14205.39999999851, "duration": 58 }
+      ],
+      "gcIntervals": [
+        { "start": 67.20000000298023, "end": 72.10000000149012 },
+        { "start": 1990.8999999985099, "end": 1998.6000000014901 },
+        { "start": 14107.20000000298, "end": 14153.39999999851 },
+        { "start": 15809.39999999851, "end": 15844.60000000149 },
+        { "start": 17243.10000000149, "end": 17252.60000000149 },
+        { "start": 17276.10000000149, "end": 17281.20000000298 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2487220,
+            "totalSize": 3215360,
+            "embedderHeapUsedSize": 775664,
+            "backingStorageSize": 166948
+          },
+          "dom": { "documents": 2, "nodes": 556, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3595804,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 2396200,
+            "backingStorageSize": 169727
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11268784,
+            "totalSize": 12390400,
+            "embedderHeapUsedSize": 18205784,
+            "backingStorageSize": 172375
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4607056,
+            "totalSize": 7933952,
+            "embedderHeapUsedSize": 5050272,
+            "backingStorageSize": 171751
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4619832,
+            "totalSize": 5574656,
+            "embedderHeapUsedSize": 2594792,
+            "backingStorageSize": 170718
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3680284,
+            "totalSize": 4788224,
+            "embedderHeapUsedSize": 968512,
+            "backingStorageSize": 169375
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 15,
+      "metrics": {
+        "inputMax": 1.1999999955296516,
+        "scheduling": 200.79999999701977,
+        "firstRender": 29.099999994039536,
+        "singleViewMax": 29.099999994039536,
+        "accumulationMax": 75.69999999552965,
+        "bodyWaitMax": 1261.3000000044703,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 58
+      },
+      "handlers": [
+        1.1999999955296516, 0.5, 0.6999999955296516, 0.5, 0.6000000014901161, 0.3999999985098839
+      ],
+      "renders": [
+        29.099999994039536, 18.700000002980232, 25.399999998509884, 28.399999998509884,
+        34.100000001490116, 38.29999999701977, 44, 50.5, 54.79999999701977, 75.69999999552965,
+        20.19999999552965, 12.399999998509884
+      ],
+      "responseBodyWaits": [
+        1204.2000000029802, 1214, 1214.5, 1221.8999999985099, 1224.8999999985099,
+        1232.6000000014901, 1238.1999999955297, 1241.9000000059605, 1247.6000000014901, 1254.5,
+        1261.3000000044703, 1209.7000000029802
+      ],
+      "initialWindow": { "start": 76.30000000447035, "end": 1617.8999999985099 },
+      "longTasks": [
+        { "start": 12763.39999999851, "duration": 51 },
+        { "start": 14018.30000000447, "duration": 51 },
+        { "start": 14230, "duration": 58 }
+      ],
+      "gcIntervals": [
+        { "start": 68, "end": 72.39999999850988 },
+        { "start": 1988.2000000029802, "end": 1996.7000000029802 },
+        { "start": 14107.70000000298, "end": 14172 },
+        { "start": 15819.5, "end": 15855.10000000149 },
+        { "start": 17246.5, "end": 17255.89999999851 },
+        { "start": 17266.89999999851, "end": 17271.80000000447 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2487212,
+            "totalSize": 3477504,
+            "embedderHeapUsedSize": 776432,
+            "backingStorageSize": 166948
+          },
+          "dom": { "documents": 2, "nodes": 556, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3595808,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 2396816,
+            "backingStorageSize": 169727
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11229848,
+            "totalSize": 12390400,
+            "embedderHeapUsedSize": 18611984,
+            "backingStorageSize": 172434
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4582412,
+            "totalSize": 7933952,
+            "embedderHeapUsedSize": 5052200,
+            "backingStorageSize": 171810
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4596668,
+            "totalSize": 5312512,
+            "embedderHeapUsedSize": 2596080,
+            "backingStorageSize": 170718
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3657200,
+            "totalSize": 4788224,
+            "embedderHeapUsedSize": 970088,
+            "backingStorageSize": 169375
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 16,
+      "metrics": {
+        "inputMax": 1.2000000029802322,
+        "scheduling": 200.79999999701977,
+        "firstRender": 23.100000001490116,
+        "singleViewMax": 23.100000001490116,
+        "accumulationMax": 80.39999999850988,
+        "bodyWaitMax": 1260.3999999985099,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 57
+      },
+      "handlers": [
+        1.2000000029802322, 0.8999999985098839, 0.8000000044703484, 0.7000000029802322,
+        0.6000000014901161, 0.5
+      ],
+      "renders": [
+        23.100000001490116, 23.600000001490116, 26.900000005960464, 33.5, 39.29999999701977,
+        39.20000000298023, 47.5, 51.100000001490116, 55.5, 80.39999999850988, 20.30000000447035,
+        11.299999997019768
+      ],
+      "responseBodyWaits": [
+        1203.1000000014901, 1211.5, 1216.0999999940395, 1221.6000000014901, 1224.7000000029802,
+        1230.3999999985099, 1237.3999999985099, 1240.2999999970198, 1250, 1257, 1260.3999999985099,
+        1210.3000000044703
+      ],
+      "initialWindow": { "start": 77.69999999552965, "end": 1614 },
+      "longTasks": [
+        { "start": 12751.19999999553, "duration": 53 },
+        { "start": 14008.5, "duration": 53 },
+        { "start": 14217.79999999702, "duration": 57 }
+      ],
+      "gcIntervals": [
+        { "start": 68.29999999701977, "end": 73.29999999701977 },
+        { "start": 1994, "end": 2002.0999999940395 },
+        { "start": 14100, "end": 14165.29999999702 },
+        { "start": 15817.19999999553, "end": 15850.29999999702 },
+        { "start": 17251.39999999851, "end": 17261.69999999553 },
+        { "start": 17288.79999999702, "end": 17293.59999999404 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2487228,
+            "totalSize": 3215360,
+            "embedderHeapUsedSize": 775664,
+            "backingStorageSize": 166948
+          },
+          "dom": { "documents": 2, "nodes": 556, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3595800,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 2396448,
+            "backingStorageSize": 169727
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11216720,
+            "totalSize": 12652544,
+            "embedderHeapUsedSize": 18206784,
+            "backingStorageSize": 172375
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4587552,
+            "totalSize": 8196096,
+            "embedderHeapUsedSize": 5051512,
+            "backingStorageSize": 171751
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4602160,
+            "totalSize": 5836800,
+            "embedderHeapUsedSize": 2595384,
+            "backingStorageSize": 170718
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3662696,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 969720,
+            "backingStorageSize": 169375
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 17,
+      "metrics": {
+        "inputMax": 1.2999999970197678,
+        "scheduling": 200.69999999552965,
+        "firstRender": 21.899999998509884,
+        "singleViewMax": 21.899999998509884,
+        "accumulationMax": 75.39999999850988,
+        "bodyWaitMax": 1260.3999999985099,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 56
+      },
+      "handlers": [
+        1.2999999970197678, 0.6000000014901161, 0.8999999985098839, 0.6000000014901161, 0.5, 0.5
+      ],
+      "renders": [
+        21.899999998509884, 20.600000001490116, 26.30000000447035, 30.5, 34.69999999552965,
+        38.600000001490116, 45.30000000447035, 51.70000000298023, 54.70000000298023,
+        75.39999999850988, 20.700000002980232, 12.100000001490116
+      ],
+      "responseBodyWaits": [
+        1204, 1211.8999999985099, 1216.3999999985099, 1220.8999999985099, 1225.5,
+        1231.5999999940395, 1238.1999999955297, 1239.8999999985099, 1247.3999999985099,
+        1251.8999999985099, 1260.3999999985099, 1210.5999999940395
+      ],
+      "initialWindow": { "start": 78.70000000298023, "end": 1614.7999999970198 },
+      "longTasks": [{ "start": 14224.20000000298, "duration": 56 }],
+      "gcIntervals": [
+        { "start": 68.79999999701977, "end": 73.60000000149012 },
+        { "start": 1995.5, "end": 2002.1000000014901 },
+        { "start": 14116.20000000298, "end": 14180.10000000149 },
+        { "start": 15821.20000000298, "end": 15856.60000000149 },
+        { "start": 17258.60000000149, "end": 17266.39999999851 },
+        { "start": 17277.70000000298, "end": 17282.39999999851 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2487220,
+            "totalSize": 3215360,
+            "embedderHeapUsedSize": 775664,
+            "backingStorageSize": 166948
+          },
+          "dom": { "documents": 2, "nodes": 556, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3595820,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 2395912,
+            "backingStorageSize": 169727
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11225024,
+            "totalSize": 12390400,
+            "embedderHeapUsedSize": 18207456,
+            "backingStorageSize": 172434
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4595676,
+            "totalSize": 7409664,
+            "embedderHeapUsedSize": 5050376,
+            "backingStorageSize": 171810
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4613388,
+            "totalSize": 5574656,
+            "embedderHeapUsedSize": 2528584,
+            "backingStorageSize": 170718
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3658760,
+            "totalSize": 4263936,
+            "embedderHeapUsedSize": 1034120,
+            "backingStorageSize": 169375
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 18,
+      "metrics": {
+        "inputMax": 1.1000000014901161,
+        "scheduling": 200.80000000447035,
+        "firstRender": 22.799999997019768,
+        "singleViewMax": 22.799999997019768,
+        "accumulationMax": 75.90000000596046,
+        "bodyWaitMax": 1262.1000000014901,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 59
+      },
+      "handlers": [
+        1.1000000014901161, 0.6000000014901161, 0.7999999970197678, 0.6000000014901161,
+        0.3999999985098839, 0.6000000014901161
+      ],
+      "renders": [
+        22.799999997019768, 23.700000002980232, 28.799999997019768, 28.399999998509884, 35,
+        38.79999999701977, 44.399999998509884, 53.69999999552965, 57, 75.90000000596046,
+        19.80000000447035, 11.599999994039536
+      ],
+      "responseBodyWaits": [
+        1204.1000000014901, 1212.8999999985099, 1216.1000000014901, 1220, 1226.5,
+        1230.8999999985099, 1238.5, 1240.2000000029802, 1249, 1257.2999999970198,
+        1262.1000000014901, 1211
+      ],
+      "initialWindow": { "start": 77.5, "end": 1611.8999999985099 },
+      "longTasks": [
+        { "start": 12747.5, "duration": 54 },
+        { "start": 14214.19999999553, "duration": 59 }
+      ],
+      "gcIntervals": [
+        { "start": 68.5, "end": 73 },
+        { "start": 1990.3999999985099, "end": 1998.1000000014901 },
+        { "start": 14096, "end": 14162.60000000149 },
+        { "start": 15820.5, "end": 15855.29999999702 },
+        { "start": 17267.10000000149, "end": 17275.79999999702 },
+        { "start": 17301.39999999851, "end": 17306.79999999702 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2487104,
+            "totalSize": 3215360,
+            "embedderHeapUsedSize": 775760,
+            "backingStorageSize": 166948
+          },
+          "dom": { "documents": 2, "nodes": 556, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3595952,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 2395960,
+            "backingStorageSize": 169727
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11237068,
+            "totalSize": 12128256,
+            "embedderHeapUsedSize": 18205432,
+            "backingStorageSize": 172375
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4585388,
+            "totalSize": 7671808,
+            "embedderHeapUsedSize": 5050448,
+            "backingStorageSize": 171751
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4598940,
+            "totalSize": 5574656,
+            "embedderHeapUsedSize": 2594968,
+            "backingStorageSize": 170718
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3659344,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 968688,
+            "backingStorageSize": 169375
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 19,
+      "metrics": {
+        "inputMax": 1.2000000029802322,
+        "scheduling": 201.10000000149012,
+        "firstRender": 22.799999997019768,
+        "singleViewMax": 22.799999997019768,
+        "accumulationMax": 87.60000000149012,
+        "bodyWaitMax": 1262.5,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 60
+      },
+      "handlers": [
+        1.2000000029802322, 0.5999999940395355, 1, 0.7000000029802322, 0.5, 0.6000000014901161
+      ],
+      "renders": [
+        22.799999997019768, 21.100000001490116, 24.5, 28.399999998509884, 34.399999998509884,
+        36.69999999552965, 46.899999998509884, 62.70000000298023, 62.399999998509884,
+        87.60000000149012, 20.5, 11.800000004470348
+      ],
+      "responseBodyWaits": [
+        1203.2000000029802, 1212.7999999970198, 1215.7999999970198, 1222.1000000014901,
+        1226.2000000029802, 1231.2000000029802, 1238.6000000014901, 1243.5, 1248.8999999985099,
+        1253.8000000044703, 1262.5, 1211.6999999955297
+      ],
+      "initialWindow": { "start": 60, "end": 1596 },
+      "longTasks": [
+        { "start": 11247.5, "duration": 53 },
+        { "start": 12618.39999999851, "duration": 53 },
+        { "start": 14007, "duration": 60 },
+        { "start": 14219.20000000298, "duration": 59 }
+      ],
+      "gcIntervals": [
+        { "start": 50, "end": 55 },
+        { "start": 1976.7000000029802, "end": 1983.8999999985099 },
+        { "start": 14100.70000000298, "end": 14167 },
+        { "start": 15810.5, "end": 15844.29999999702 },
+        { "start": 17237.5, "end": 17250.5 },
+        { "start": 17275.79999999702, "end": 17282.10000000149 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2303656,
+            "totalSize": 2953216,
+            "embedderHeapUsedSize": 1310112,
+            "backingStorageSize": 166735
+          },
+          "dom": { "documents": 2, "nodes": 557, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3416992,
+            "totalSize": 4263936,
+            "embedderHeapUsedSize": 2329080,
+            "backingStorageSize": 169526
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11105884,
+            "totalSize": 12128256,
+            "embedderHeapUsedSize": 18660656,
+            "backingStorageSize": 172268
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4582032,
+            "totalSize": 7409664,
+            "embedderHeapUsedSize": 5051992,
+            "backingStorageSize": 171786
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4597240,
+            "totalSize": 5574656,
+            "embedderHeapUsedSize": 2595192,
+            "backingStorageSize": 170723
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3657840,
+            "totalSize": 4788224,
+            "embedderHeapUsedSize": 970096,
+            "backingStorageSize": 169380
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    },
+    {
+      "repeat": 20,
+      "metrics": {
+        "inputMax": 1.2000000029802322,
+        "scheduling": 200.79999999701977,
+        "firstRender": 23.099999994039536,
+        "singleViewMax": 23.099999994039536,
+        "accumulationMax": 88.69999999552965,
+        "bodyWaitMax": 1257.6999999955297,
+        "initialLongTaskMax": 0,
+        "traversalLongTaskMax": 61
+      },
+      "handlers": [
+        1.2000000029802322, 0.7000000029802322, 0.7999999970197678, 0.6999999955296516,
+        0.6000000014901161, 0.5999999940395355
+      ],
+      "renders": [
+        23.099999994039536, 19.5, 25.299999997019768, 28.399999998509884, 33.19999999552965,
+        48.30000000447035, 55.100000001490116, 49.20000000298023, 66.60000000149012,
+        88.69999999552965, 19.5, 15
+      ],
+      "responseBodyWaits": [
+        1203.2000000029802, 1211.9000000059605, 1215.8000000044703, 1221.3000000044703, 1226,
+        1230.5999999940395, 1242.3000000044703, 1242.7999999970198, 1245.8999999985099,
+        1251.8000000044703, 1257.6999999955297, 1211.5
+      ],
+      "initialWindow": { "start": 78.10000000149012, "end": 1615.5 },
+      "longTasks": [
+        { "start": 12651.10000000149, "duration": 56 },
+        { "start": 14040.20000000298, "duration": 61 },
+        { "start": 14255.30000000447, "duration": 55 }
+      ],
+      "gcIntervals": [
+        { "start": 69.40000000596046, "end": 73.90000000596046 },
+        { "start": 1994.1000000014901, "end": 2000.7000000029802 },
+        { "start": 14134.70000000298, "end": 14197.10000000149 },
+        { "start": 15824.90000000596, "end": 15858.90000000596 },
+        { "start": 17255, "end": 17265.90000000596 },
+        { "start": 17293.40000000596, "end": 17299.5 }
+      ],
+      "samples": [
+        {
+          "name": "empty",
+          "heap": {
+            "usedSize": 2487220,
+            "totalSize": 3215360,
+            "embedderHeapUsedSize": 775664,
+            "backingStorageSize": 166948
+          },
+          "dom": { "documents": 2, "nodes": 556, "jsEventListeners": 57 },
+          "rows": 0
+        },
+        {
+          "name": "50-rows",
+          "heap": {
+            "usedSize": 3595816,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 2396160,
+            "backingStorageSize": 169727
+          },
+          "dom": { "documents": 2, "nodes": 2435, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "500-rows",
+          "heap": {
+            "usedSize": 11238016,
+            "totalSize": 12652544,
+            "embedderHeapUsedSize": 18683768,
+            "backingStorageSize": 172434
+          },
+          "dom": { "documents": 2, "nodes": 18200, "jsEventListeners": 57 },
+          "rows": 500
+        },
+        {
+          "name": "page-11",
+          "heap": {
+            "usedSize": 4585256,
+            "totalSize": 7671808,
+            "embedderHeapUsedSize": 5050824,
+            "backingStorageSize": 171810
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "page-12",
+          "heap": {
+            "usedSize": 4599008,
+            "totalSize": 5574656,
+            "embedderHeapUsedSize": 2595056,
+            "backingStorageSize": 170718
+          },
+          "dom": { "documents": 2, "nodes": 2467, "jsEventListeners": 57 },
+          "rows": 50
+        },
+        {
+          "name": "cleared",
+          "heap": {
+            "usedSize": 3659540,
+            "totalSize": 4526080,
+            "embedderHeapUsedSize": 969064,
+            "backingStorageSize": 169375
+          },
+          "dom": { "documents": 2, "nodes": 679, "jsEventListeners": 57 },
+          "rows": 0
+        }
+      ]
+    }
+  ]
+}

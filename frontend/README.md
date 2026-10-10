@@ -33,7 +33,8 @@ Linux also needs Playwright's Chromium system libraries. For an image without th
 them with the authorized
 `npx playwright install-deps chromium` using appropriate system privileges. Installing the
 browser alone does not supply system libraries; a launch failure is not a browser pass.
-Chromium is the bootstrap test target, not a finalized supported-browser policy.
+Initial supported browser: Chromium desktop only (owner's F11b decision). Desktop narrow-viewport
+evidence does not establish real-mobile support; other browsers are not approved targets.
 
 `test:unit` runs Vitest/jsdom unit/component tests. `test:proxy` owns a disposable loopback
 HTTP fixture and Vite process in-process, verifies real forwarding and connection-refusal
@@ -109,7 +110,7 @@ complete copy, explicit pagination, destination links and empty selection. The s
 `distributed 雪` directory exists in the oldest alpha inventory; beta contains its known-size
 identity and gamma its unknown-size identity under unrelated paths.
 The full F11a integration below extends these workflows to the deployed Go host and lifecycle faults.
-F11b manual accessibility/responsive audits and F12 final integration checks remain separate.
+F11b is complete under the revised owner scope; F12 final integration checks remain separate.
 These correctness tests neither establish performance budgets nor close the unresolved backend gate.
 
 ### Full real-backend integration (F11a)
@@ -163,10 +164,13 @@ stop responding and can be rebound, and owned directories disappear. `test:hosti
 final assets-acquisition fault. Browser fixtures always close in `finally`; no workspace catalog,
 benchmark directory or concurrently owned catalog is opened.
 
-F11a is complete. F11b automated accessibility/keyboard/responsive checks and instrumented
-browser evidence are implemented; see the [F11b evidence and required owner checklist](tests/F11b-acceptance.md).
-Manual screen-reader feedback and agreed target/budget acceptance remain pending, as do F12 checks.
-No performance budget, supported-browser policy or backend gate is approved by this suite.
+F11a and F11b are complete within the approved scope; see the
+[F11b approved responsiveness evidence and scope](tests/F11b-acceptance.md). All 20 fresh-context
+runs pass the agreed Chromium/container input/scheduling/render budgets. Accessibility is best
+effort: no additional accessibility/screen-reader audit or manual AT acceptance gate, and no
+screen-reader success claimed. Support is Chromium desktop only; no hardware-general guarantee.
+F12 checks and backend gates remain separate. F11a correctness tests do not establish UI budgets;
+the approved F11b measurements are independent profile-specific evidence.
 
 ## Wire client and domain helpers
 
@@ -344,8 +348,8 @@ Connection invalidation clears selection/scroll and retires or marks pages unver
 Mocked browser coverage includes delayed first pages and continuations, Unicode/IME scheduling,
 keyboard guards/preference, invalid filters, failures/stale cursors, URL history, first-page
 reconstruction and later rows past the retention bound. These tests do not establish backend
-performance or real-catalog workflow acceptance. Manual screen-reader/input-method audits remain
-F11b work.
+performance or real-catalog workflow acceptance. The owner's F11b scope makes accessibility best
+effort, without further screen-reader/input-method audits or a manual AT acceptance gate.
 
 ### Content and observation details (F4 handoff)
 
@@ -384,7 +388,7 @@ F4 checks cover independent failures (including disconnect/reconnect), huge deci
 zero/unknown values, date labels, selected context, safe return/path links, copy success/failure,
 explicit hash identity and stale lookup responses, current/history traversal and bounded later
 pages. These are mocked-browser tests; no Go checks, catalog access or real-backend acceptance
-is implied. Optional manual accessibility/responsive audits remain F11b.
+is implied. Extended accessibility audits are outside the owner's revised best-effort F11b scope.
 
 ### Read-only disks and inventories (F5 handoff)
 
@@ -471,7 +475,7 @@ is still unresolved.
 - Mocked browser coverage owns precision/range, changed-only/null/omission, conflict retention,
   uncertain POST/PATCH and manual pagination, post-write read failure, retained search invalidation
   and stale-context draft rebasing. The bounded real write test above complements, but does not
-  replace the full F11a restart/outage/reconciliation tests or F11b accessibility audits.
+  replace the full F11a restart/outage/reconciliation tests or F11b's recorded best-effort evidence.
 
 ### Distinct-content explorer (F8 handoff)
 
@@ -493,7 +497,8 @@ is still unresolved.
 - Unit/mocked browser coverage includes invalid combinations, huge decimals, literal membership,
   canceled late requests, bounded later pages, page errors and stale restart. The bounded real
   test uses only the existing disposable imported-catalog harness. Full F11a covers stop/
-  import/restart revision and reconnect acceptance; F11b owns manual accessibility/responsiveness.
+  import/restart revision and reconnect acceptance; F11b records approved UI responsiveness and
+  historical best-effort accessibility evidence, not manual AT acceptance.
   The backend gate remains unresolved.
 
 ### Directory exact replicas (F9a handoff)
@@ -561,7 +566,7 @@ tests/browser/replicas.spec.ts tests/browser/directories.spec.ts`. Real imported
   cover real stop/import/restart, same-revision reconnect clearing, uncertain-write/outage
   reconciliation and F10 production same-origin built-host workflows. Existing write, contents,
   replica and coverage suites run in both host modes as part of full F11a.
-  F11b accessibility/manual responsiveness and F12 release checks remain pending. Backend
+  F11b is complete under the revised owner scope; F12 release checks remain pending. Backend
   acceptance stays unresolved; no Go benchmark or full race run belongs to this package.
 
 Start the backend separately with a disposable catalog, following
@@ -645,6 +650,7 @@ remain F12 work.
 - `tests/serve-built.ts` is a test-only reference host with broader document fallback to
   exercise future nested URLs. Do not ship it or copy it as the production security handler.
 
-Manual screen-reader feedback and browser support/measurement agreement remain F11b/F12 work;
-automated checks and measured evidence are in the [F11b checklist](tests/F11b-acceptance.md).
+F11b profile-specific responsiveness and Chromium-desktop support are approved; accessibility
+remains best effort, with no extended audit/manual AT acceptance requirement. See the
+[F11b evidence and scope](tests/F11b-acceptance.md). F12 release checks remain pending.
 No backend benchmark or full Go race check is needed for pure frontend tasks.
