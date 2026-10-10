@@ -1,26 +1,26 @@
 import assert from 'node:assert/strict';
 import { access } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { test } from 'node:test';
-import { startCatalog, type Catalog } from './harness.ts';
+import { startCatalog, type Catalog } from '../real/harness.ts';
 
 async function gone(state: Partial<Catalog>) {
   assert(state.root);
   await assert.rejects(access(state.root), { code: 'ENOENT' });
   if (state.pid) assert.throws(() => process.kill(state.pid!, 0), { code: 'ESRCH' });
-  for (const origin of [state.origin, state.backendOrigin].filter(Boolean)) {
-    await assert.rejects(fetch(new URL('/healthz', origin), { signal: AbortSignal.timeout(1000) }));
-  }
+  if (state.backendOrigin)
+    await assert.rejects(
+      fetch(`${state.backendOrigin}/healthz`, { signal: AbortSignal.timeout(1000) }),
+    );
 }
 
-test('successful harness owns a ready linked catalog and releases processes/ports/directory', async () => {
-  const catalog = await startCatalog();
+test('built hosting owns only Go and releases its port, process and catalog', async () => {
+  const catalog = await startCatalog(undefined, resolve('build'));
   try {
-    const response = await fetch(new URL('/api/v1/catalog', catalog.origin));
+    assert.equal(catalog.origin, catalog.backendOrigin);
+    const response = await fetch(`${catalog.origin}/disks/${catalog.diskID}`);
     assert.equal(response.status, 200);
-    const totals = await response.json();
-    assert.equal(totals.disk_count, '3');
-    assert.equal(totals.file_count, '12');
-    assert.equal(catalog.snapshots.length, 3);
+    assert.match(response.headers.get('content-type')!, /text\/html/);
   } finally {
     await catalog.close();
   }
@@ -28,14 +28,14 @@ test('successful harness owns a ready linked catalog and releases processes/port
   await gone(catalog);
 });
 
-for (const failure of ['imported', 'backend', 'proxy'] as const) {
-  test(`failure after ${failure} cleans every acquired resource`, async () => {
+for (const failure of ['imported', 'backend', 'assets'] as const) {
+  test(`built hosting failure after ${failure} releases acquired resources`, async () => {
     let state: Partial<Catalog> = {};
     await assert.rejects(
       startCatalog((stage, acquired) => {
         state = { ...state, ...acquired };
         if (stage === failure) throw new Error(`injected ${failure} failure`);
-      }),
+      }, resolve('build')),
       new RegExp(`injected ${failure} failure`),
     );
     await gone(state);

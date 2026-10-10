@@ -34,6 +34,9 @@ func TestServeProcessHelper(t *testing.T) {
 		"--listen",
 		os.Getenv("COLDCAT_TEST_LISTEN"),
 	}
+	if assets := os.Getenv("COLDCAT_TEST_ASSETS"); assets != "" {
+		os.Args = append(os.Args, "--assets", assets)
+	}
 	if file := os.Getenv("COLDCAT_TEST_IMPORT"); file != "" {
 		os.Args = []string{
 			"coldcat",
@@ -93,6 +96,12 @@ INSERT INTO import_content(snapshot_id,content_id) VALUES(1,1);`); err != nil {
 				"COLDCAT_TEST_DB="+path,
 				"COLDCAT_TEST_LISTEN=127.0.0.1:0",
 			)
+			assets := t.TempDir()
+			shell := filepath.Join(assets, "index.html")
+			if err := os.WriteFile(shell, []byte("UI shell"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cmd.Env = append(cmd.Env, "COLDCAT_TEST_ASSETS="+assets)
 			stderr, err := cmd.StderrPipe()
 			if err != nil {
 				t.Fatal(err)
@@ -118,6 +127,15 @@ INSERT INTO import_content(snapshot_id,content_id) VALUES(1,1);`); err != nil {
 			resp.Body.Close()
 			if resp.StatusCode != 200 {
 				t.Fatalf("readiness: %d", resp.StatusCode)
+			}
+
+			resp, err = client.Get(address + "/disks/1?literal=%2F")
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+			if resp.StatusCode != 200 || !strings.Contains(resp.Header.Get("Content-Type"), "text/html") {
+				t.Fatalf("CLI asset hosting: %d %v", resp.StatusCode, resp.Header)
 			}
 
 			var count int
@@ -254,4 +272,25 @@ CREATE TRIGGER fail_recovery BEFORE DELETE ON snapshot BEGIN SELECT RAISE(ABORT,
 	}
 
 	db.Close()
+}
+
+func TestServeAssetsStartupFailures(t *testing.T) {
+	for _, assets := range []string{"", t.TempDir(), filepath.Join(t.TempDir(), "missing")} {
+		path := filepath.Join(t.TempDir(), "catalog.sqlite")
+		cmd := newCommand()
+		var output bytes.Buffer
+		cmd.ErrWriter = &output
+		err := cmd.Run(t.Context(), []string{
+			"coldcat", "--db", path, "serve", "--listen", "127.0.0.1:0", "--assets", assets,
+		})
+		if err == nil || !strings.Contains(err.Error(), "asset") || output.Len() != 0 {
+			t.Fatalf("startup with %q: %v %s", assets, err, output.String())
+		}
+
+		db, err := database.Open(path)
+		if err != nil {
+			t.Fatalf("startup leaked catalog lock: %v", err)
+		}
+		_ = db.Close()
+	}
 }

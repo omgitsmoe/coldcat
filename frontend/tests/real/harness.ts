@@ -11,7 +11,7 @@ import type { components } from '../../src/lib/api/generated/wire.ts';
 const run = promisify(execFile);
 const repository = resolve(import.meta.dirname, '../../..');
 
-export type Stage = 'imported' | 'backend' | 'proxy';
+export type Stage = 'imported' | 'backend' | 'proxy' | 'assets';
 export type Catalog = {
   root: string;
   origin: string;
@@ -39,6 +39,7 @@ async function terminate(child: ChildProcess) {
 
 export async function startCatalog(
   onStage?: (stage: Stage, state: Partial<Catalog>) => void,
+  assetsDirectory?: string,
 ): Promise<Catalog> {
   const root = await mkdtemp('/tmp/opencode/coldcat-browser-');
   let child: ChildProcess | undefined;
@@ -115,7 +116,14 @@ export async function startCatalog(
     onStage?.('imported', { root, diskID: disk.id, snapshots });
     child = spawn(
       binary,
-      ['--db', join(root, 'catalog.sqlite'), 'serve', '--listen', '127.0.0.1:0'],
+      [
+        '--db',
+        join(root, 'catalog.sqlite'),
+        'serve',
+        '--listen',
+        '127.0.0.1:0',
+        ...(assetsDirectory === undefined ? [] : ['--assets', assetsDirectory]),
+      ],
       { stdio: ['ignore', 'pipe', 'pipe'] },
     );
     let logs = '';
@@ -148,21 +156,25 @@ export async function startCatalog(
       throw new Error(`Backend readiness deadline exceeded: ${logs}`);
     if (!child.pid) throw new Error('Backend PID unavailable');
     onStage?.('backend', { root, backendOrigin, pid: child.pid });
-    vite = await createServer({
-      root: resolve(repository, 'frontend'),
-      server: {
-        host: '127.0.0.1',
-        port: 0,
-        strictPort: true,
-        proxy: proxyRules(backendTarget(backendOrigin)),
-      },
-    });
-    await vite.listen();
-    const origin = vite.resolvedUrls?.local[0];
-    if (!origin) throw new Error('Frontend origin unavailable');
+    let origin = backendOrigin;
+    if (assetsDirectory === undefined) {
+      vite = await createServer({
+        root: resolve(repository, 'frontend'),
+        server: {
+          host: '127.0.0.1',
+          port: 0,
+          strictPort: true,
+          proxy: proxyRules(backendTarget(backendOrigin)),
+        },
+      });
+      await vite.listen();
+      const proxyOrigin = vite.resolvedUrls?.local[0];
+      if (!proxyOrigin) throw new Error('Frontend origin unavailable');
+      origin = proxyOrigin;
+    }
     for (const path of ['healthz', 'api/v1/catalog']) {
       const response = await fetch(new URL(path, origin), { signal: AbortSignal.timeout(5000) });
-      if (!response.ok) throw new Error(`Proxy readiness failed: ${path} ${response.status}`);
+      if (!response.ok) throw new Error(`Host readiness failed: ${path} ${response.status}`);
       await response.json();
     }
     const catalog = {
@@ -174,7 +186,7 @@ export async function startCatalog(
       snapshots,
       close,
     };
-    onStage?.('proxy', catalog);
+    onStage?.(assetsDirectory === undefined ? 'proxy' : 'assets', catalog);
     return catalog;
   } catch (error) {
     await close();

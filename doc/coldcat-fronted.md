@@ -1,6 +1,6 @@
 # Coldcat frontend plan
 
-Status: F0–F9b and F11a core integration implemented. F10–F12/full F11a pending;
+Status: F0–F10 and F11a core integration implemented. F11b–F12/full F11a pending;
 backend gate unresolved. This is not release acceptance closure.
 The first-usable-slice real-backend harness precedes F7/comparisons; see the
 [core integration interface and coverage](../frontend/README.md#real-backend-core-integration-f11a-core).
@@ -619,6 +619,9 @@ full F11a revision/reconnect and later feature integration remain pending.
 
 ### F10 — same-origin static deployment
 
+- **Implemented interface:** `serve --assets <built-directory>` hosts the static SPA at
+  origin root with confined file access and explicit deep-link dispatch; see
+  [local hosting and F11a harness interface](../frontend/README.md#built-route-and-same-origin-go-hosting-f10).
 - **Prerequisites:** F0 architecture approval and built route contract; runnable UI for smoke
   tests. Can proceed independently of later comparison screens.
 - **Scope:** minimal Go asset-directory option/handler, static/SPA dispatch tests, and local

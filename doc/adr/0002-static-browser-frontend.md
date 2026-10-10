@@ -21,7 +21,7 @@ Development binds Vite to loopback and proxies only `/api/v1/*` and `/healthz` t
 HTTP loopback origin (`COLDCAT_BACKEND`, default `http://127.0.0.1:8080`). Backend/proxy
 failures are visible; there is no demo-response fallback or browser security workaround.
 
-F10 will add Go same-origin hosting through an explicit asset-directory option. Reserve
+F10 implements Go same-origin hosting through the explicit `serve --assets` option. Reserve
 API/readiness routes before static dispatch, serve the shell for recognized application
 deep links, and return real 404s for missing assets. Production must test encoded paths,
 traversal, HEAD, missing routes/assets, and reserved-route precedence. F0's Node static test
@@ -43,7 +43,7 @@ The latter belongs to F3, not bootstrap. Imports remain CLI-only with the server
 ## Consequences
 
 Builds require the pinned Node/npm toolchain and frontend checks. Deployment must supply
-the built directory explicitly; until F10, Go still serves JSON only. Deep-link reloads
+the built directory explicitly; without `--assets`, Go still serves JSON only. Deep-link reloads
 require the documented shell dispatch contract rather than a generic file server.
 Wire type generation/client work starts at F1; no Kit server routes or SQLite frontend
 access. Browser support and UI performance budgets remain release decisions, not backend

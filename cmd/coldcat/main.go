@@ -37,6 +37,10 @@ func newCommand() *cli.Command {
 						Usage: "HTTP listen address",
 						Value: "127.0.0.1:8080",
 					},
+					&cli.StringFlag{
+						Name:  "assets",
+						Usage: "built frontend directory (optional; served at origin root)",
+					},
 				},
 				Action: serveCommand,
 			},

@@ -3,7 +3,7 @@
 The primary search workspace, content/location and observation details, hash lookup,
 disk/inventory pages and disk creation/editing, distinct-content explorer, directory browsing/sizing, shell, request/page
 lifecycle, directory exact replicas/content coverage with a shared literal rule editor, and wire/domain helpers are implemented.
-Go asset hosting remains a separate package. Backend acceptance
+Go same-origin asset-directory hosting is implemented. Backend acceptance
 remains open.
 Architecture: [ADR 0002](../doc/adr/0002-static-browser-frontend.md).
 
@@ -24,6 +24,8 @@ npx playwright install chromium
 npm run test:e2e
 npm run test:real-harness
 npm run test:real
+npm run test:hosting-harness
+npm run test:hosting
 ```
 
 Linux also needs Playwright's Chromium system libraries. For an image without them, provision
@@ -102,7 +104,7 @@ complete copy, explicit pagination, destination links and empty selection. The s
 `distributed 雪` directory exists in the oldest alpha inventory; beta contains its known-size
 identity and gamma its unknown-size identity under unrelated paths.
 Full F11a still needs outage/reconciliation write integration, stop/import/restart revision
-and reconnect cases, and F10 built-host runs.
+and reconnect cases, and the full operation matrix against the F10 built host.
 F11b manual accessibility/responsive audits and F12 final integration checks remain separate.
 These correctness tests neither establish performance budgets nor close the unresolved backend gate.
 
@@ -524,22 +526,63 @@ Non-loopback targets, credentials, query/fragment, and non-root target paths fai
 The shell checks health and catalog on mount, owns bounded connection rechecks, and offers
 manual retry. It never supplies cached/demo responses as proof of backend readiness.
 
-## Built route and hosting contract (F10 handoff)
+## Built route and same-origin Go hosting (F10)
+
+Build with the pinned Node/npm toolchain, then run from the repository root:
+
+```sh
+go build -o /tmp/opencode/coldcat ./cmd/coldcat
+/tmp/opencode/coldcat --db /tmp/opencode/demo.sqlite serve \
+  --listen 127.0.0.1:8080 --assets frontend/build
+```
+
+Open `http://127.0.0.1:8080/`. The deployed process is Go only: distribute the binary and
+the entire built directory, not `node_modules` or a Node server. `--assets` is optional;
+omitting it preserves API-only serving. Relative asset paths resolve from the server's
+working directory. An explicitly empty directory, inaccessible directory, or missing/non-file
+`index.html` fails startup without announcing readiness. Supply a trusted build-only directory;
+all its regular files can be served. Stop Go before replacing the build, and keep `index.html`
+and its hashed assets together. Subpath hosting and embedded assets are not configured.
+
+The server exclusively owns the chosen catalog. Import offline before starting it; stop it
+before any CLI catalog operation, and never delete lock files. Keep the default loopback bind.
+There is no authentication or CORS change, and this is not safe public/Internet hosting.
+
+`npm run test:hosting` builds and runs a Chromium smoke against a real Go `--assets` server
+with the existing disposable imported fixtures. It starts no Vite/Node HTTP server and uses
+no browser request interception. It covers search/content navigation, nested document reloads,
+root/literal-query directory links, same-origin built assets and real API/missing-asset errors.
+Node is only the build/test runner. `npm run test:hosting-harness` builds then checks success
+and failure cleanup after import/backend/asset-host acquisition. Run browser suites sequentially
+because they share `test-results/`.
+
+For full F11a, `startCatalog(onStage?, assetsDirectory?)` in `tests/real/harness.ts` selects
+built Go hosting when given an absolute build-directory path. Returned `origin` then equals
+`backendOrigin`, no proxy is created, and the final fault-injection stage is `assets` rather
+than `proxy`. The unchanged default still tests the development proxy. Cleanup/ownership and
+stop-before-import rules apply to both modes. The bounded smoke is not the full F11a matrix
+or F11b/F12 acceptance; final Go race checks remain F12 work.
 
 - `npm run build` writes `build/index.html` and `build/_app/` assets. Serve at origin root;
   a subpath deployment is not configured. No runtime Node service is required.
 - Client rendering is global; no prerendered resource pages or server endpoints.
 - The host must dispatch `/api/v1/*` and `/healthz` to the backend first, never to HTML.
-- Serve existing static files with correct MIME types. Missing assets, including `_app/*`,
-  must be real 404s, not HTML 200. Traversal/encoded paths and HEAD require F10 tests.
+- Regular static files use Go's MIME/conditional/range serving and support GET/HEAD.
+  Missing assets, including `_app/*`, return real 404s, not HTML 200; no directory listing
+  or automatic directory/index redirect is provided. File access is confined with `os.Root`,
+  including symlink resolution. Dot segments, duplicate separators, encoded slash/backslash,
+  backslash, NUL, control bytes and invalid UTF-8 path bytes return non-HTML 400s. Ordinary
+  encoded filename characters are decoded once; query encoding does not affect dispatch.
 - Application navigation routes from the approved plan are `/`, `/contents`,
   `/contents/[id]`, `/observations/[id]`, `/disks`, `/disks/[id]`, `/snapshots/[id]`, and
   `/snapshots/[id]/directory`. Return `index.html` for their direct document requests;
-  query strings do not change asset dispatch. Arbitrary directory paths stay in `?path=`.
+  query strings do not change asset dispatch. IDs must be canonical positive signed-64-bit
+  decimal strings; malformed IDs, extra segments and unknown routes are not shell destinations.
+  Arbitrary directory paths stay in `?path=`.
 - `/`, `/contents`, `/contents/[id]`, `/observations/[id]`, `/disks`, `/disks/[id]`, and
   `/snapshots/[id]`, and `/snapshots/[id]/directory` are implemented through F6.
-  Unknown routes display the client “Page not found” boundary and are not approved
-  production fallback destinations.
+  Unknown direct document routes return Go 404s; client navigation can display the
+  “Page not found” boundary. Neither is a production fallback destination.
 - `tests/serve-built.ts` is a test-only reference host with broader document fallback to
   exercise future nested URLs. Do not ship it or copy it as the production security handler.
 

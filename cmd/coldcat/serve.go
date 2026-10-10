@@ -16,10 +16,21 @@ import (
 )
 
 func serveCommand(ctx context.Context, cmd *cli.Command) error {
-	return serveCatalog(ctx, cmd.String("db"), cmd.String("listen"), cmd.ErrWriter)
+	if cmd.IsSet("assets") && cmd.String("assets") == "" {
+		return fmt.Errorf("assets directory must not be empty")
+	}
+
+	return serveCatalogAssets(ctx, cmd.String("db"), cmd.String("listen"),
+		cmd.String("assets"), cmd.ErrWriter)
 }
 
-func serveCatalog(ctx context.Context, path, address string, output io.Writer) (result error) {
+func serveCatalog(ctx context.Context, path, address string, output io.Writer) error {
+	return serveCatalogAssets(ctx, path, address, "", output)
+}
+
+func serveCatalogAssets(
+	ctx context.Context, path, address, assets string, output io.Writer,
+) (result error) {
 	if _, _, err := net.SplitHostPort(address); err != nil {
 		return fmt.Errorf("invalid listen address: %w", err)
 	}
@@ -29,13 +40,24 @@ func serveCatalog(ctx context.Context, path, address string, output io.Writer) (
 		return fmt.Errorf("open catalog: %w", err)
 	}
 	defer func() { result = errors.Join(result, db.Close()) }()
+
+	handler := httpapi.New(app.New(db))
+	if assets != "" {
+		var closeAssets func() error
+		handler, closeAssets, err = httpapi.WithAssets(handler, assets)
+		if err != nil {
+			return err
+		}
+		defer func() { result = errors.Join(result, closeAssets()) }()
+	}
+
 	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", address)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
 	defer listener.Close()
 	server := &http.Server{
-		Handler:           httpapi.New(app.New(db)),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,

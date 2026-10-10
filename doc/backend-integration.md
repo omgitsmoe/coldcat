@@ -98,16 +98,19 @@ An empty list is not a missing resource. See OpenAPI for endpoint-specific disti
 
 ## Browser origin and deployment constraints
 
-The backend serves JSON only: it does not serve static assets, expose OpenAPI as an HTTP
-route, or enable CORS. Keep loopback binding; it has no authentication and is not an
-Internet-facing service.
+The backend serves JSON by default. Optional `serve --assets frontend/build` adds the built
+static SPA on the same origin; see [frontend build and hosting](../frontend/README.md#built-route-and-same-origin-go-hosting-f10).
+API/readiness paths remain reserved, including failures and missing routes; only recognized
+UI deep links receive the shell. The backend does not expose OpenAPI as an HTTP route or
+enable CORS. Keep loopback binding; it has no authentication and is not an Internet-facing service.
 
-For a later local browser client, a same-origin development proxy can forward `/api/v1/*`
+The frontend's same-origin development proxy forwards `/api/v1/*`
 and `/healthz` to the loopback backend while serving assets itself. Same-origin includes
 scheme, hostname and port: another localhost port is a different origin. Without a proxy,
 cross-origin browser access requires a separately implemented, explicit CORS configuration
 with approved origins/methods/headers. There is currently no CORS CLI option, and browser
-security must not be disabled as a workaround. No frontend or proxy is implemented here.
+security must not be disabled as a workaround. Built Go hosting needs no development proxy
+or Node runtime.
 
 ## Contract coverage and remaining gate
 
