@@ -307,8 +307,11 @@ For each milestone, first write behavioral acceptance tests, then implement the 
   50,000-input success/late-parse-failure cases; test publication rollback independently.
 - [ ] **Partial:** million-input operational distribution command ran after renewed authorization:
   all three success cases passed, deep/shared late-failure cleanup assertions failed, and
-  history late failure was interrupted by the outer deadline. Investigate cleanup failures
-  and finish the incomplete case before closing the slice; publication-failure timing is unmeasured.
+  history late failure was interrupted by the outer deadline. A duplicate/shared-only rerun
+  confirms the observation DELETE exceeds the 30-second cleanup context; checked reference
+  plans are indexed. Diagnostic errors/tests were added, not a cleanup algorithm or timeout fix.
+  Profile that DELETE before choosing an optimization; deep failure is undiagnosed and history
+  failure remains unmeasured. Publication-failure timing is unmeasured.
 - [ ] Measure true **physical** journal peak using a suitable filesystem and validated
   allocation/free/reservation instrumentation. Blocked on that environment; logical VFS
   accounting or sampled apparent file lengths are not an approved replacement.
@@ -329,7 +332,10 @@ For each milestone, first write behavioral acceptance tests, then implement the 
    authorization allowed the run; deep/shared failures left two million observations instead
    of the one-million baseline, and history late failure hit the outer deadline. The three
    success cases passed; do not infer failure correctness or timings from them.
-   Publication-failure timing and
+   A bounded shared-only reproduction confirms observation cleanup deadline expiration;
+   indexed plans do not establish a safe optimization. Profile DELETE/trigger costs on an
+   owned fixture, then reproduce only affected failures. Keep the 30-second policy unless
+   an ADR proposal and user approval justify changing it. Publication-failure timing and
    distribution-specific RSS/transaction/journal evidence are unmeasured; select required
    operational measurements for the approved scope rather than expanding workloads indefinitely.
 4. **Provide physical journal-peak instrumentation:** this requirement remains deliberately
@@ -419,7 +425,12 @@ extractors, thumbnails, and Wails remain deferred.
     failures failed cleanup counts (two million observations remained, expected one million);
     history late failure was interrupted at the 29-minute outer deadline. The space guard
     did not trigger (minimum sampled free space 26.94 GB). The slice is incomplete, not
-    accepted; failed attempts emitted no validated metrics. Interrupted fixtures are preserved.
+     accepted; failed attempts emitted no validated metrics. Interrupted fixtures are preserved.
+     A later duplicate/shared-only rerun failed in 180.866 package seconds and printed the
+     original parse error plus `delete import observations: context deadline exceeded`.
+     Stage-labelled errors and rollback/index tests are in place; no cleanup fix is claimed.
+     Immutable inspection of the unrecovered history main file found an importing first
+     baseline, not proof the timed late-failure import began; its journal was not replayed.
     Publication-failure timing and distribution-specific RSS/transaction/journal evidence
     remain unmeasured. Setup/baseline imports are untimed; sampled heap is not RSS.
    **Isolated Linux process RSS measured:** `BenchmarkImportPeakRSS` runs fresh importer

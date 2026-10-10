@@ -62,26 +62,30 @@ func (db *DB) CleanupImport(ctx context.Context, id int64) error {
 		}
 
 		if _, err := tx.ExecContext(ctx, "DELETE FROM directory WHERE snapshot_id=?", id); err != nil {
-			return err
+			return fmt.Errorf("delete import directories: %w", err)
 		}
 
 		if _, err := tx.ExecContext(ctx, "DELETE FROM observation WHERE snapshot_id=?", id); err != nil {
-			return err
+			return fmt.Errorf("delete import observations: %w", err)
 		}
 
 		if _, err := tx.ExecContext(ctx, "DELETE FROM pending_size WHERE snapshot_id=?", id); err != nil {
-			return err
+			return fmt.Errorf("delete import staged sizes: %w", err)
 		}
 		// Ownership limits orphan cleanup to content introduced by this import.
 		if _, err := tx.ExecContext(ctx, `DELETE FROM content WHERE id IN (SELECT content_id FROM import_content WHERE snapshot_id=?)
  AND NOT EXISTS(SELECT 1 FROM observation WHERE content_id=content.id)
  AND NOT EXISTS(SELECT 1 FROM pending_size WHERE content_id=content.id)
  AND NOT EXISTS(SELECT 1 FROM import_content WHERE content_id=content.id AND snapshot_id!=?)`, id, id); err != nil {
-			return err
+			return fmt.Errorf("delete import-owned content: %w", err)
 		}
 
 		_, err = tx.ExecContext(ctx, "DELETE FROM snapshot WHERE id=?", id)
-		return err
+		if err != nil {
+			return fmt.Errorf("delete import snapshot: %w", err)
+		}
+
+		return nil
 	})
 }
 

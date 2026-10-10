@@ -1635,11 +1635,76 @@ go test ./internal/importer -run '^$' \
 ```
 
 Execution permission is no longer the blocker. Two observed cleanup failures and one
-interrupted case leave the million-input slice incomplete. Production code was not changed,
-and no failed case or other million-scale baseline was rerun. Publication-failure timing,
-broader import RSS/journal/transaction distributions, physical peak storage, cold measurements
-and approved budgets remain open. Logical journal accounting is not an approved substitute
-for the blocked physical-peak requirement.
+interrupted case leave the million-input slice incomplete. The original matrix did not
+change production code. Publication-failure timing, broader import RSS/journal/transaction
+distributions, physical peak storage, cold measurements and approved budgets remain open.
+Logical journal accounting is not an approved substitute for the blocked physical-peak requirement.
+
+#### Bounded cleanup diagnosis
+
+The follow-up on 2026-10-10 first added diagnostic context without weakening assertions:
+failed distribution imports log the entire joined error before checking table counts, and
+`CleanupImport` wraps each DELETE error with its stage while preserving the underlying error.
+Cleanup still uses one transaction and the separate 30-second context. No schema, cleanup
+algorithm, timeout, or catalog-access policy changed.
+
+Only the million-input `duplicate_shared/late_failure_true` case was rerun:
+
+```sh
+go test ./internal/importer -run '^$' \
+  -bench '^BenchmarkImportDistributions/1000000/duplicate_shared/late_failure_true$' \
+  -benchtime=1x -benchmem -v -timeout=30m
+```
+
+The unique workspace `TMPDIR`, isolated process group and one-second free-space watchdog
+were retained, with a 2,000,000,000-byte threshold and a 30-minute outer deadline. The
+command finished normally with a failing test after 180.866 package seconds (181.478
+wrapper seconds), without triggering either guard. Initial/minimum/final available bytes
+were 33,790,889,984 / 31,555,260,416 / 33,556,045,824. No successful million case was repeated.
+The benchmark printed both errors before the unchanged row-count failure:
+
+```text
+invalid request: line 1000002: expected a space separating fields and path: "broken"
+cleanup snapshot 2 failed: delete import observations: context deadline exceeded
+observation: 2000000, want 1000000
+```
+
+This confirms that the observation DELETE exceeds the cleanup deadline in the duplicate/shared
+reproduction, causing transactional cleanup rollback. It does **not** diagnose the separate
+deep-known failure or assign the time to any individual trigger, FTS operation, index update,
+or journal I/O. The command emits no validated failure throughput or import metrics.
+Logs/guard metadata are in `/tmp/opencode/million-cleanup-3948105496/`; the diagnostic wrapper
+is `/tmp/opencode/run-million-cleanup.go`. Its root `/workspace/.million-cleanup-577680217`
+was retained, though normal test `TempDir` cleanup removed the case's catalog.
+
+`TestImportCleanupReferenceIndexes` now checks the observation DELETE, shared-path lookup,
+search-path lookup and directory-file observation reference in addition to staged/owned
+content references. All checked plans use indexes: the snapshot/path unique index,
+`observation_path_snapshot`, the search-path unique index, directory-file integer primary
+key, `import_content_content` and `pending_size_content`. There is no confirmed missing-index
+fix in these plans. Observation deletion still invokes per-row immutability, search-path/FTS
+maintenance and directory-build invalidation; their relative costs are unmeasured.
+`TestImportCleanupErrorStages` injects failures at all five DELETE stages and checks the
+stage/original error and rollback preservation of snapshot, observation, staging, content,
+search and directory rows.
+
+The earlier interrupted history artifact was inspected through `mode=ro&immutable=1`, not
+application open or recovery. Its unrecovered main file contains snapshot 1 in `importing`
+state, 320,000 observation/content/search-path rows, and no directories; its 300,104-byte
+journal was not replayed. These are **not recovered or transaction-consistent counts** and
+do not establish how far the interrupted process progressed. In particular, the artifacts
+do not prove that the timed late-failure import began; baseline setup is untimed. All original
+fixtures, the workspace catalog and its lock remain untouched.
+
+No bounded cleanup optimization was established, so the million-input gate remains Partial.
+The next bounded task is to profile the duplicate/shared observation DELETE and its triggers
+on an owned temporary fixture, preserving the completed baseline and FTS integrity checks.
+Use per-case guarded runs rather than another whole-matrix deadline. If a concrete optimization
+is found, first test rollback, shared-path preservation, cancellation, recovery and joined
+errors at small scale, then rerun only the affected million failure. Deep-known late failure
+is the next undiagnosed completed failure; history late failure remains unmeasured. A timeout
+or transactional-cleanup policy change requires a proposed ADR covering the decision, context,
+alternatives and consequences, and user approval before implementation; none was made here.
 
 ## Verification and follow-on work
 
@@ -1653,10 +1718,12 @@ After the latest implementation, the parent reported all required checks passed:
   database 43.200 seconds, httpapi 33.556 seconds, importer 653.412 seconds;
   scripts package has no tests. This was the only end-of-work full race run.
 
-This follow-up ran the million-input distribution benchmarks above and documentation diff
-checks, not another normal/vet/race suite; production code is unchanged. The earlier required
-checks remain recorded, but newly observed million-distribution cleanup failures prevent
-treating that operational slice as correct. Operational acceptance remains Partial. The concrete
+The original matrix follow-up ran benchmarks and documentation diff checks only. The bounded
+diagnostic follow-up passed `go test ./...` (importer 22.022 seconds) and `go vet ./...`, plus
+one focused serial race check of cleanup-stage/index, distribution-fixture and cleanup-poisoning
+tests: database 2.047 seconds, importer 454.939 seconds. The full race suite was not repeated.
+The observed million-distribution cleanup failures prevent treating that operational slice
+as correct. Operational acceptance remains Partial. The concrete
 [remaining decisions and blockers](coldcat-backend-api.md#remaining-decisions-and-blockers)
 are supported limits/budgets, cold boundary/latency metric, million-input cleanup failures
 and the interrupted history case, true physical journal-peak instrumentation and final gate approval.

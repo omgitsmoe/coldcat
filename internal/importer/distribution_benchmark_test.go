@@ -162,6 +162,7 @@ func assertDistributionImport(
 	tb.Helper()
 	failed := failure != ""
 	if failed {
+		tb.Logf("failed import result: %v", importErr)
 		fragment := "distribution publication failure"
 		if failure == "parse" {
 			fragment = fmt.Sprintf("line %d", d.files+2)
