@@ -1,0 +1,912 @@
+// Generated from doc/openapi.json; do not edit.
+// SHA-256: 75c07bcf5a2aac8d8f525d8a4bfd00e38ba3bfbf6418ebc54f98d33f42e556e1
+import type { Schema, Operation } from '../schema';
+import type { operations } from './wire';
+export const schemas: Record<
+  | 'CatalogSummary'
+  | 'DirectorySummary'
+  | 'DirectoryDetail'
+  | 'DirectoryPage'
+  | 'DirectoryEntry'
+  | 'DirectoryComparisonFilters'
+  | 'DirectorySelection'
+  | 'DirectoryReplica'
+  | 'DirectoryReplicaPage'
+  | 'DirectoryCoverage'
+  | 'DirectoryCoveragePage'
+  | 'CreateDisk'
+  | 'UpdateDisk'
+  | 'DiskSummary'
+  | 'DiskDetail'
+  | 'DiskPage'
+  | 'NullableSnapshot'
+  | 'Decimal'
+  | 'ContentPage'
+  | 'SearchPage'
+  | 'SearchItem'
+  | 'SnapshotPage'
+  | 'ID'
+  | 'Count'
+  | 'NullableBytes'
+  | 'Timestamp'
+  | 'NullableTimestamp'
+  | 'Algorithm'
+  | 'Hash'
+  | 'Content'
+  | 'Disk'
+  | 'Snapshot'
+  | 'Observation'
+  | 'ObservationSummary'
+  | 'ContentObservation'
+  | 'ObservationPage'
+  | 'Error',
+  Schema
+> = {
+  CatalogSummary: {
+    type: 'object',
+    required: ['revision', 'scope', 'disk_count', 'file_count', 'content_count'],
+    additionalProperties: false,
+    properties: {
+      revision: { ref: 'Decimal' },
+      scope: { type: 'string', const: 'current' },
+      disk_count: { ref: 'Decimal' },
+      file_count: { ref: 'Decimal' },
+      content_count: { ref: 'Decimal' },
+    },
+  },
+  DirectorySummary: {
+    type: 'object',
+    required: [
+      'path',
+      'file_count',
+      'content_count',
+      'known_bytes',
+      'unknown_size_file_count',
+      'size_complete',
+      'unique_content_known_bytes',
+      'unknown_size_content_count',
+      'unique_content_size_complete',
+      'max_known_mtime',
+    ],
+    properties: {
+      path: { type: 'string' },
+      file_count: { ref: 'Decimal' },
+      content_count: { ref: 'Decimal' },
+      known_bytes: { ref: 'Decimal' },
+      unknown_size_file_count: { ref: 'Decimal' },
+      size_complete: { type: 'boolean' },
+      unique_content_known_bytes: { ref: 'Decimal' },
+      unknown_size_content_count: { ref: 'Decimal' },
+      unique_content_size_complete: { type: 'boolean' },
+      max_known_mtime: { type: ['string', 'null'], format: 'date-time' },
+    },
+  },
+  DirectoryDetail: {
+    type: 'object',
+    required: [
+      'snapshot',
+      'revision',
+      'is_current',
+      'replica_scope',
+      'directory',
+      'redundancy_histogram',
+    ],
+    properties: {
+      snapshot: { ref: 'Snapshot' },
+      revision: { ref: 'Decimal' },
+      is_current: { type: 'boolean' },
+      replica_scope: { type: 'string', const: 'current' },
+      directory: { ref: 'DirectorySummary' },
+      redundancy_histogram: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['other_disk_count', 'file_count'],
+          properties: { other_disk_count: { ref: 'Decimal' }, file_count: { ref: 'Decimal' } },
+        },
+      },
+    },
+  },
+  DirectoryPage: {
+    type: 'object',
+    required: [
+      'snapshot',
+      'revision',
+      'is_current',
+      'replica_scope',
+      'filters',
+      'items',
+      'next_cursor',
+    ],
+    properties: {
+      snapshot: { ref: 'Snapshot' },
+      revision: { ref: 'Decimal' },
+      is_current: { type: 'boolean' },
+      replica_scope: { type: 'string', const: 'current' },
+      filters: {
+        type: 'object',
+        required: [
+          'path',
+          'directories_only',
+          'recursive',
+          'replica_metric',
+          'other_replicas',
+          'min_other_replicas',
+          'max_other_replicas',
+        ],
+        properties: {
+          path: { type: 'string' },
+          directories_only: { type: 'boolean' },
+          recursive: { type: 'boolean' },
+          replica_metric: { type: 'string', enum: ['disks', 'locations'] },
+          other_replicas: { type: ['string', 'null'], pattern: '^(0|[1-9][0-9]*)$' },
+          min_other_replicas: { type: ['string', 'null'], pattern: '^(0|[1-9][0-9]*)$' },
+          max_other_replicas: { type: ['string', 'null'], pattern: '^(0|[1-9][0-9]*)$' },
+        },
+      },
+      items: { type: 'array', items: { ref: 'DirectoryEntry' } },
+      next_cursor: { type: ['string', 'null'] },
+    },
+  },
+  DirectoryEntry: {
+    type: 'object',
+    required: ['path', 'kind', 'directory', 'file'],
+    properties: {
+      path: { type: 'string' },
+      kind: { type: 'string', enum: ['directory', 'file'] },
+      directory: {
+        type: ['object', 'null'],
+        required: [
+          'path',
+          'file_count',
+          'content_count',
+          'known_bytes',
+          'unknown_size_file_count',
+          'size_complete',
+          'unique_content_known_bytes',
+          'unknown_size_content_count',
+          'unique_content_size_complete',
+          'max_known_mtime',
+        ],
+        properties: {
+          path: { type: 'string' },
+          file_count: { ref: 'Decimal' },
+          content_count: { ref: 'Decimal' },
+          known_bytes: { ref: 'Decimal' },
+          unknown_size_file_count: { ref: 'Decimal' },
+          size_complete: { type: 'boolean' },
+          unique_content_known_bytes: { ref: 'Decimal' },
+          unknown_size_content_count: { ref: 'Decimal' },
+          unique_content_size_complete: { type: 'boolean' },
+          max_known_mtime: { type: ['string', 'null'], format: 'date-time' },
+        },
+      },
+      file: {
+        type: ['object', 'null'],
+        required: ['observation', 'hash', 'size', 'other_location_count', 'other_disk_count'],
+        properties: {
+          observation: { ref: 'Observation' },
+          hash: { ref: 'Hash' },
+          size: { type: ['string', 'null'], pattern: '^(0|[1-9][0-9]*)$' },
+          other_location_count: { ref: 'Decimal' },
+          other_disk_count: { ref: 'Decimal' },
+        },
+      },
+    },
+  },
+  DirectoryComparisonFilters: {
+    type: 'object',
+    required: ['path', 'allow', 'block'],
+    properties: {
+      path: { type: 'string' },
+      allow: { type: 'array', items: { type: 'string' } },
+      block: { type: 'array', items: { type: 'string' } },
+    },
+  },
+  DirectorySelection: {
+    type: 'object',
+    required: [
+      'retained_file_count',
+      'excluded_file_count',
+      'content_count',
+      'known_bytes',
+      'unknown_size_file_count',
+      'size_complete',
+      'empty_comparison',
+    ],
+    properties: {
+      retained_file_count: { ref: 'Count' },
+      excluded_file_count: { ref: 'Count' },
+      content_count: { ref: 'Count' },
+      known_bytes: { ref: 'Decimal' },
+      unknown_size_file_count: { ref: 'Count' },
+      size_complete: { type: 'boolean' },
+      empty_comparison: { type: 'boolean' },
+    },
+  },
+  DirectoryReplica: {
+    type: 'object',
+    required: [
+      'disk',
+      'snapshot',
+      'path',
+      'same_disk',
+      'whole_tree_equal',
+      'retained_file_count',
+      'excluded_file_count',
+    ],
+    properties: {
+      disk: { ref: 'Disk' },
+      snapshot: { ref: 'Snapshot' },
+      path: { type: 'string' },
+      same_disk: { type: 'boolean' },
+      whole_tree_equal: { type: 'boolean' },
+      retained_file_count: { ref: 'Count' },
+      excluded_file_count: { ref: 'Count' },
+    },
+  },
+  DirectoryReplicaPage: {
+    type: 'object',
+    required: [
+      'snapshot',
+      'revision',
+      'is_current',
+      'replica_scope',
+      'filters',
+      'selection',
+      'items',
+      'next_cursor',
+    ],
+    properties: {
+      snapshot: { ref: 'Snapshot' },
+      revision: { ref: 'Decimal' },
+      is_current: { type: 'boolean' },
+      replica_scope: { type: 'string', const: 'current' },
+      filters: { ref: 'DirectoryComparisonFilters' },
+      selection: { ref: 'DirectorySelection' },
+      items: { type: 'array', items: { ref: 'DirectoryReplica' } },
+      next_cursor: { type: ['string', 'null'] },
+    },
+  },
+  DirectoryCoverage: {
+    type: 'object',
+    required: [
+      'disk',
+      'snapshot',
+      'covered_file_count',
+      'missing_file_count',
+      'covered_content_count',
+      'missing_content_count',
+      'covered_known_bytes',
+      'missing_known_bytes',
+      'covered_unknown_size_file_count',
+      'missing_unknown_size_file_count',
+      'complete',
+    ],
+    properties: {
+      disk: { ref: 'Disk' },
+      snapshot: { ref: 'Snapshot' },
+      covered_file_count: { ref: 'Count' },
+      missing_file_count: { ref: 'Count' },
+      covered_content_count: { ref: 'Count' },
+      missing_content_count: { ref: 'Count' },
+      covered_known_bytes: { ref: 'Decimal' },
+      missing_known_bytes: { ref: 'Decimal' },
+      covered_unknown_size_file_count: { ref: 'Count' },
+      missing_unknown_size_file_count: { ref: 'Count' },
+      complete: { type: 'boolean' },
+    },
+  },
+  DirectoryCoveragePage: {
+    type: 'object',
+    required: [
+      'snapshot',
+      'revision',
+      'is_current',
+      'replica_scope',
+      'filters',
+      'selection',
+      'items',
+      'next_cursor',
+    ],
+    properties: {
+      snapshot: { ref: 'Snapshot' },
+      revision: { ref: 'Decimal' },
+      is_current: { type: 'boolean' },
+      replica_scope: { type: 'string', const: 'current' },
+      filters: { ref: 'DirectoryComparisonFilters' },
+      selection: { ref: 'DirectorySelection' },
+      items: { type: 'array', items: { ref: 'DirectoryCoverage' } },
+      next_cursor: { type: ['string', 'null'] },
+    },
+  },
+  CreateDisk: {
+    type: 'object',
+    required: ['label', 'capacity'],
+    additionalProperties: false,
+    properties: {
+      label: { type: 'string', minLength: 1 },
+      capacity: { type: 'string', pattern: '^[0-9]+$' },
+      notes: { type: ['string', 'null'] },
+      serial: { type: ['string', 'null'] },
+    },
+  },
+  UpdateDisk: {
+    type: 'object',
+    minProperties: 1,
+    additionalProperties: false,
+    properties: {
+      label: { type: 'string', minLength: 1 },
+      capacity: { type: 'string', pattern: '^[0-9]+$' },
+      notes: { type: ['string', 'null'] },
+      serial: { type: ['string', 'null'] },
+    },
+  },
+  DiskSummary: {
+    type: 'object',
+    required: ['id', 'label', 'notes', 'serial', 'capacity', 'latest_snapshot'],
+    properties: {
+      id: { ref: 'ID' },
+      label: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      serial: { type: ['string', 'null'] },
+      capacity: { ref: 'Decimal' },
+      latest_snapshot: { ref: 'NullableSnapshot' },
+    },
+  },
+  DiskDetail: {
+    type: 'object',
+    required: ['id', 'label', 'notes', 'serial', 'capacity', 'latest_snapshot', 'cataloged'],
+    properties: {
+      id: { ref: 'ID' },
+      label: { type: 'string' },
+      notes: { type: ['string', 'null'] },
+      serial: { type: ['string', 'null'] },
+      capacity: { ref: 'Decimal' },
+      latest_snapshot: { ref: 'NullableSnapshot' },
+      cataloged: {
+        type: ['object', 'null'],
+        required: [
+          'file_count',
+          'content_count',
+          'known_bytes',
+          'unknown_size_file_count',
+          'size_complete',
+        ],
+        properties: {
+          file_count: { ref: 'Count' },
+          content_count: { ref: 'Count' },
+          known_bytes: { ref: 'Decimal' },
+          unknown_size_file_count: { ref: 'Count' },
+          size_complete: { type: 'boolean' },
+        },
+      },
+    },
+  },
+  DiskPage: {
+    type: 'object',
+    required: ['revision', 'items', 'next_cursor'],
+    properties: {
+      revision: { ref: 'Decimal' },
+      items: { type: 'array', items: { ref: 'DiskSummary' } },
+      next_cursor: { type: ['string', 'null'] },
+    },
+  },
+  NullableSnapshot: {
+    type: ['object', 'null'],
+    required: [
+      'id',
+      'disk_id',
+      'state',
+      'captured_at',
+      'imported_at',
+      'capture_provenance',
+      'input_path',
+      'input_format',
+      'file_count',
+      'content_count',
+    ],
+    properties: {
+      id: { ref: 'ID' },
+      disk_id: { ref: 'ID' },
+      state: { type: 'string', const: 'complete' },
+      captured_at: { ref: 'Timestamp' },
+      imported_at: { ref: 'Timestamp' },
+      capture_provenance: { type: 'string', enum: ['explicit', 'source_mtime'] },
+      input_path: { type: 'string' },
+      input_format: { type: 'string' },
+      file_count: { ref: 'Count' },
+      content_count: { ref: 'Count' },
+    },
+  },
+  Decimal: { type: 'string', pattern: '^(0|[1-9][0-9]*)$' },
+  ContentPage: {
+    type: 'object',
+    required: ['scope', 'revision', 'filters', 'items', 'next_cursor'],
+    properties: {
+      scope: { type: 'string', enum: ['current', 'history'] },
+      revision: { ref: 'Decimal' },
+      filters: {
+        type: 'object',
+        required: [
+          'disk_id',
+          'directory',
+          'replica_metric',
+          'other_replicas',
+          'min_other_replicas',
+          'max_other_replicas',
+        ],
+        properties: {
+          disk_id: { type: ['string', 'null'], pattern: '^[1-9][0-9]*$' },
+          directory: { type: 'string' },
+          replica_metric: { type: 'string', enum: ['disks', 'locations'] },
+          other_replicas: { type: ['string', 'null'], pattern: '^[0-9]+$' },
+          min_other_replicas: { type: ['string', 'null'], pattern: '^[0-9]+$' },
+          max_other_replicas: { type: ['string', 'null'], pattern: '^[0-9]+$' },
+        },
+      },
+      items: { type: 'array', items: { ref: 'Content' } },
+      next_cursor: { type: ['string', 'null'] },
+    },
+  },
+  SearchPage: {
+    type: 'object',
+    required: ['scope', 'revision', 'filters', 'items', 'next_cursor'],
+    properties: {
+      scope: { type: 'string', enum: ['current', 'history'] },
+      revision: { ref: 'Decimal' },
+      filters: {
+        type: 'object',
+        required: [
+          'q',
+          'field',
+          'match',
+          'snapshot_id',
+          'disk_id',
+          'directory',
+          'replica_metric',
+          'other_replicas',
+          'min_other_replicas',
+          'max_other_replicas',
+        ],
+        properties: {
+          q: { type: 'string', minLength: 1 },
+          field: { type: 'string', enum: ['name', 'path'] },
+          match: { type: 'string', enum: ['exact', 'substring'] },
+          snapshot_id: { type: ['string', 'null'], pattern: '^[1-9][0-9]*$' },
+          disk_id: { type: ['string', 'null'], pattern: '^[1-9][0-9]*$' },
+          directory: { type: 'string' },
+          replica_metric: { type: 'string', enum: ['disks', 'locations'] },
+          other_replicas: { type: ['string', 'null'], pattern: '^[0-9]+$' },
+          min_other_replicas: { type: ['string', 'null'], pattern: '^[0-9]+$' },
+          max_other_replicas: { type: ['string', 'null'], pattern: '^[0-9]+$' },
+        },
+      },
+      items: { type: 'array', items: { ref: 'SearchItem' } },
+      next_cursor: { type: ['string', 'null'] },
+    },
+  },
+  SearchItem: {
+    type: 'object',
+    required: ['observation', 'content', 'disk', 'snapshot', 'basename', 'is_current', 'relevance'],
+    properties: {
+      observation: { ref: 'Observation' },
+      content: { ref: 'Content' },
+      disk: { ref: 'Disk' },
+      snapshot: { ref: 'Snapshot' },
+      basename: { type: 'string' },
+      is_current: { type: 'boolean' },
+      relevance: { type: 'string', enum: ['exact', 'prefix', 'substring'] },
+    },
+  },
+  SnapshotPage: {
+    type: 'object',
+    required: ['disk_id', 'revision', 'items', 'next_cursor'],
+    properties: {
+      disk_id: { ref: 'ID' },
+      revision: { ref: 'Count' },
+      items: { type: 'array', items: { ref: 'Snapshot' } },
+      next_cursor: { type: ['string', 'null'] },
+    },
+  },
+  ID: { type: 'string', pattern: '^[1-9][0-9]*$' },
+  Count: { type: 'string', pattern: '^(0|[1-9][0-9]*)$' },
+  NullableBytes: { type: ['string', 'null'], pattern: '^(0|[1-9][0-9]*)$' },
+  Timestamp: { type: 'string', format: 'date-time' },
+  NullableTimestamp: { type: ['string', 'null'], format: 'date-time' },
+  Algorithm: {
+    type: 'string',
+    enum: [
+      'md4',
+      'md5',
+      'sha1',
+      'sha256',
+      'sha384',
+      'sha3_224',
+      'sha3_256',
+      'sha3_384',
+      'sha3_512',
+      'sha512',
+    ],
+  },
+  Hash: {
+    type: 'object',
+    required: ['algorithm', 'hex'],
+    properties: {
+      algorithm: { ref: 'Algorithm' },
+      hex: { type: 'string', pattern: '^(?:[0-9a-f]{2})+$' },
+    },
+  },
+  Content: {
+    type: 'object',
+    required: [
+      'id',
+      'hash',
+      'size',
+      'scope',
+      'location_count',
+      'disk_count',
+      'observation_count',
+      'current_location_count',
+      'current_disk_count',
+    ],
+    properties: {
+      id: { ref: 'ID' },
+      hash: { ref: 'Hash' },
+      size: { ref: 'NullableBytes' },
+      scope: { type: 'string', enum: ['current', 'history'] },
+      location_count: { ref: 'Count' },
+      disk_count: { ref: 'Count' },
+      observation_count: { ref: 'Count' },
+      current_location_count: { ref: 'Count' },
+      current_disk_count: { ref: 'Count' },
+    },
+  },
+  Disk: {
+    type: 'object',
+    required: ['id', 'label', 'serial', 'capacity'],
+    properties: {
+      id: { ref: 'ID' },
+      label: { type: 'string' },
+      serial: { type: 'string' },
+      capacity: { ref: 'Count' },
+    },
+  },
+  Snapshot: {
+    type: 'object',
+    required: [
+      'id',
+      'disk_id',
+      'state',
+      'captured_at',
+      'imported_at',
+      'capture_provenance',
+      'input_path',
+      'input_format',
+      'file_count',
+      'content_count',
+    ],
+    properties: {
+      id: { ref: 'ID' },
+      disk_id: { ref: 'ID' },
+      state: { type: 'string', const: 'complete' },
+      captured_at: { ref: 'Timestamp' },
+      imported_at: { ref: 'Timestamp' },
+      capture_provenance: { type: 'string', enum: ['explicit', 'source_mtime'] },
+      input_path: { type: 'string' },
+      input_format: { type: 'string' },
+      file_count: { ref: 'Count' },
+      content_count: { ref: 'Count' },
+    },
+  },
+  Observation: {
+    type: 'object',
+    required: ['id', 'content_id', 'snapshot_id', 'path', 'mtime'],
+    properties: {
+      id: { ref: 'ID' },
+      content_id: { ref: 'ID' },
+      snapshot_id: { ref: 'ID' },
+      path: { type: 'string' },
+      mtime: { ref: 'NullableTimestamp' },
+    },
+  },
+  ObservationSummary: {
+    type: 'object',
+    required: [
+      'observation',
+      'snapshot',
+      'disk',
+      'content',
+      'other_location_count',
+      'other_disk_count',
+    ],
+    properties: {
+      observation: { ref: 'Observation' },
+      snapshot: { ref: 'Snapshot' },
+      disk: { ref: 'Disk' },
+      content: { ref: 'Content' },
+      other_location_count: { ref: 'Count' },
+      other_disk_count: { ref: 'Count' },
+    },
+  },
+  ContentObservation: {
+    type: 'object',
+    required: ['observation', 'snapshot', 'disk', 'size', 'is_current'],
+    properties: {
+      observation: { ref: 'Observation' },
+      snapshot: { ref: 'Snapshot' },
+      disk: { ref: 'Disk' },
+      size: { ref: 'NullableBytes' },
+      is_current: { type: 'boolean' },
+    },
+  },
+  ObservationPage: {
+    type: 'object',
+    required: ['scope', 'revision', 'items', 'next_cursor'],
+    properties: {
+      scope: { type: 'string', enum: ['current', 'history'] },
+      revision: { ref: 'Count' },
+      items: { type: 'array', items: { ref: 'ContentObservation' } },
+      next_cursor: { type: ['string', 'null'] },
+    },
+  },
+  Error: {
+    type: 'object',
+    required: ['error'],
+    properties: {
+      error: {
+        type: 'object',
+        required: ['code', 'message'],
+        properties: {
+          code: {
+            type: 'string',
+            enum: [
+              'invalid_request',
+              'not_found',
+              'stale_cursor',
+              'conflict',
+              'catalog_unavailable',
+              'internal_error',
+              'method_not_allowed',
+              'request_too_large',
+              'unsupported_media_type',
+            ],
+          },
+          message: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+export const contract: Record<keyof operations, Operation> = {
+  'GET /api/v1/catalog': {
+    method: 'GET',
+    path: '/api/v1/catalog',
+    status: 200,
+    query: {},
+    response: { ref: 'CatalogSummary' },
+  },
+  'GET /api/v1/snapshots/{id}/directories': {
+    method: 'GET',
+    path: '/api/v1/snapshots/{id}/directories',
+    status: 200,
+    query: {
+      parent: { schema: { type: 'string' }, required: false },
+      limit: { schema: { type: 'integer', minimum: 1, maximum: 200 }, required: false },
+      cursor: { schema: { type: 'string', minLength: 1, maxLength: 16384 }, required: false },
+    },
+    response: { ref: 'DirectoryPage' },
+  },
+  'GET /api/v1/snapshots/{id}/directory': {
+    method: 'GET',
+    path: '/api/v1/snapshots/{id}/directory',
+    status: 200,
+    query: { path: { schema: { type: 'string' }, required: false } },
+    response: { ref: 'DirectoryDetail' },
+  },
+  'GET /api/v1/snapshots/{id}/directory/entries': {
+    method: 'GET',
+    path: '/api/v1/snapshots/{id}/directory/entries',
+    status: 200,
+    query: {
+      path: { schema: { type: 'string' }, required: false },
+      recursive: { schema: { type: 'boolean' }, required: false },
+      replica_metric: { schema: { type: 'string', enum: ['disks', 'locations'] }, required: false },
+      other_replicas: { schema: { ref: 'Decimal' }, required: false },
+      min_other_replicas: { schema: { ref: 'Decimal' }, required: false },
+      max_other_replicas: { schema: { ref: 'Decimal' }, required: false },
+      limit: { schema: { type: 'integer', minimum: 1, maximum: 200 }, required: false },
+      cursor: { schema: { type: 'string', minLength: 1, maxLength: 16384 }, required: false },
+    },
+    response: { ref: 'DirectoryPage' },
+  },
+  'GET /api/v1/snapshots/{id}/directory/replicas': {
+    method: 'GET',
+    path: '/api/v1/snapshots/{id}/directory/replicas',
+    status: 200,
+    query: {
+      path: { schema: { type: 'string' }, required: false },
+      allow: {
+        schema: {
+          type: 'array',
+          maxItems: 100,
+          items: { type: 'string', minLength: 1, maxLength: 1024 },
+        },
+        required: false,
+      },
+      block: {
+        schema: {
+          type: 'array',
+          maxItems: 100,
+          items: { type: 'string', minLength: 1, maxLength: 1024 },
+        },
+        required: false,
+      },
+      limit: { schema: { type: 'integer', minimum: 1, maximum: 200 }, required: false },
+      cursor: { schema: { type: 'string', minLength: 1, maxLength: 16384 }, required: false },
+    },
+    response: { ref: 'DirectoryReplicaPage' },
+  },
+  'GET /api/v1/snapshots/{id}/directory/coverage': {
+    method: 'GET',
+    path: '/api/v1/snapshots/{id}/directory/coverage',
+    status: 200,
+    query: {
+      path: { schema: { type: 'string' }, required: false },
+      allow: {
+        schema: {
+          type: 'array',
+          maxItems: 100,
+          items: { type: 'string', minLength: 1, maxLength: 1024 },
+        },
+        required: false,
+      },
+      block: {
+        schema: {
+          type: 'array',
+          maxItems: 100,
+          items: { type: 'string', minLength: 1, maxLength: 1024 },
+        },
+        required: false,
+      },
+      limit: { schema: { type: 'integer', minimum: 1, maximum: 200 }, required: false },
+      cursor: { schema: { type: 'string', minLength: 1, maxLength: 16384 }, required: false },
+    },
+    response: { ref: 'DirectoryCoveragePage' },
+  },
+  'GET /api/v1/search': {
+    method: 'GET',
+    path: '/api/v1/search',
+    status: 200,
+    query: {
+      q: { schema: { type: 'string', minLength: 1 }, required: true },
+      field: { schema: { type: 'string', enum: ['name', 'path'] }, required: false },
+      match: { schema: { type: 'string', enum: ['exact', 'substring'] }, required: false },
+      scope: { schema: { type: 'string', enum: ['current', 'history'] }, required: false },
+      disk_id: { schema: { ref: 'ID' }, required: false },
+      snapshot_id: { schema: { ref: 'ID' }, required: false },
+      directory: { schema: { type: 'string' }, required: false },
+      replica_metric: { schema: { type: 'string', enum: ['disks', 'locations'] }, required: false },
+      other_replicas: { schema: { ref: 'Decimal' }, required: false },
+      min_other_replicas: { schema: { ref: 'Decimal' }, required: false },
+      max_other_replicas: { schema: { ref: 'Decimal' }, required: false },
+      limit: { schema: { type: 'integer', minimum: 1, maximum: 200 }, required: false },
+      cursor: { schema: { type: 'string', minLength: 1, maxLength: 16384 }, required: false },
+    },
+    response: { ref: 'SearchPage' },
+  },
+  'GET /healthz': {
+    method: 'GET',
+    path: '/healthz',
+    status: 200,
+    query: {},
+    response: {
+      type: 'object',
+      required: ['status'],
+      properties: { status: { const: 'ready', type: 'string' } },
+    },
+  },
+  'GET /api/v1/contents': {
+    method: 'GET',
+    path: '/api/v1/contents',
+    status: 200,
+    query: {
+      scope: { schema: { type: 'string', enum: ['current', 'history'] }, required: false },
+      disk_id: { schema: { ref: 'ID' }, required: false },
+      directory: { schema: { type: 'string' }, required: false },
+      replica_metric: { schema: { type: 'string', enum: ['disks', 'locations'] }, required: false },
+      other_replicas: { schema: { ref: 'Decimal' }, required: false },
+      min_other_replicas: { schema: { ref: 'Decimal' }, required: false },
+      max_other_replicas: { schema: { ref: 'Decimal' }, required: false },
+      limit: { schema: { type: 'integer', minimum: 1, maximum: 200 }, required: false },
+      cursor: { schema: { type: 'string', minLength: 1, maxLength: 16384 }, required: false },
+    },
+    response: { ref: 'ContentPage' },
+  },
+  'GET /api/v1/contents/lookup': {
+    method: 'GET',
+    path: '/api/v1/contents/lookup',
+    status: 200,
+    query: {
+      hash_type: { schema: { ref: 'Algorithm' }, required: true },
+      hash: { schema: { type: 'string', pattern: '^(?:[0-9a-fA-F]{2})+$' }, required: true },
+      scope: { schema: { type: 'string', enum: ['current', 'history'] }, required: false },
+    },
+    response: { ref: 'Content' },
+  },
+  'GET /api/v1/contents/{id}': {
+    method: 'GET',
+    path: '/api/v1/contents/{id}',
+    status: 200,
+    query: { scope: { schema: { type: 'string', enum: ['current', 'history'] }, required: false } },
+    response: { ref: 'Content' },
+  },
+  'GET /api/v1/contents/{id}/observations': {
+    method: 'GET',
+    path: '/api/v1/contents/{id}/observations',
+    status: 200,
+    query: {
+      scope: { schema: { type: 'string', enum: ['current', 'history'] }, required: false },
+      limit: { schema: { type: 'integer', minimum: 1, maximum: 200 }, required: false },
+      cursor: { schema: { type: 'string', minLength: 1, maxLength: 2048 }, required: false },
+    },
+    response: { ref: 'ObservationPage' },
+  },
+  'GET /api/v1/observations/{id}': {
+    method: 'GET',
+    path: '/api/v1/observations/{id}',
+    status: 200,
+    query: {},
+    response: { ref: 'ObservationSummary' },
+  },
+  'GET /api/v1/disks': {
+    method: 'GET',
+    path: '/api/v1/disks',
+    status: 200,
+    query: {
+      limit: { schema: { type: 'integer', minimum: 1, maximum: 200 }, required: false },
+      cursor: { schema: { type: 'string', minLength: 1, maxLength: 2048 }, required: false },
+    },
+    response: { ref: 'DiskPage' },
+  },
+  'POST /api/v1/disks': {
+    method: 'POST',
+    path: '/api/v1/disks',
+    status: 201,
+    query: {},
+    response: { ref: 'DiskDetail' },
+    body: { ref: 'CreateDisk' },
+  },
+  'GET /api/v1/disks/{id}': {
+    method: 'GET',
+    path: '/api/v1/disks/{id}',
+    status: 200,
+    query: {},
+    response: { ref: 'DiskDetail' },
+  },
+  'PATCH /api/v1/disks/{id}': {
+    method: 'PATCH',
+    path: '/api/v1/disks/{id}',
+    status: 200,
+    query: {},
+    response: { ref: 'DiskDetail' },
+    body: { ref: 'UpdateDisk' },
+  },
+  'GET /api/v1/disks/{id}/snapshots': {
+    method: 'GET',
+    path: '/api/v1/disks/{id}/snapshots',
+    status: 200,
+    query: {
+      limit: { schema: { type: 'integer', minimum: 1, maximum: 200 }, required: false },
+      cursor: { schema: { type: 'string', minLength: 1, maxLength: 2048 }, required: false },
+    },
+    response: { ref: 'SnapshotPage' },
+  },
+  'GET /api/v1/snapshots/{id}': {
+    method: 'GET',
+    path: '/api/v1/snapshots/{id}',
+    status: 200,
+    query: {},
+    response: { ref: 'Snapshot' },
+  },
+};
