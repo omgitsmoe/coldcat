@@ -599,21 +599,43 @@ manual retry. It never supplies cached/demo responses as proof of backend readin
 
 ## Built route and same-origin Go hosting (F10)
 
-Build with the pinned Node/npm toolchain, then run from the repository root:
+From the repository root, build and start the UI and API together with:
 
 ```sh
-go build -o /tmp/opencode/coldcat ./cmd/coldcat
-/tmp/opencode/coldcat --db /tmp/opencode/demo.sqlite serve \
+just serve /path/to/catalog.sqlite
+```
+
+This installs the pinned frontend dependencies, builds the static UI, embeds it in `build/coldcat`,
+and starts the Go server at `http://127.0.0.1:8080/`. An optional second argument sets the
+listen address: `just serve /path/to/catalog.sqlite 127.0.0.1:8081`.
+Stop any existing server before running it; the catalog allows only one owner.
+With no arguments, `just serve` uses `coldcat.sqlite` in the repository root.
+Use `just build` to build without starting the server. These recipes require Just, Go,
+and the pinned Node/npm toolchain. `just build` uses the `webui` Go build tag, which embeds
+`frontend/build/` including SvelteKit's `_app/` assets. Distribute only `build/coldcat`;
+`coldcat --db /path/to/catalog.sqlite serve` serves both UI and API without Node or asset files.
+The embedded UI changes only when the binary is rebuilt.
+
+Ordinary `go build ./cmd/coldcat` and Go tests remain frontend-independent and API-only.
+To build the combined binary manually, run `npm --prefix frontend ci`, then
+`npm --prefix frontend run build`, then `go build -tags webui -o build/coldcat ./cmd/coldcat`.
+The tagged build requires real frontend output; no placeholder UI is supplied.
+
+To override the embedded UI with a built asset directory, run from the repository root:
+
+```sh
+./build/coldcat --db /path/to/catalog.sqlite serve \
   --listen 127.0.0.1:8080 --assets frontend/build
 ```
 
-Open `http://127.0.0.1:8080/`. The deployed process is Go only: distribute the binary and
-the entire built directory, not `node_modules` or a Node server. `--assets` is optional;
-omitting it preserves API-only serving. Relative asset paths resolve from the server's
+Open `http://127.0.0.1:8080/`. The deployed process is Go only. When using `--assets`,
+distribute the binary and the entire built directory, not `node_modules` or a Node server.
+`--assets` overrides the bundled UI; `--api-only` disables it and cannot be combined with
+`--assets`. Relative asset paths resolve from the server's
 working directory. An explicitly empty directory, inaccessible directory, or missing/non-file
 `index.html` fails startup without announcing readiness. Supply a trusted build-only directory;
 all its regular files can be served. Stop Go before replacing the build, and keep `index.html`
-and its hashed assets together. Subpath hosting and embedded assets are not configured.
+and its hashed assets together. Subpath hosting is not configured.
 
 The server exclusively owns the chosen catalog. Import offline before starting it; stop it
 before any CLI catalog operation, and never delete lock files. Keep the default loopback bind.

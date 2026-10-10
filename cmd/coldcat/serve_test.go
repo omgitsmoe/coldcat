@@ -37,6 +37,9 @@ func TestServeProcessHelper(t *testing.T) {
 	if assets := os.Getenv("COLDCAT_TEST_ASSETS"); assets != "" {
 		os.Args = append(os.Args, "--assets", assets)
 	}
+	if os.Getenv("COLDCAT_TEST_API_ONLY") == "1" {
+		os.Args = append(os.Args, "--api-only")
+	}
 	if file := os.Getenv("COLDCAT_TEST_IMPORT"); file != "" {
 		os.Args = []string{
 			"coldcat",
@@ -292,5 +295,18 @@ func TestServeAssetsStartupFailures(t *testing.T) {
 			t.Fatalf("startup leaked catalog lock: %v", err)
 		}
 		_ = db.Close()
+	}
+}
+
+func TestServeConflictingAssetOptions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "catalog.sqlite")
+	err := newCommand().Run(t.Context(), []string{
+		"coldcat", "--db", path, "serve", "--api-only", "--assets", t.TempDir(),
+	})
+	if err == nil || !strings.Contains(err.Error(), "cannot be combined") {
+		t.Fatalf("accepted conflicting options: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("opened catalog for invalid options: %v", err)
 	}
 }

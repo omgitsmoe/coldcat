@@ -861,18 +861,18 @@ use source mtime). For development, start the loopback Go API, then run `npm run
 `frontend/`; `COLDCAT_BACKEND` selects another validated loopback origin. A missing backend
 is an explicit failure, never demo data. See [frontend setup](../frontend/README.md#development).
 
-For deployment, build assets with `npm run build`, then from the repository root:
+For single-binary deployment, run from the repository root:
 
 ```sh
-go build -o /tmp/opencode/coldcat ./cmd/coldcat
-/tmp/opencode/coldcat --db /tmp/opencode/demo.sqlite serve \
-  --listen 127.0.0.1:8080 --assets frontend/build
+just build
+./build/coldcat --db /path/to/catalog.sqlite serve --listen 127.0.0.1:8080
 ```
 
-Open `http://127.0.0.1:8080/`. Distribute the Go binary plus the complete trusted `build/`
-directory; Node is not needed at runtime. Relative asset paths resolve from the server's
-working directory. Stop Go before replacing assets, keeping shell and hashed files together.
-Omit `--assets` for API-only serving. Deep links are recognized explicitly; API failures and
+Open `http://127.0.0.1:8080/`. Distribute only the Go binary; Node and asset files are not
+needed at runtime. `--assets <directory>` overrides the bundled UI; relative paths resolve
+from the server's working directory. Stop Go before replacing override assets, keeping shell
+and hashed files together. `--api-only` disables the UI. Untagged Go builds remain API-only.
+Deep links are recognized explicitly; API failures and
 missing assets never become HTML success responses. The server holds the exclusive catalog
 lock: stop with SIGINT/SIGTERM before any CLI/import operation; never delete lock files.
 
@@ -881,7 +881,7 @@ lock: stop with SIGINT/SIGTERM before any CLI/import operation; never delete loc
 - Chromium desktop only; other browsers and real mobile devices are unsupported initially.
   Accessibility is best effort, without WCAG conformance or assistive-technology success claims.
 - Local/private use only: no authentication, CORS option or safe public/Internet exposure.
-  Keep loopback binding. Origin-root asset hosting only; no embedded assets/subpath package.
+  Keep loopback binding. Origin-root asset hosting only; no subpath package.
 - Imports remain CLI-only; no uploads, extraction/downloads, host-file opening, snapshot diffs,
   jobs or multi-catalog switching. These are deferred, not unfinished UI actions.
 - Current replicas describe latest recorded complete inventories, not live filesystem checks

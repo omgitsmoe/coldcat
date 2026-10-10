@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path"
@@ -19,7 +20,25 @@ func WithAssets(backend http.Handler, directory string) (http.Handler, func() er
 		return nil, nil, fmt.Errorf("open assets: %w", err)
 	}
 
-	shell, err := root.Open("index.html")
+	handler, err := withAssetFiles(backend, func(name string) (http.File, error) {
+		return root.Open(name)
+	})
+	if err != nil {
+		_ = root.Close()
+		return nil, nil, err
+	}
+
+	return handler, root.Close, nil
+}
+
+func WithAssetFS(backend http.Handler, assets fs.FS) (http.Handler, error) {
+	return withAssetFiles(backend, http.FS(assets).Open)
+}
+
+func withAssetFiles(
+	backend http.Handler, open func(string) (http.File, error),
+) (http.Handler, error) {
+	shell, err := open("index.html")
 	if err == nil {
 		var info os.FileInfo
 		info, err = shell.Stat()
@@ -29,8 +48,7 @@ func WithAssets(backend http.Handler, directory string) (http.Handler, func() er
 		err = errors.Join(err, shell.Close())
 	}
 	if err != nil {
-		_ = root.Close()
-		return nil, nil, fmt.Errorf("open asset shell: %w", err)
+		return nil, fmt.Errorf("open asset shell: %w", err)
 	}
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +74,7 @@ func WithAssets(backend http.Handler, directory string) (http.Handler, func() er
 		if applicationPath(p) {
 			name = "index.html"
 		}
-		file, err := root.Open(name)
+		file, err := open(name)
 		if err != nil {
 			http.NotFound(w, r)
 			return
@@ -71,7 +89,7 @@ func WithAssets(backend http.Handler, directory string) (http.Handler, func() er
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		http.ServeContent(w, r, path.Base(name), info.ModTime(), file)
 	})
-	return handler, root.Close, nil
+	return handler, nil
 }
 
 func safeAssetPath(r *http.Request) bool {

@@ -21,7 +21,7 @@ Development binds Vite to loopback and proxies only `/api/v1/*` and `/healthz` t
 HTTP loopback origin (`COLDCAT_BACKEND`, default `http://127.0.0.1:8080`). Backend/proxy
 failures are visible; there is no demo-response fallback or browser security workaround.
 
-F10 implements Go same-origin hosting through the explicit `serve --assets` option. Reserve
+Go same-origin hosting supports an embedded UI and the explicit `serve --assets` option. Reserve
 API/readiness routes before static dispatch, serve the shell for recognized application
 deep links, and return real 404s for missing assets. Production must test encoded paths,
 traversal, HEAD, missing routes/assets, and reserved-route precedence. F0's Node static test
@@ -37,14 +37,20 @@ The latter belongs to F3, not bootstrap. Imports remain CLI-only with the server
   workflow; the Go service remains the sole API and catalog owner.
 - Separate-origin production hosting/CORS: adds origin configuration and deployment concerns;
   same-origin hosting avoids that requirement.
-- Embedding generated assets in Go: may help later packaging, but would couple frontend
-  builds to Go distribution. Reconsider separately if packaging warrants it.
+- Asset-directory-only distribution: keeps the binary smaller and permits independent UI
+  replacement, but requires deploying matching files alongside the binary.
 
 ## Consequences
 
-Builds require the pinned Node/npm toolchain and frontend checks. Deployment must supply
-the built directory explicitly; without `--assets`, Go still serves JSON only. Deep-link reloads
-require the documented shell dispatch contract rather than a generic file server.
+Combined builds require the pinned Node/npm toolchain and frontend checks. `just build`
+builds the frontend first, then builds Go with `-tags webui` to embed the static output.
+The resulting binary serves UI and API by default without external assets or Node.
+`--assets` explicitly overrides the embedded UI, and invalid overrides fail startup.
+`--api-only` disables the UI and cannot be combined with `--assets`.
+Ordinary untagged Go builds/tests remain frontend-independent and API-only; tagged builds
+require generated frontend output. Updating the bundled UI requires rebuilding the binary.
+This packaging revision was requested by the owner on 2026-10-10.
+Deep-link reloads require the documented shell dispatch contract rather than a generic file server.
 Wire type generation/client work starts at F1; no Kit server routes or SQLite frontend
 access. Browser support and UI performance budgets remain release decisions, not backend
 latency acceptance. Loopback defaults do not make unauthenticated public exposure safe.

@@ -30,7 +30,7 @@ func newCommand() *cli.Command {
 		Commands: []*cli.Command{
 			{
 				Name:  "serve",
-				Usage: "serve the catalog HTTP API; stop before importing",
+				Usage: "serve the catalog API and bundled UI, if built; stop before importing",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:  "listen",
@@ -39,7 +39,11 @@ func newCommand() *cli.Command {
 					},
 					&cli.StringFlag{
 						Name:  "assets",
-						Usage: "built frontend directory (optional; served at origin root)",
+						Usage: "built frontend directory (overrides bundled UI; served at origin root)",
+					},
+					&cli.BoolFlag{
+						Name:  "api-only",
+						Usage: "serve only the HTTP API, without frontend assets",
 					},
 				},
 				Action: serveCommand,

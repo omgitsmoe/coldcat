@@ -20,16 +20,20 @@ func serveCommand(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("assets directory must not be empty")
 	}
 
-	return serveCatalogAssets(ctx, cmd.String("db"), cmd.String("listen"),
-		cmd.String("assets"), cmd.ErrWriter)
+	if cmd.Bool("api-only") && cmd.IsSet("assets") {
+		return fmt.Errorf("--api-only and --assets cannot be combined")
+	}
+
+	return serveCatalogUI(ctx, cmd.String("db"), cmd.String("listen"),
+		cmd.String("assets"), cmd.Bool("api-only"), cmd.ErrWriter)
 }
 
 func serveCatalog(ctx context.Context, path, address string, output io.Writer) error {
-	return serveCatalogAssets(ctx, path, address, "", output)
+	return serveCatalogUI(ctx, path, address, "", false, output)
 }
 
-func serveCatalogAssets(
-	ctx context.Context, path, address, assets string, output io.Writer,
+func serveCatalogUI(
+	ctx context.Context, path, address, assets string, apiOnly bool, output io.Writer,
 ) (result error) {
 	if _, _, err := net.SplitHostPort(address); err != nil {
 		return fmt.Errorf("invalid listen address: %w", err)
@@ -49,6 +53,11 @@ func serveCatalogAssets(
 			return err
 		}
 		defer func() { result = errors.Join(result, closeAssets()) }()
+	} else if !apiOnly {
+		handler, err = defaultAssetHandler(handler)
+		if err != nil {
+			return err
+		}
 	}
 
 	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", address)

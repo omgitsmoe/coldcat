@@ -11,23 +11,28 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/omgitsmoe/coldcat/internal/app"
 	"github.com/omgitsmoe/coldcat/internal/database"
 )
 
-func assetFixture(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	for name, body := range map[string]string{
+func assetBodies() map[string]string {
+	return map[string]string{
 		"index.html":     "<!doctype html><title>shell</title>",
 		"_app/main.js":   "console.log('asset')",
 		"_app/main.css":  "body { color: black }",
 		"snow 雪.txt":     "literal asset",
 		"api/v1/missing": "must not serve",
 		"healthz":        "must not serve",
-	} {
+	}
+}
+
+func assetFixture(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, body := range assetBodies() {
 		path := filepath.Join(dir, name)
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 			t.Fatal(err)
@@ -45,11 +50,29 @@ func TestAssetsDispatch(t *testing.T) {
 		w.WriteHeader(503)
 		_, _ = w.Write([]byte(`{"error":"backend"}`))
 	})
-	handler, closeAssets, err := WithAssets(backend, assetFixture(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = closeAssets() })
+	t.Run("directory", func(t *testing.T) {
+		handler, closeAssets, err := WithAssets(backend, assetFixture(t))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = closeAssets() })
+		testAssetsDispatch(t, handler)
+	})
+	t.Run("filesystem", func(t *testing.T) {
+		assets := fstest.MapFS{}
+		for name, body := range assetBodies() {
+			assets[name] = &fstest.MapFile{Data: []byte(body)}
+		}
+		handler, err := WithAssetFS(backend, assets)
+		if err != nil {
+			t.Fatal(err)
+		}
+		testAssetsDispatch(t, handler)
+	})
+}
+
+func testAssetsDispatch(t *testing.T, handler http.Handler) {
+	t.Helper()
 	for _, tc := range []struct {
 		path, method, mime string
 		status             int
@@ -107,6 +130,33 @@ func TestAssetsDispatch(t *testing.T) {
 				t.Fatal("HEAD returned a body")
 			}
 		})
+	}
+}
+
+func TestAssetFSStartupAndRange(t *testing.T) {
+	for _, assets := range []fstest.MapFS{
+		{},
+		{"index.html": {Mode: os.ModeDir}},
+	} {
+		if _, err := WithAssetFS(http.NotFoundHandler(), assets); err == nil {
+			t.Fatal("accepted invalid asset shell")
+		}
+	}
+
+	handler, err := WithAssetFS(http.NotFoundHandler(), fstest.MapFS{
+		"index.html":   {Data: []byte("<!doctype html>")},
+		"_app/main.js": {Data: []byte("console.log('asset')")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := httptest.NewRequest("GET", "/_app/main.js", nil)
+	r.Header.Set("Range", "bytes=0-6")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+	if w.Code != http.StatusPartialContent || w.Body.String() != "console" {
+		t.Fatalf("range response: %d %s", w.Code, w.Body.String())
 	}
 }
 
