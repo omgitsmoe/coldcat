@@ -3,8 +3,9 @@
 The primary search workspace, content/location and observation details, hash lookup,
 disk/inventory pages and disk creation/editing, distinct-content explorer, directory browsing/sizing, shell, request/page
 lifecycle, directory exact replicas/content coverage with a shared literal rule editor, and wire/domain helpers are implemented.
-Go same-origin asset-directory hosting is implemented. Backend acceptance
-remains open.
+Go same-origin asset-directory hosting and F12 integration/release handoff are complete within
+the approved scope; see the [final check results](../doc/coldcat-fronted.md#f12-release-handoff).
+Backend acceptance remains open.
 Architecture: [ADR 0002](../doc/adr/0002-static-browser-frontend.md).
 
 ## Toolchain and commands
@@ -21,10 +22,10 @@ npm run test:api-generation
 npm run test:proxy
 npm run build
 npx playwright install chromium
-npm run test:e2e
+npm run test:e2e -- 'tests/browser/(?!accessibility\.spec\.ts$)[^/]+\.spec\.ts$'
 npm run test:real-harness
-npm run test:real
-npm run test:deployed
+npm run test:real -- 'tests/real/(?!accessibility\.spec\.ts$)[^/]+\.spec\.ts$'
+npm run test:deployed -- 'tests/real/(?!accessibility\.spec\.ts$)[^/]+\.spec\.ts$'
 npm run test:hosting-harness
 npm run test:hosting
 ```
@@ -35,6 +36,12 @@ them with the authorized
 browser alone does not supply system libraries; a launch failure is not a browser pass.
 Initial supported browser: Chromium desktop only (owner's F11b decision). Desktop narrow-viewport
 evidence does not establish real-mobile support; other browsers are not approved targets.
+
+The final-integration commands above deliberately exclude existing accessibility specs in both
+browser directories. Accessibility is owner-approved best effort: no extended audit or manual
+assistive-technology gate. These are non-accessibility regression suites, not unfiltered full suites.
+The deployed operation-matrix gate still applies. Approved 20-run profile evidence is retained in
+[F11b acceptance](tests/F11b-acceptance.md), not repeated as a hardware-general guarantee.
 
 `test:unit` runs Vitest/jsdom unit/component tests. `test:proxy` owns a disposable loopback
 HTTP fixture and Vite process in-process, verifies real forwarding and connection-refusal
@@ -110,7 +117,8 @@ complete copy, explicit pagination, destination links and empty selection. The s
 `distributed 雪` directory exists in the oldest alpha inventory; beta contains its known-size
 identity and gamma its unknown-size identity under unrelated paths.
 The full F11a integration below extends these workflows to the deployed Go host and lifecycle faults.
-F11b is complete under the revised owner scope; F12 final integration checks remain separate.
+F11b is complete under the revised owner scope; F12 results are recorded in the
+[release handoff](../doc/coldcat-fronted.md#f12-release-handoff).
 These correctness tests neither establish performance budgets nor close the unresolved backend gate.
 
 ### Full real-backend integration (F11a)
@@ -183,8 +191,6 @@ owned temporary directories; it does not modify the real contract or generated f
 The dependency-free generator supports this contract's schema subset, not general OpenAPI.
 Unknown assertion keywords, reference siblings and unsupported operations fail explicitly.
 The generated descriptors power runtime shape validation, avoiding handwritten DTO schemas.
-`openapi-typescript@7.13.0` was not installed: its TypeScript 5 peer conflicts with the pinned
-TypeScript 6 toolchain. No dependency/lockfile change or forced peer override was needed.
 
 - `src/lib/api/client.ts`: `createClient(fetcher?)` returns explicit wrappers for all 19
   operations. Exported `Client`, `Query<operation>` and `Result<operation>` types use generated
@@ -292,8 +298,8 @@ empty-success messaging belongs to the feature, not the shell.
 `searchURL`, `directoryBrowseURL`, `contentURL`, and `comparisonURL` (repeated literal rules).
 Use native anchors, not row-only click handlers. Root directory is `path=''`; IDs stay
 opaque decimal strings and directory paths remain query values. Do not append cursors to URLs.
-The layout resolves implemented links through SvelteKit. Add Contents/Disks navigation when
-their feature routes exist; the shell does not register placeholder pages for future features.
+The layout resolves implemented links through SvelteKit and exposes Search/Contents/Disks
+navigation; the shell does not register placeholder pages for future features.
 
 - F3: `parseSearch(URLSearchParams)` → `SearchRoute`, including explicit defaults and literal
   empty query. F3 validates scheduling eligibility (Unicode length, UTF-8 limits, combinations);
@@ -412,9 +418,9 @@ is implied. Extended accessibility audits are outside the owner's revised best-e
   into F5; disk/inventory navigation preserves it. Existing one-argument calls remain valid.
 - **F6:** root actions use `directoryBrowseURL(snapshotID, { path: '' })`, yielding literal
   `?path=` with no detail context. These entry links are browsable through F6.
-- **F7:** compose write controls with `DiskMetadata`/`DiskDetail`; call
+- **F7:** write controls compose with `DiskMetadata`/`DiskDetail`; call
   `connection.metadataChanged()` after writes/reconciliation and manually refetch metadata.
-  F5 installs no create/edit forms, write requests, or metadata-version assumptions.
+  F5's read components install no write requests or metadata-version assumptions.
 
 Browser coverage is mocked (pagination including later retained-page transitions, latest/history,
 empty inventories, unknown/zero/large totals, literal markup, date meanings, return validation,
@@ -503,10 +509,11 @@ is still unresolved.
 
 ### Directory exact replicas (F9a handoff)
 
-- The directory route offers Entries / Exact tree copies views. Opening the comparison view
-  makes no request; only **Apply and compare** executes. Returning to Entries, changing source
-  inventory/path or leaving the route disposes comparison work. No coverage placeholder or
-  endpoint call is added. Browsing still loads its independent F6 summary and entry page.
+- The directory route offers Entries / Exact tree copies / Content on other disks views.
+  Opening a comparison view makes no request; only **Apply and compare** executes.
+  Returning to Entries, changing source
+  inventory/path or leaving the route disposes comparison work. Browsing still loads its
+  independent F6 summary and entry page; F9b owns the separate coverage request.
 - `features/directories/rules.ts` exports `Rules = { allow: string[]; block: string[] }`
   and `ruleInput(draft): Rules`: validate combined row/UTF-8 limits and NUL, then copy literal
   arrays. No trimming, splitting, normalization or browser glob interpretation occurs.
@@ -532,7 +539,8 @@ is still unresolved.
   `npm run test:unit -- tests/unit/rules.test.ts tests/unit/feature-requests.test.ts`.
   Browser checks: `npm run test:e2e -- tests/browser/replicas.spec.ts tests/browser/directories.spec.ts`.
   Real bounded integration: `npm run test:real -- tests/real/replicas.spec.ts`, using the existing
-  disposable offline-import harness only. These checks do not close F9b/full F11a/F11b or backend gates.
+  disposable offline-import harness only. Focused checks do not replace the full integration
+  matrix or approved F11b evidence, and do not close backend gates.
 
 ### Directory content coverage (F9b handoff)
 
@@ -566,8 +574,8 @@ tests/browser/replicas.spec.ts tests/browser/directories.spec.ts`. Real imported
   cover real stop/import/restart, same-revision reconnect clearing, uncertain-write/outage
   reconciliation and F10 production same-origin built-host workflows. Existing write, contents,
   replica and coverage suites run in both host modes as part of full F11a.
-  F11b is complete under the revised owner scope; F12 release checks remain pending. Backend
-  acceptance stays unresolved; no Go benchmark or full race run belongs to this package.
+  F11b is complete under the revised owner scope; the F12 handoff records final checks. Backend
+  acceptance stays unresolved; no Go benchmark or full race run belongs to this feature package.
 
 Start the backend separately with a disposable catalog, following
 [backend integration](../doc/backend-integration.md). Stop it before CLI catalog operations;
@@ -624,8 +632,8 @@ built Go hosting when given an absolute build-directory path. Returned `origin` 
 `backendOrigin`, no proxy is created, and the final fault-injection stage is `assets` rather
 than `proxy`. The unchanged default still tests the development proxy. Cleanup/ownership and
 stop-before-import rules apply to both modes. `test:deployed` supplies the full F11a matrix;
-the bounded smoke alone is not full integration or F11b/F12 acceptance. Final Go race checks
-remain F12 work.
+the bounded smoke alone is not full integration or F11b/F12 acceptance. The F12 handoff records
+the exact final Go race coverage.
 
 - `npm run build` writes `build/index.html` and `build/_app/` assets. Serve at origin root;
   a subpath deployment is not configured. No runtime Node service is required.
@@ -644,7 +652,7 @@ remain F12 work.
   decimal strings; malformed IDs, extra segments and unknown routes are not shell destinations.
   Arbitrary directory paths stay in `?path=`.
 - `/`, `/contents`, `/contents/[id]`, `/observations/[id]`, `/disks`, `/disks/[id]`, and
-  `/snapshots/[id]`, and `/snapshots/[id]/directory` are implemented through F6.
+  `/snapshots/[id]`, and `/snapshots/[id]/directory` are implemented.
   Unknown direct document routes return Go 404s; client navigation can display the
   “Page not found” boundary. Neither is a production fallback destination.
 - `tests/serve-built.ts` is a test-only reference host with broader document fallback to
@@ -652,5 +660,6 @@ remain F12 work.
 
 F11b profile-specific responsiveness and Chromium-desktop support are approved; accessibility
 remains best effort, with no extended audit/manual AT acceptance requirement. See the
-[F11b evidence and scope](tests/F11b-acceptance.md). F12 release checks remain pending.
+[F11b evidence and scope](tests/F11b-acceptance.md) and
+[F12 release handoff](../doc/coldcat-fronted.md#f12-release-handoff).
 No backend benchmark or full Go race check is needed for pure frontend tasks.

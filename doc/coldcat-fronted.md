@@ -1,9 +1,10 @@
 # Coldcat frontend plan
 
-Status: F0–F11b complete within the approved scope, including the full deployed-Go real-browser
+Status: F0–F12 complete within the approved scope, including the full deployed-Go real-browser
 operation matrix, revision/reconnection/write reconciliation and approved 20-run UI responsiveness
-checks. Accessibility is best effort by owner decision; no manual AT acceptance gate. F12 pending;
-backend gate unresolved. This is not release acceptance closure.
+checks and final integration/release handoff. Accessibility is best effort by owner decision;
+no manual AT acceptance gate. Backend gate unresolved. Frontend completion is not final
+backend or combined release acceptance closure.
 The first-usable-slice real-backend harness precedes F7/comparisons; see the
 [core integration interface and coverage](../frontend/README.md#real-backend-core-integration-f11a-core).
 
@@ -26,7 +27,8 @@ it neither establishes hardware-general guarantees nor approves backend performa
 
 [ADR 0002](adr/0002-static-browser-frontend.md) records the authorized architecture.
 [Frontend README](../frontend/README.md) defines setup, hosting and shared feature interfaces.
-Execution results, transient blockers and package handoffs belong in sessions/PRs, not this plan.
+Detailed execution logs and transient blockers belong in sessions/PRs; the final release
+handoff below records reproducible commands, check scope and durable limitations.
 
 ## 1. Goal, scope, and release boundaries
 
@@ -64,8 +66,8 @@ Canonical references:
 - [ADR 0001](adr/0001-search-without-fuzzy.md): exact/substring search, no fuzzy matching.
 
 If documents conflict, inspect the implemented contract and ask for resolution rather than
-inventing a frontend workaround. In particular, older physical-journal acceptance language
-in the integration document is superseded by the backend plan's scrapped-measurement decision.
+inventing a frontend workaround. Physical-journal tracing is scrapped by owner decision;
+retained historical instrumentation is not an active frontend or backend release gate.
 
 ## 2. Proposed architecture
 
@@ -680,6 +682,8 @@ full F11a revision/reconnect and later feature integration also run through `npm
 
 ### F12 — release handoff and final checks
 
+- **Implemented handoff:** [final release checks and limitations](#f12-release-handoff), with
+  non-accessibility browser regression scope and focused final Go race coverage stated explicitly.
 - **Prerequisites:** all selected release packages and explicit gate decisions.
 - **Scope:** clean install/build/test run, supported-browser statement, local setup/help,
   import/server ownership instructions, known limitations, and final acceptance checklist.
@@ -746,21 +750,148 @@ separate scope decision.
 
 ### Completion checklist
 
-- [ ] Entry-point search is keyboard-friendly and works without deliberate mouse focus.
-- [ ] Exact/substring, name/path, current/history, and filters match the backend contract.
-- [ ] Latest request wins; loading, empty, error, and stale-cursor states are explicit.
-- [ ] Search → content → current locations → observation/disk/directory is exercised with
+- [x] Entry-point search is keyboard-friendly and works without deliberate mouse focus.
+- [x] Exact/substring, name/path, current/history, and filters match the backend contract.
+- [x] Latest request wins; loading, empty, error, and stale-cursor states are explicit.
+- [x] Search → content → current locations → observation/disk/directory is exercised with
       real temporary catalogs, not only mocks.
-- [ ] History and replica metrics cannot be mistaken for current backup guarantees.
-- [ ] Numeric strings, null metadata, literal paths, and date meanings remain accurate.
-- [ ] Directory browsing, comparisons, and selected management/list features meet tests.
-- [ ] Back/reload/deep links work; pagination is bounded but later results remain reachable.
+- [x] History and replica metrics are explicitly labeled, without live backup guarantees.
+- [x] Numeric strings, null metadata, literal paths, and date meanings remain accurate.
+- [x] Directory browsing, comparisons, and selected management/list features meet tests.
+- [x] Back/reload/deep links work; pagination is bounded but later results remain reachable.
 - [x] F11b best-effort keyboard/accessibility/responsive evidence and approved profile-specific
       UI responsiveness checks are complete under the revised owner scope (no manual AT claim).
-- [ ] Static same-origin distribution and API precedence are tested; no public-safety claim.
-- [ ] Build/test/setup commands are reproducible and known limitations are documented.
-- [ ] Remaining backend performance decisions are explicitly approved, waived for this
+- [x] Static same-origin distribution and API precedence are tested; no public-safety claim.
+- [x] Build/test/setup commands are reproducible and known limitations are documented.
+- [x] Remaining backend performance decisions are explicitly approved, waived for this
       release, or still labeled unresolved; successful UI tests do not close them.
 
 Deliver by usable vertical slices. If work must stop early, leave a tested search/location
 workflow rather than many half-built screens.
+
+## F12 release handoff
+
+### Release package and owner decisions
+
+F0–F10 implementation, F11a real-backend integration, F11b approved profile evidence and F12
+final integration are complete within the full initial frontend scope. No new feature or
+backend benchmark was added during F12. Production client, connection/proxy, route dispatch,
+asset handler and CLI ownership paths were reviewed: no production mock switch, unfinished
+UI action or silent response fallback was found. Test-only hosts/interception remain test-only.
+
+Owner authorization, not test output, establishes npm/SvelteKit/Go-assets architecture
+([ADR 0002](adr/0002-static-browser-frontend.md)), parallel frontend development, Chromium
+desktop-only support and best-effort accessibility. The accepted
+[20-run F11b profile/budget evidence](../frontend/tests/F11b-acceptance.md) is retained unchanged;
+it is not backend latency approval or a hardware-general guarantee. Final browser runs exclude
+both existing accessibility specs; no accessibility suite or manual AT gate was added or rerun.
+
+### Reproducible final checks (2026-10-10)
+
+From `frontend/`, with Node 24.21.0/npm 11.19.0 and Chromium system libraries installed:
+
+```sh
+npm ci
+npm run api:check
+npm run test:api-generation
+npm run check
+npm run lint
+npm run test:unit
+npm run build
+npx playwright install chromium
+npm run test:proxy
+npm run test:e2e -- 'tests/browser/(?!accessibility\.spec\.ts$)[^/]+\.spec\.ts$'
+npm run test:real-harness
+npm run test:real -- 'tests/real/(?!accessibility\.spec\.ts$)[^/]+\.spec\.ts$'
+npm run test:deployed -- 'tests/real/(?!accessibility\.spec\.ts$)[^/]+\.spec\.ts$'
+npm run test:hosting-harness
+npm run test:hosting
+```
+
+Run browser suites sequentially because they share `test-results/`. The filename regex
+excludes only `accessibility.spec.ts`; this is intentionally not an unfiltered full-suite claim.
+The deployed command retains the mandatory 18-operation exposed-API matrix. The unexposed
+directories-only operation is excluded by design, not missing UI coverage.
+
+From the repository root, use Go 1.27.1 and a disposable non-tmpfs test directory, following
+project-local ext4 guidance for cold-cache correctness tests. Final Go checks passed using
+disposable non-tmpfs storage; this is not an ext4 or cold-performance measurement claim.
+
+```sh
+go vet ./...
+test_tmp=$(mktemp -d /home/m/coldcat-test-tmp-XXXXXXXX)
+TMPDIR="$test_tmp" go test -count=1 ./...
+rmdir "$test_tmp"
+test_tmp=$(mktemp -d /home/m/coldcat-test-tmp-XXXXXXXX)
+TMPDIR="$test_tmp" go test -race -p 1 -count=1 ./internal/httpapi ./cmd/coldcat -timeout=30m
+rmdir "$test_tmp"
+go build -o /tmp/opencode/coldcat-f12 ./cmd/coldcat
+/tmp/opencode/coldcat-f12 serve --help
+```
+
+The final race command ran once, serially, for HTTP/asset hosting and CLI packages only;
+it is **not** `go test -race ./...`. Full normal Go tests and vet cover all packages.
+All catalogs/processes were disposable and owned by tests; the workspace catalog and
+preserved benchmark directories were untouched. Check results are recorded below.
+
+| Final check | Result |
+| --- | --- |
+| Fresh `npm ci` | Pass; 233 packages, zero audit vulnerabilities |
+| `api:check`, `test:api-generation` | Pass; no drift, 2 generator tests |
+| `check`, `lint` | Pass; zero Svelte errors/warnings; formatting/lint clean |
+| `test:unit`, `build` | Pass; 143 tests across 15 files; static assets built |
+| Chromium install, `test:proxy` | Pass; 1 proxy test including expected connection-refusal/502 |
+| Non-accessibility `test:e2e` | Pass; 72 mocked browser tests, including one responsiveness regression |
+| `test:real-harness` | Pass; 10 startup/lifecycle/cleanup tests in both host modes |
+| Non-accessibility `test:real` | Pass; 27 development-proxy real-backend tests |
+| Non-accessibility `test:deployed` | Pass; 27 Go-hosted real-backend tests; 18/18 exposed-operation matrix |
+| `test:hosting-harness`, `test:hosting` | Pass; 4 owned cleanup tests and 1 built-Go browser smoke |
+| `go vet ./...`, full normal `go test -count=1 ./...` | Pass; all packages, disposable non-tmpfs storage |
+| One focused serial final race run | Pass; `internal/httpapi` (45.455 s), `cmd/coldcat` (58.058 s); no full race suite |
+| CLI build and `serve --help` | Pass; loopback default and explicit `--assets` documented |
+
+The single final responsiveness regression is not a replacement for the approved 20-run
+F11b measurement. Existing profile evidence and accessibility scope remain unchanged.
+
+### Local startup and distribution
+
+Use [backend setup](backend-integration.md#local-setup) to create disks and import a complete
+inventory into a separate catalog, offline. Supply its actual capture time (or explicitly
+use source mtime). For development, start the loopback Go API, then run `npm run dev` from
+`frontend/`; `COLDCAT_BACKEND` selects another validated loopback origin. A missing backend
+is an explicit failure, never demo data. See [frontend setup](../frontend/README.md#development).
+
+For deployment, build assets with `npm run build`, then from the repository root:
+
+```sh
+go build -o /tmp/opencode/coldcat ./cmd/coldcat
+/tmp/opencode/coldcat --db /tmp/opencode/demo.sqlite serve \
+  --listen 127.0.0.1:8080 --assets frontend/build
+```
+
+Open `http://127.0.0.1:8080/`. Distribute the Go binary plus the complete trusted `build/`
+directory; Node is not needed at runtime. Relative asset paths resolve from the server's
+working directory. Stop Go before replacing assets, keeping shell and hashed files together.
+Omit `--assets` for API-only serving. Deep links are recognized explicitly; API failures and
+missing assets never become HTML success responses. The server holds the exclusive catalog
+lock: stop with SIGINT/SIGTERM before any CLI/import operation; never delete lock files.
+
+### Known limitations and unresolved gate
+
+- Chromium desktop only; other browsers and real mobile devices are unsupported initially.
+  Accessibility is best effort, without WCAG conformance or assistive-technology success claims.
+- Local/private use only: no authentication, CORS option or safe public/Internet exposure.
+  Keep loopback binding. Origin-root asset hosting only; no embedded assets/subpath package.
+- Imports remain CLI-only; no uploads, extraction/downloads, host-file opening, snapshot diffs,
+  jobs or multi-catalog switching. These are deferred, not unfinished UI actions.
+- Current replicas describe latest recorded complete inventories, not live filesystem checks
+  or backup guarantees. Distributed content coverage is not one exact tree backup.
+- Pagination/restoration is bounded and process-local; reload reconstructs page one, reconnect
+  clears retained data conservatively. Revision is not catalog identity. Metadata writes have
+  no idempotency key/version; uncertain writes require deliberate manual reconciliation.
+- **Backend acceptance remains unresolved**, neither waived nor approved by frontend completion.
+  Supported observation/history limits, latency/storage/import/recovery budgets, slow broad/no-match
+  searches and filtered comparisons, and required remaining operational evidence need owner
+  decisions in the [backend closure list](coldcat-backend-api.md#remaining-decisions-and-blockers).
+  Physical journal-peak tracing is scrapped, not a reopened blocker. Existing journal sizes,
+  warm means and cold open-plus-query samples retain their stated measurement boundaries.

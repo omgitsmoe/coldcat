@@ -174,12 +174,10 @@ RSS/transaction/journal evidence remain unmeasured; select required operational 
 for the supported scope.
 Larger-than-measured history scenarios depend on selecting supported limits, not a mandatory
 million-source history run. Cold acceptance boundaries and latency metrics need agreement;
-HTTP p95 is unmeasured, not an unconditional new criterion. **True physical peak journal
-storage is blocked on a suitable filesystem and validated allocation/free/reservation
-instrumentation**; logical VFS growth or faster apparent
-file-size polling is not an approved replacement. Sampled heap/journal and transaction API
-durations do not prove physical storage bounds. Propose an ADR for measurement semantics
-before accepting a changed accounting boundary; none is created or approved here.
+HTTP p95 is unmeasured, not an unconditional new criterion. The owner scrapped physical
+journal-peak tracing on 2026-10-10; journal file sizes are sufficient for the approved evidence
+scope. Retained instrumentation is historical reference, not an active release blocker.
+Sampled heap/journal and transaction API durations do not prove physical storage bounds.
 
 Observation/distinct-path limits and latency/storage/import/recovery budgets still require
 explicit user approval. Broad search, valid replica-filter no-match and large filtered directory
@@ -188,5 +186,7 @@ comparisons retain slow cases to improve or explicitly accept. Final `go test ./
 implementation; the parent ran the full race suite only once at end of work. Package timings
 are in [final implementation checks](backend-foundation.md#final-implementation-checks).
 See the [remaining decisions and blockers](coldcat-backend-api.md#remaining-decisions-and-blockers)
-for the bounded closure list. Operational acceptance stays Partial; no frontend work or
-final backend acceptance is authorized by these successful checks.
+for the bounded closure list. Operational acceptance stays Partial. The owner's separate
+2026-10-10 approval authorizes the full frontend in parallel (see
+[frontend plan](coldcat-fronted.md#implementation-approvals)); successful checks do not
+authorize final backend acceptance.
