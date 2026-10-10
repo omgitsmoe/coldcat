@@ -8,6 +8,7 @@
   import { formatBytes, formatCount } from '../../format/decimal';
   import RequestFeedback from '../../components/RequestFeedback.svelte';
   import DiskMetadata from './DiskMetadata.svelte';
+  import DiskForm from './DiskForm.svelte';
   import InventoryPages from './InventoryPages.svelte';
   import InventorySummary from '../snapshots/InventorySummary.svelte';
   let { id, search }: { id: string; search: string } = $props();
@@ -18,6 +19,7 @@
   let owner = $state<ReturnType<typeof diskDetail>>();
   let view = $state<RequestState<Disk>>({ status: 'idle' });
   let cached = $state<Disk>();
+  let editing = $state<Disk>();
   const item = $derived(view.status === 'success' ? view.value : cached);
   $effect(() => {
     try {
@@ -68,8 +70,25 @@
     {#if item}
       {#if view.status !== 'success'}<p>Previously loaded disk; not freshly verified.</p>{/if}
       <DiskMetadata {item} />
+      <button
+        disabled={view.status !== 'success' || !!editing}
+        onclick={() => {
+          editing = item;
+        }}
+      >
+        Edit disk
+      </button>
     {/if}
   </section>
+  {#if editing}
+    <DiskForm
+      initial={editing}
+      refreshed={(disk) => {
+        view = { status: 'success', value: disk };
+        cached = disk;
+      }}
+    />
+  {/if}
   {#if item}
     <section aria-labelledby="cataloged-size">
       <h2 id="cataloged-size">Cataloged inventory size</h2>

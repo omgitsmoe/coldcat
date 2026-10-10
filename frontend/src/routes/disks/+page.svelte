@@ -2,6 +2,8 @@
   import { page } from '$app/state';
   import { parsePageLimit } from '../../lib/state/routes';
   import InventoryPages from '../../lib/features/disks/InventoryPages.svelte';
+  import DiskForm from '../../lib/features/disks/DiskForm.svelte';
+  let listVersion = $state(0);
   const input = $derived.by(() => {
     try {
       return { limit: parsePageLimit(new globalThis.URLSearchParams(page.url.search)).limit };
@@ -15,5 +17,10 @@
 {#if input.error}<p role="alert">{input.error}</p>
   <pre>{page.url.search}</pre>
 {:else}
-  {#key page.url.search}<InventoryPages limit={input.limit} />{/key}
+  <DiskForm
+    refreshed={() => {
+      listVersion++;
+    }}
+  />
+  {#key `${page.url.search}:${listVersion}`}<InventoryPages limit={input.limit} />{/key}
 {/if}

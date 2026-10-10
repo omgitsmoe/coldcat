@@ -1,6 +1,6 @@
 # Coldcat frontend plan
 
-Status: F0–F6 and F11a core integration implemented. F7–F12/full F11a pending;
+Status: F0–F7 and F11a core integration implemented. F8–F12/full F11a pending;
 backend gate unresolved. This is not release acceptance closure.
 The first-usable-slice real-backend harness precedes F7/comparisons; see the
 [core integration interface and coverage](../frontend/README.md#real-backend-core-integration-f11a-core).
@@ -572,6 +572,9 @@ full F11a revision/reconnect and later feature integration remain pending.
 
 ### F7 — disk creation/editing
 
+- **Implemented interface:** create form on `/disks`, edit form on `/disks/[id]`, with
+  explicit write reconciliation and metadata invalidation; see the
+  [F7 handoff](../frontend/README.md#disk-creation-and-editing-f7-handoff).
 - **Prerequisites:** F5 and stable invalidation interfaces from F2.
 - **Scope:** forms, decimal capacity validation, PATCH semantics, conflicts, uncertain-write
   reconciliation, and affected metadata refetch.

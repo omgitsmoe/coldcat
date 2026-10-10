@@ -1,8 +1,9 @@
 # Coldcat frontend
 
-The primary search workspace, content/location and observation details, hash lookup, read-only
-disk/inventory pages, directory browsing/sizing, shell, request/page lifecycle, and wire/domain helpers are implemented.
-Disk writes, comparisons and Go asset hosting remain separate packages. Backend acceptance
+The primary search workspace, content/location and observation details, hash lookup,
+disk/inventory pages and disk creation/editing, directory browsing/sizing, shell, request/page
+lifecycle, and wire/domain helpers are implemented.
+Comparisons and Go asset hosting remain separate packages. Backend acceptance
 remains open.
 Architecture: [ADR 0002](../doc/adr/0002-static-browser-frontend.md).
 
@@ -84,9 +85,13 @@ exposed read (run the full suite, not a filtered single test, for its coverage a
 | `GET /api/v1/snapshots/{id}/directory`, `/directory/entries` | Root/child/literal deep reloads, recursive sizes, membership boundaries, paging, replica filters retaining directory rows and historical source/current replicas |
 
 Core navigation uses Tab/Enter and search arrows, with ordinary Back restoration and first-page
-reconstruction after document reload. Request guards reject writes, unsolicited comparisons or
-directories-only preloads, API errors and browser JS errors. Full F11a still needs F7–F9 write/list/
-comparison workflows, stop/import/restart revision and reconnect cases, and F10 built-host runs.
+reconstruction after document reload. Core read request guards reject writes, unsolicited
+comparisons or directories-only preloads, API errors and browser JS errors.
+The separate `tests/real/writes.spec.ts` uses the same disposable harness for browser-originated
+POST/PATCH, a real label conflict, exact large capacity, null clearing, persisted metadata refetch,
+and an unchanged inventory revision. It does not simulate uncertain writes by intercepting real API
+traffic. Full F11a still needs outage/reconciliation write integration, F8–F9 list/comparison
+workflows, stop/import/restart revision and reconnect cases, and F10 built-host runs.
 F11b manual accessibility/responsive audits and F12 final integration checks remain separate.
 These correctness tests neither establish performance budgets nor close the unresolved backend gate.
 
@@ -363,6 +368,36 @@ is still unresolved.
   `test:real` imported-catalog workflow described above, before F7/comparisons. Full F11a still
   owns later write/comparison and stop/import/restart scenarios. `test:e2e` continues to own
   the mocked built-static host only; never reuse the workspace catalog or benchmark directories.
+
+### Disk creation and editing (F7 handoff)
+
+- `/disks` composes `features/disks/DiskForm.svelte` with the F5 disk list; `/disks/[id]`
+  opens the same form from freshly verified metadata. Label, capacity, serial and notes remain
+  literal text inputs. Capacity uses F1's exact decimal validation/canonicalization and BigInt
+  preview, including zero and the signed-64-bit maximum; no numeric HTML input or Number conversion.
+- Edit submission uses `buildDiskPatch` and skips unchanged drafts. Only changed fields are sent;
+  cleared optional text is explicit null, unchanged text is omitted. Conflicts retain all inputs
+  for deliberate correction. There is no optimistic metadata version in the API.
+- Forms own their baseline/drafts independently of read-owner invalidation. Successful writes
+  call `connection.metadataChanged()`, refetch the disk through the client, and update the affected
+  detail/list. This clears retained search selection/traversal even when inventory revision is
+  unchanged. Inventory/history sections invalidated by F2 remain explicitly reloadable.
+- Uncertain writes and failed post-write reads block submission until manual reconciliation;
+  readiness recovery never resubmits. Edit reconciliation refetches metadata, preserves edited
+  fields and refreshes untouched fields, then requires explicit Save against the refreshed baseline.
+  Connection-context changes also block editing until reconciliation; late reads are epoch-checked.
+- Uncertain creation checks exact submitted labels in manually requested 50-item pages, without
+  retained catalog-sized results or automatic next-page fetching. A matching disk is refetched for
+  review, not attributed conclusively to the lost response. If no label matches after the final
+  page, the UI warns about possible renaming and requires explicit disk-list review/approval before
+  enabling another POST. The API has no idempotency key; absence alone cannot prove a failed write.
+- `DiskForm` takes optional `initial: DiskDetail` and `refreshed(disk)`; its callback receives a
+  successful read, not merely a write response. No new route, shared state interface, generated
+  contract, dependency, backend feature or catalog mutation outside HTTP disk metadata is added.
+- Mocked browser coverage owns precision/range, changed-only/null/omission, conflict retention,
+  uncertain POST/PATCH and manual pagination, post-write read failure, retained search invalidation
+  and stale-context draft rebasing. The bounded real write test above complements, but does not
+  close, full F11a restart/outage/reconciliation or F11b accessibility audits.
 
 Start the backend separately with a disposable catalog, following
 [backend integration](../doc/backend-integration.md). Stop it before CLI catalog operations;
