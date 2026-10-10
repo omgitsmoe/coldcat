@@ -1571,21 +1571,75 @@ Fixture generation, baseline imports and integrity checks are untimed. Metrics i
 import/ingestion/directory/publication durations, input throughput, continuously sampled
 Go heap and final catalog bytes including baselines and reusable failed-import space.
 Samples are not RSS or proven memory peaks; phase durations are not transaction durations.
-All six 50,000-input success/late-failure cases passed exploratory runs; no million-input
-distribution results exist. The guarded million command was rejected twice by tool-level
-permission despite user authorization and about 36.3 GB free in the working filesystem.
-The larger slice remains pending, not passed, failed by benchmark, or inferred from the
-flat million-file fixture. No additional benchmark was run for this documentation closure.
+All six 50,000-input success/late-failure cases passed exploratory runs. Earlier guarded
+million-input commands were rejected twice by tool permission without running. After the
+container restart and renewed authorization, the million-input slice ran on 2026-10-10
+at `72531bd`, with unchanged benchmark/production code, Go 1.27.1, Linux amd64 and an
+AMD Ryzen 5 9600X. The benchmark reported four Go CPUs; `GOMAXPROCS` was not explicitly
+set. Cases ran serially, one iteration each, without overlapping project checks. Other
+container activity was not controlled.
+
+**The million-input matrix did not pass:** all three success cases passed their full
+assertions; deep-known and duplicate/shared late-failure cases failed cleanup assertions;
+history-enrichment late failure was interrupted before reporting a result. Successful
+metrics are individual samples, not extrapolations, p95, cold measurements or acceptance.
+
+| Million-input success profile | Import s | Ingestion s | Directories s | Publication s | Input files/s | Sampled heap bytes | Heap samples | Final catalog bytes | B/op | allocs/op |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `deep_known` | 313.7 | 105.8 | 195.7 | 12.16 | 3,188 | 7,764,416 | 31,373 | 7,723,622,400 | 4,917,834,104 | 124,059,105 |
+| `duplicate_shared` | 95.03 | 83.90 | 6.088 | 5.045 | 10,523 | 6,209,240 | 9,504 | 1,487,233,024 | 3,620,015,072 | 121,971,736 |
+| `history_enrichment` | 80.09 | 39.28 | 16.42 | 24.40 | 12,485 | 6,412,112 | 8,011 | 3,683,500,032 | 5,292,504,168 | 161,022,441 |
+
+Exact standard `ns/op` values were 313,711,227,558 / 95,028,953,420 / 80,093,237,340
+in the same order. Final catalogs contain two million observations for deep/shared
+success and four million for history success; history baselines contain three million.
+The assertions validated snapshot/observation/content/index counts, staged-row removal,
+known-size enrichment of historical directory totals, root/deep summaries, current
+revision/search, foreign keys and FTS integrity for each successful case.
+
+Both completed late-failure attempts reported at `distribution_benchmark_test.go:372`:
+`observation: 2000000, want 1000000`. The initial expected parse-error check passed,
+but failed-import observations remained when cleanup counts were checked. No validated
+failure metrics were emitted; subsequent preservation/integrity checks were not completed.
+The importer has a separate 30-second cleanup context and joins cleanup errors with parse
+errors, but this benchmark does not print the joined error when the later count assertion
+fails. A cleanup timeout is a hypothesis, not a diagnosed cause. These failures require
+investigation before operational acceptance; the earlier full correctness-suite pass does
+not establish million-distribution cleanup correctness.
+
+Fixtures used the authorized working filesystem through unique
+`TMPDIR=/workspace/.million-distributions-3388537839`, never the workspace catalog.
+A one-second `statfs` watchdog monitored available space, with a 2,000,000,000-byte abort
+threshold. Initial/minimum sampled/final available bytes were
+36,062,552,064 / 26,935,201,792 / 34,078,691,328; the space guard never triggered.
+The outer deadline was 29 minutes, leaving signal/shutdown headroom inside the 30-minute
+harness limit; the Go test command itself used `-timeout=30m`. At 1,740.028 seconds the
+watchdog sent SIGINT to the isolated benchmark process group, interrupting the history
+late-failure case. Go test reported `signal: interrupt`, package duration 1,721.183 seconds
+and nonzero exit. No claim is made about how far that case progressed.
+
+Normal test cleanup removed earlier fixtures. The interrupted temporary root was nonempty,
+so its empty-root removal failed and artifacts were preserved (about 646 MiB at inspection),
+not recursively deleted or reopened for recovery. Logs and guard metadata are under
+`/tmp/opencode/million-distributions-2596164939/`; the wrapper source is
+`/tmp/opencode/run-million-distributions.go`. Those paths are local run artifacts, not
+repository deliverables. Signals cannot guarantee test `TempDir` or importer cleanup.
 
 ```sh
 go test ./internal/importer -run '^TestImportDistributionFixtures$' -count=1
 go test ./internal/importer -run '^$' \
   -bench '^BenchmarkImportDistributions/50000/' -benchtime=1x -benchmem -v -timeout=30m
+# Million-input run above used the guarded wrapper and a unique workspace TMPDIR:
+go test ./internal/importer -run '^$' \
+  -bench '^BenchmarkImportDistributions/1000000/' -benchtime=1x -benchmem -v -timeout=30m
 ```
 
-The analogous `/1000000/` selection requires resolution of the execution permission
-block before running. Broader import RSS/journal/transaction distributions, physical
-peak storage, cold measurements and approved budgets remain open.
+Execution permission is no longer the blocker. Two observed cleanup failures and one
+interrupted case leave the million-input slice incomplete. Production code was not changed,
+and no failed case or other million-scale baseline was rerun. Publication-failure timing,
+broader import RSS/journal/transaction distributions, physical peak storage, cold measurements
+and approved budgets remain open. Logical journal accounting is not an approved substitute
+for the blocked physical-peak requirement.
 
 ## Verification and follow-on work
 
@@ -1599,11 +1653,13 @@ After the latest implementation, the parent reported all required checks passed:
   database 43.200 seconds, httpapi 33.556 seconds, importer 653.412 seconds;
   scripts package has no tests. This was the only end-of-work full race run.
 
-This documentation follow-up runs diff checks only, not another race suite. Correctness
-verification is complete, while operational acceptance remains Partial. The concrete
+This follow-up ran the million-input distribution benchmarks above and documentation diff
+checks, not another normal/vet/race suite; production code is unchanged. The earlier required
+checks remain recorded, but newly observed million-distribution cleanup failures prevent
+treating that operational slice as correct. Operational acceptance remains Partial. The concrete
 [remaining decisions and blockers](coldcat-backend-api.md#remaining-decisions-and-blockers)
-are supported limits/budgets, cold boundary/latency metric, permission-blocked million-input
-distributions, true physical journal-peak instrumentation and final gate approval.
+are supported limits/budgets, cold boundary/latency metric, million-input cleanup failures
+and the interrupted history case, true physical journal-peak instrumentation and final gate approval.
 
 ### Content lists and redundancy
 

@@ -274,8 +274,10 @@ For each milestone, first write behavioral acceptance tests, then implement the 
   verified catalog-page-cache-cold HTTP open-plus-query covers 50,000/1,000,000 current
   observations. This is not standalone cold-query or whole-physical-filesystem cold evidence.
   Cold/history acceptance scope still needs agreement; HTTP p95 is unmeasured and the
-  required latency metric must be selected. Million-input operational import distributions
-  and true physical journal peak remain open. Removed fuzzy measurements are historical only.
+  required latency metric must be selected. Million-input operational import successes are
+  measured, but two late-failure cleanup assertions failed and one case was interrupted;
+  that slice and true physical journal peak remain open. Removed fuzzy measurements are
+  historical only.
 - [x] Check query plans for latest-snapshot selection and observation content/snapshot/path lookups (`TestQueryIndexes`).
 - [x] Check exact hash lookup and content observation-page indexes; add focused 50,000-observation warm-query benchmarks for hash lookup and first/deep pages.
 - [x] Check content-list keyset and observation query indexes. Benchmark current/history first/deep pages, disk/directory membership and both redundancy metrics at 50,000 and 1,000,000 observations; document the catalog-wide cost of no-match bounds in `backend-foundation.md`. An agreed latency budget and cold-query measurements remain pending.
@@ -303,8 +305,10 @@ For each milestone, first write behavioral acceptance tests, then implement the 
   workflow / verified catalog-cache-cold open-plus-query reruns. These do not approve performance.
 - [x] Implement fixed deep/shared/history-enrichment import profiles and measure all six
   50,000-input success/late-parse-failure cases; test publication rollback independently.
-- [ ] Run the million-input operational distribution slice after resolving its twice-rejected
-  tool permission. No results exist; publication-failure timing also remains unmeasured.
+- [ ] **Partial:** million-input operational distribution command ran after renewed authorization:
+  all three success cases passed, deep/shared late-failure cleanup assertions failed, and
+  history late failure was interrupted by the outer deadline. Investigate cleanup failures
+  and finish the incomplete case before closing the slice; publication-failure timing is unmeasured.
 - [ ] Measure true **physical** journal peak using a suitable filesystem and validated
   allocation/free/reservation instrumentation. Blocked on that environment; logical VFS
   accounting or sampled apparent file lengths are not an approved replacement.
@@ -321,8 +325,11 @@ For each milestone, first write behavioral acceptance tests, then implement the 
    evidence exists; standalone query and whole-filesystem coldness are not established.
    Choose which additional cold/history evidence is needed within the supported scope.
    HTTP p95 is unmeasured, not an unconditional criterion added to the original plan.
-3. **Resolve the million-input import permission blocker:** two tool denials left no operational
-   distribution results. No retry is authorized here. Publication-failure timing and
+3. **Resolve observed million-input cleanup failures and the incomplete case:** renewed
+   authorization allowed the run; deep/shared failures left two million observations instead
+   of the one-million baseline, and history late failure hit the outer deadline. The three
+   success cases passed; do not infer failure correctness or timings from them.
+   Publication-failure timing and
    distribution-specific RSS/transaction/journal evidence are unmeasured; select required
    operational measurements for the approved scope rather than expanding workloads indefinitely.
 4. **Provide physical journal-peak instrumentation:** this requirement remains deliberately
@@ -406,9 +413,13 @@ extractors, thumbnails, and Wails remain deferred.
     **Fixed operational distributions partially measured:** `bf9f873` implements deep-known,
     duplicate/shared and three-baseline history-enrichment profiles, with success and late
     parse failure after committed batches. All six 50,000-input cases ran; independent tests
-    also cover publication rollback and preserved historical metadata. Million-input runs
-    remain pending: the guarded command was denied twice by tool permission despite user
-    authorization and about 36.3 GB free. There are no million-distribution results to accept.
+    also cover publication rollback and preserved historical metadata. After restart and
+    renewed authorization, the million-input run passed all three success cases, taking
+    313.7 / 95.03 / 80.09 seconds for deep/shared/history respectively. Deep/shared late
+    failures failed cleanup counts (two million observations remained, expected one million);
+    history late failure was interrupted at the 29-minute outer deadline. The space guard
+    did not trigger (minimum sampled free space 26.94 GB). The slice is incomplete, not
+    accepted; failed attempts emitted no validated metrics. Interrupted fixtures are preserved.
     Publication-failure timing and distribution-specific RSS/transaction/journal evidence
     remain unmeasured. Setup/baseline imports are untimed; sampled heap is not RSS.
    **Isolated Linux process RSS measured:** `BenchmarkImportPeakRSS` runs fresh importer
