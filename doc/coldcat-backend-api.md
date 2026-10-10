@@ -130,7 +130,7 @@ Use the existing application layer as the shared backend:
 
 1. **Done:** acquire exclusive catalog access, recover abandoned imports, and validate disk, format, explicit inventory time, and input path.
 2. **Done:** create an `importing` snapshot.
-3. **Partial:** stream records in bounded batches of 5,000 with typed progress and throttled CLI stderr reporting. Measured memory bounds remain.
+3. **Partial:** stream records in bounded batches of 5,000 with typed progress and throttled CLI stderr reporting. Sampled Go heap and isolated Linux child RSS are measured for the short-path full-index fixture; general memory bounds remain unproven.
 4. **Done:** validate paths/metadata/hash encoding and algorithm-specific digest lengths, deduplicate content, and reject duplicate snapshot paths.
 5. **Done:** return scanner/read errors and cancellation, with line/path context in record failures.
 6. **Done:** search indexes are built transactionally with observation batches; directory aggregates/fingerprints are built in a separate derived-index transaction before publication, streaming rows without whole-inventory Go collections.
@@ -343,6 +343,18 @@ extractors, thumbnails, and Wails remain deferred.
    durations, not engine lock-hold measurements, p95, cold performance or acceptance.
    Production behavior is unchanged; overhead is not isolated. True peak storage and
    broader import distributions remain open. See `backend-foundation.md`.
+   **Isolated Linux process RSS measured:** `BenchmarkImportPeakRSS` runs fresh importer
+   children, keeping fixture generation and integrity validation in the parent. It reads
+   child `VmHWM` after catalog close and separately records kernel lifetime maximum RSS;
+   both counters matched in all samples. Three serial repetitions per case at 50,000 and
+   1,000,000 files observed million-scale maxima of 55,377,920 bytes for success and
+   59,883,520 bytes for late failure plus cleanup. The maximum covers Go/test runtime,
+   catalog initialization, import and close, not import-only heap or one phase. Completion,
+   committed counts and cleanup are checked before reopening can mask abandoned rows.
+   These are kernel-accounted maxima for this fixture/environment, not a universal bound,
+   cold-performance result or acceptance decision. Other container activity was not
+   controlled; broader import distributions and true physical peak storage remain open.
+   Results, scope and commands are in `backend-foundation.md`.
    **Standalone full-index recovery measured:**
    `BenchmarkFullIndexRecovery` covers 50,000/1,000,000 abandoned observations before
    and after directory construction, with completed-data preservation and index-integrity

@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func assertNoErr(t *testing.T, err error) {
+func assertNoErr(t testing.TB, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

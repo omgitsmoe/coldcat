@@ -1169,8 +1169,8 @@ sampler overhead. Sampling adds work to the operation, and these one-iteration
 results are not latency p95 or an acceptance decision. Zero WAL/SHM maxima mean no
 nonzero sizes were observed, not that polling proves those files never existed.
 Transaction API durations are measured separately below. True peak journal storage,
-peak RSS, broader import distributions, filesystem-cold workloads, and approved budgets
-remain open.
+broader import distributions, filesystem-cold workloads, and approved budgets remain
+open. Child-process RSS measurements for this fixture are recorded below.
 
 ### Full-index import transaction durations
 
@@ -1239,6 +1239,102 @@ size enrichment, long/deep paths, repeated contents or history-heavy imports. Th
 measurements close the transaction-boundary timing slice for this fixture only, not true
 peak storage, cold performance, approved limits or the backend acceptance gate. They do
 not justify changing transaction policy.
+
+### Isolated Linux import peak RSS
+
+`BenchmarkImportPeakRSS` runs each import in a fresh instance of the importer test
+executable, invoking only `TestImportRSSChild`. No production instrumentation or Go
+overlay is involved. The parent generates the input before launch and performs all
+catalog/index integrity checks after the child has exited. Each child opens a fresh
+temporary catalog through `database.OpenContext`, creates one disk, runs production
+`Import`, closes the catalog and writes a versioned completion record. Success and late
+parse failure use the same 5,000-file batches, unknown-size unique SHA-256 contents and
+short, shallow `archive/report-*.txt` paths as the earlier full-index import fixture.
+
+The primary metric, `child-max-rss-bytes`, is Linux `/proc/self/status` `VmHWM`, read
+once by the child after catalog close. Linux reports this in KiB (`kB` in the file);
+the harness converts it to bytes with a factor of 1,024. The kernel maintains this
+address-space RSS high-water counter throughout execution: this is not periodic RSS
+polling and is not sampled Go heap. It covers the child after exec through that probe,
+including the Go/test runtime, database driver, schema/catalog opening, disk creation,
+parsing and indexed batches, directory construction/publication or failure cleanup,
+catalog close and the small completion validation. It excludes fixture generation,
+parent validation, compilation, and child work after the probe (JSON emission and test
+teardown). It cannot attribute the maximum to one phase or isolate import-only memory.
+
+The parent also records the exited child's Linux resource-usage `ru_maxrss` through
+`exec.Cmd.ProcessState.SysUsage()` as `child-lifetime-max-rss-bytes`. This broader lifetime
+counter includes launch/exit boundaries and teardown; it is kept separate rather than
+assumed identical to the post-close address-space counter. Both counters matched for
+every sample below. `child-mean-max-rss-bytes` averages per-child high-water marks;
+it is not average resident memory over time. These are Linux kernel-accounted RSS
+maxima, not a byte-exact instantaneous physical-memory peak or a universal memory bound.
+They do not include uncharged filesystem cache, kernel memory, or combined parent/child
+and container memory. No heap/journal sampler runs in the measured child.
+
+Completion requires a successful child exit and a strict JSON result after catalog
+close, with expected snapshot/file/content counts, all input files committed, a positive
+import duration, and either no import error or the expected final-line parse error
+without a cleanup error. Missing/malformed completion, invalid requests, missing input,
+or missing/invalid kernel RSS fields fail rather than supply fallback measurements.
+Before application reopening can recover anything, the parent inspects the exited
+child's catalog read-only and rejects incomplete publication or surviving failed-import
+rows. It then runs the shared search, directory, foreign-key and FTS integrity checks.
+Small tests cover both outcomes, protocol/child errors, KiB parsing and rejection of an
+unclean snapshot without silently recovering it.
+
+Reproduce on Linux from the repository root, without race instrumentation:
+
+```sh
+go test ./internal/importer -run '^TestImport(PeakRSSFixture|RSSChildErrors|RSSProtocol|RSSHWM|RSSUncleanCatalog)$' -count=1 -v
+go test ./internal/importer -run '^$' -bench '^BenchmarkImportPeakRSS/' -benchtime=3x -v -timeout=30m
+```
+
+Use `^BenchmarkImportPeakRSS/50000/` or `/1000000/` to select one scale. Fixed three-iteration
+runs launch three independent children per outcome, serially (not `RunParallel`). Fresh
+catalogs and parent checks are outside the benchmark timer; `ns/op` times the child
+launcher, including result decoding, rather than just import. `import-s/op` is measured
+inside the child from `Import` entry through return, including deferred cleanup but
+excluding opening/close. `child-s/op` covers process launch through exit; user/system CPU
+metrics cover the child's lifetime. `B/op` with `-benchmem` would be parent allocation
+traffic, not child allocations or RSS. Running this benchmark with `-race` changes the
+child executable and cannot reproduce the uninstrumented memory values below.
+
+Three serial repetitions per case on 2026-10-10 used Linux amd64, Go 1.27.1, AMD Ryzen 5
+9600X and benchmark parallelism 4. The measurement command ran no concurrent checks of
+its own; other agents/container activity and filesystem cache state were not controlled.
+All maxima are bytes; each row lists raw child `VmHWM` values in launch order.
+
+| Files / outcome | RSS repetitions (bytes) | Maximum bytes | Mean high-water bytes | Import seconds, repetitions |
+| --- | --- | ---: | ---: | --- |
+| 50,000 / success | 35,000,320; 33,308,672; 34,951,168 | 35,000,320 | 34,420,053 | 1.413100; 1.406355; 1.384772 |
+| 50,000 / late failure + cleanup | 31,936,512; 31,535,104; 31,424,512 | 31,936,512 | 31,632,043 | 1.226363; 1.219723; 1.226789 |
+| 1,000,000 / success | 55,169,024; 54,927,360; 55,377,920 | 55,377,920 | 55,158,101 | 33.245328; 34.065789; 38.341540 |
+| 1,000,000 / late failure + cleanup | 59,883,520; 58,712,064; 58,675,200 | 59,883,520 | 59,090,261 | 45.235428; 35.739763; 35.763282 |
+
+At one million files, successful children used 31.28–31.71 seconds of combined user/system
+CPU and failed-import children used 29.30–29.62 seconds. Wall times vary more than these
+CPU totals; scheduling overlap, I/O and other container activity were not isolated.
+Do not infer an inherent importer speed regression, a latency distribution, or a
+contention-independent RSS guarantee from this overlap. The kernel maxima are valid
+for these executions under that environment, but not proof that all inventories or
+memory-pressure conditions behave identically. This closes the isolated process-RSS
+measurement slice for this fixture only. Long/deep paths, known/shared-size enrichment,
+repeated contents, history-heavy imports, cold behavior, approved budgets and optimization
+of slow cases remain separate work. No backend gate or acceptance limit is approved.
+
+**Remaining true peak journal-storage evidence:** first define whether the target is
+apparent lengths, allocated blocks, filesystem reservations, or simultaneous total
+catalog/sidecar/temporary storage. An event-complete trace must preserve file identity
+across creation, growth, truncation, unlink and close (including open-but-unlinked files)
+and reconcile the simultaneously live allocations with no dropped events. SQLite VFS
+write/truncate/delete instrumentation can explain logical file growth and transaction
+ownership, but does not prove allocated physical blocks under delayed allocation,
+sparse extents, compression or copy-on-write. A physical-storage claim needs
+filesystem-aware allocation/free/reservation evidence or an instrumented filesystem,
+with the chosen accounting scope and trace overhead validated. Faster `stat` polling
+does not provide that evidence. This RSS slice makes no true peak journal claim and
+does not change transaction policy.
 
 ## Verification and follow-on work
 
