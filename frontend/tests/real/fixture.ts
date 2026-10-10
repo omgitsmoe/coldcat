@@ -10,6 +10,9 @@ export const fixture = {
   oldHash: 'ef'.repeat(32),
   unknownHash: '12'.repeat(32),
   zeroHash: '34'.repeat(32),
+  coverageDirectory: 'distributed 雪',
+  coverageKnownHash: '56'.repeat(32),
+  coverageUnknownHash: '78'.repeat(32),
   oldCapture: '2020-01-02T03:04:05.123456789Z',
   middleCapture: '2021-02-03T04:05:06Z',
   currentCapture: '2022-03-04T05:06:07.987654321Z',
@@ -43,7 +46,10 @@ export const inventories = [
     capturedAt: fixture.oldCapture,
     records:
       record(reportPath, fixture.sharedHash, '7', '946684800') +
-      record('foo/retired.txt', fixture.oldHash, '5'),
+      record('foo/retired.txt', fixture.oldHash, '5') +
+      record(`${fixture.coverageDirectory}/one.txt`, fixture.coverageKnownHash, '13') +
+      record(`${fixture.coverageDirectory}/alias.txt`, fixture.coverageKnownHash, '13') +
+      record(`${fixture.coverageDirectory}/unknown.txt`, fixture.coverageUnknownHash, ''),
   },
   {
     name: 'alpha-middle',
@@ -55,12 +61,16 @@ export const inventories = [
     name: 'beta-current',
     label: 'Backup β',
     capturedAt: fixture.currentCapture,
-    records: record('renamed/alias.txt', fixture.sharedHash, '7'),
+    records:
+      record('renamed/alias.txt', fixture.sharedHash, '7') +
+      record('distributed-copy/known.txt', fixture.coverageKnownHash, '13'),
   },
   {
     name: 'gamma-current',
     label: 'Third γ',
     capturedAt: fixture.currentCapture,
-    records: record('other/report.txt', fixture.sharedHash, '7'),
+    records:
+      record('other/report.txt', fixture.sharedHash, '7') +
+      record('elsewhere/opaque.txt', fixture.coverageUnknownHash, ''),
   },
 ];

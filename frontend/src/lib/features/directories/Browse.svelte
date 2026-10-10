@@ -21,6 +21,7 @@
   import Entries from './Entries.svelte';
   import Filters from './Filters.svelte';
   import Replicas from './Replicas.svelte';
+  import Coverage from './Coverage.svelte';
   let { id, search }: { id: string; search: string } = $props();
   const connection = useConnection();
   type Detail = Result<'GET /api/v1/snapshots/{id}/directory'>;
@@ -33,7 +34,7 @@
   let view = $state<TraversalState<Page>>({ status: 'idle', pages: [], active: 0, paged: false });
   let items = $state<Page['items']>([]);
   let draft = $state(false);
-  let tab = $state<'entries' | 'replicas'>('entries');
+  let tab = $state<'entries' | 'replicas' | 'coverage'>('entries');
   let paging = $state({ busy: false, canMore: false, canNext: false, canPrevious: false });
   const source = $derived(detail.status === 'success' ? detail.value : view.pages[0]?.value);
   $effect(() => {
@@ -151,9 +152,14 @@
     <button aria-pressed={tab === 'replicas'} onclick={() => (tab = 'replicas')}
       >Exact tree copies</button
     >
+    <button aria-pressed={tab === 'coverage'} onclick={() => (tab = 'coverage')}
+      >Content on other disks</button
+    >
   </nav>
   {#if tab === 'replicas'}
     {#key `${id}:${query.path}`}<Replicas {id} path={query.path!} />{/key}
+  {:else if tab === 'coverage'}
+    {#key `${id}:${query.path}`}<Coverage {id} path={query.path!} />{/key}
   {:else}
     <section aria-label="Directory entry listing">
       <h2>Entries</h2>

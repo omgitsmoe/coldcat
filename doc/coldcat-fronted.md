@@ -1,6 +1,6 @@
 # Coldcat frontend plan
 
-Status: F0–F9a and F11a core integration implemented. F9b–F12/full F11a pending;
+Status: F0–F9b and F11a core integration implemented. F10–F12/full F11a pending;
 backend gate unresolved. This is not release acceptance closure.
 The first-usable-slice real-backend harness precedes F7/comparisons; see the
 [core integration interface and coverage](../frontend/README.md#real-backend-core-integration-f11a-core).
@@ -607,6 +607,9 @@ full F11a revision/reconnect and later feature integration remain pending.
 
 ### F9b — directory content coverage
 
+- **Implemented interface:** explicit Content on other disks view, reusing F9a's controlled
+  rule editor and bounded traversal; see the
+  [F9b handoff](../frontend/README.md#directory-content-coverage-f9b-handoff).
 - **Prerequisites:** F9a's rule editor contract and F6.
 - **Scope:** coverage tab, covered/missing counts, safe optional percentages, completeness
   and unknown bytes, and links to destination disks.

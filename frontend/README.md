@@ -2,8 +2,8 @@
 
 The primary search workspace, content/location and observation details, hash lookup,
 disk/inventory pages and disk creation/editing, distinct-content explorer, directory browsing/sizing, shell, request/page
-lifecycle, directory exact replicas with a shared literal rule editor, and wire/domain helpers are implemented.
-Content coverage and Go asset hosting remain separate packages. Backend acceptance
+lifecycle, directory exact replicas/content coverage with a shared literal rule editor, and wire/domain helpers are implemented.
+Go asset hosting remains a separate package. Backend acceptance
 remains open.
 Architecture: [ADR 0002](../doc/adr/0002-static-browser-frontend.md).
 
@@ -96,8 +96,13 @@ catalog-wide disks/locations, presets, historical-only zero-safe counts and real
 The separate `tests/real/replicas.spec.ts` covers F9a historical literal paths, current
 destination inventories, same-disk copies, explicit one-item pagination, whole/filtered
 equality and empty selection without comparison preloading.
-Full F11a still needs outage/reconciliation write integration, F9b coverage
-workflows, stop/import/restart revision and reconnect cases, and F10 built-host runs.
+The separate `tests/real/coverage.spec.ts` covers F9b's historical source with aliases,
+known/unknown sizes and content distributed across two current destinations without any single
+complete copy, explicit pagination, destination links and empty selection. The source-only
+`distributed 雪` directory exists in the oldest alpha inventory; beta contains its known-size
+identity and gamma its unknown-size identity under unrelated paths.
+Full F11a still needs outage/reconciliation write integration, stop/import/restart revision
+and reconnect cases, and F10 built-host runs.
 F11b manual accessibility/responsive audits and F12 final integration checks remain separate.
 These correctness tests neither establish performance budgets nor close the unresolved backend gate.
 
@@ -461,6 +466,43 @@ is still unresolved.
   Browser checks: `npm run test:e2e -- tests/browser/replicas.spec.ts tests/browser/directories.spec.ts`.
   Real bounded integration: `npm run test:real -- tests/real/replicas.spec.ts`, using the existing
   disposable offline-import harness only. These checks do not close F9b/full F11a/F11b or backend gates.
+
+### Directory content coverage (F9b handoff)
+
+- The directory route adds **Content on other disks** alongside Entries / Exact tree copies.
+  Opening the view does not execute; **Apply and compare** alone starts coverage. Switching
+  views, navigating to another source/path or leaving the route destroys pending comparisons.
+  Rules are local drafts, not bookmarks; F9a's `RuleEditor` and `ruleInput` remain unchanged.
+- `features/directories/Coverage.svelte` owns separate literal draft/applied copies. Draft or
+  page-size edits immediately hide results and retire pending first/continuation requests.
+  Cancel leaves the editor usable and requires explicit Apply. Applied allow/block rules and
+  selected/excluded source counts accompany verified results; no JavaScript glob matching occurs.
+- `coveragePages(connection, snapshotID, query)` captures copied rules, literal path and page
+  size (default 50, editable 1–200). It creates no request and returns the existing
+  `{ traversal, dispose }` contract. The ten-page retention bound, explicit next/previous
+  navigation, retained-page failure/retry, stale restart, connection invalidation and abort/late
+  response rejection use F2. No per-destination fetch or automatic all-page loading is added.
+- Per-disk rows show covered/missing source file occurrences and distinct contents, known
+  covered/missing source bytes and unknown-size file counts. Source byte completeness is
+  independent of content coverage completeness. Percentages use F1's BigInt helper, label the
+  selected-distinct-content denominator and rounding, and never determine complete status.
+  An empty selection is **No files selected**, without percentages or destination rows.
+- Historical sources compare against current destination inventories, excluding the source
+  disk. Disk/inventory anchors are native links. Distributed partial coverage is not summed
+  into a backup claim; even complete content coverage is not an exact tree copy.
+- Focused mocked checks: `npm run test:e2e -- tests/browser/coverage.spec.ts
+tests/browser/replicas.spec.ts tests/browser/directories.spec.ts`. Real imported coverage:
+  `npm run test:real -- tests/real/coverage.spec.ts`; run the full `npm run test:real` suite for
+  core operation coverage and fixture regression checks. Run mocked and real Playwright
+  commands sequentially: both configurations use the same default `test-results/` directory.
+- **Full F11a handoff:** keep the disposable offline-import ownership/cleanup contract. Add
+  real stop/import/restart cursor invalidation and same-revision reconnect clearing across
+  search, contents, directory entries, replicas and coverage; verify no obsolete destinations
+  or cursors survive and no comparison reruns automatically. Add real uncertain-write/outage
+  reconciliation and F10 production same-origin built-host workflows. Existing write, contents,
+  replica and coverage suites complement the core read matrix; they do not close full F11a.
+  F11b accessibility/manual responsiveness and F12 release checks remain pending. Backend
+  acceptance stays unresolved; no Go benchmark or full race run belongs to this package.
 
 Start the backend separately with a disposable catalog, following
 [backend integration](../doc/backend-integration.md). Stop it before CLI catalog operations;

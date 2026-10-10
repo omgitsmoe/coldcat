@@ -129,6 +129,31 @@ export function replicaPages(
   );
 }
 
+export function coveragePages(
+  connection: Connection,
+  id: string,
+  query: Omit<Query<'GET /api/v1/snapshots/{id}/directory/coverage'>, 'cursor'>,
+) {
+  withoutCursor(query);
+  const input = {
+    path: '',
+    limit: 50,
+    ...query,
+    allow: query.allow ? [...query.allow] : undefined,
+    block: query.block ? [...query.block] : undefined,
+  };
+  const encoded = encodeQuery(contract['GET /api/v1/snapshots/{id}/directory/coverage'], input);
+  return bindTraversal(
+    connection,
+    new CursorTraversal<
+      Result<'GET /api/v1/snapshots/{id}/directory/coverage'>['items'][number],
+      Result<'GET /api/v1/snapshots/{id}/directory/coverage'>
+    >({ endpoint: 'directory-coverage', resource: id, query: encoded }, (cursor, signal) =>
+      connection.client.directoryCoverage(id, { ...input, cursor }, signal),
+    ),
+  );
+}
+
 export function directoryPages(connection: Connection, id: string, query: DirectoryRoute = {}) {
   withoutCursor(query);
   const input: DirectoryRoute = {

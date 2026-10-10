@@ -8,6 +8,7 @@ import {
   snapshotPages,
   directoryPages,
   replicaPages,
+  coveragePages,
   contentDetail,
   observationDetail,
   diskDetail,
@@ -18,6 +19,42 @@ import { searchFixture } from '../fixtures/api';
 import { ApiError } from '../../src/lib/api/errors';
 
 describe('concrete feature contracts', () => {
+  it('captures coverage rules, cancels late results and invalidates current destination context', async () => {
+    const client = createClient();
+    let release!: (value: { revision: string; items: never[]; next_cursor: null }) => void;
+    const pending = new Promise<{ revision: string; items: never[]; next_cursor: null }>(
+      (resolve) => {
+        release = resolve;
+      },
+    );
+    client.directoryCoverage = vi.fn().mockReturnValue(pending);
+    const connection = new Connection(client);
+    const query = { path: '雪/\\x', allow: [' **/a\\?.txt '], block: ['**/*.log'] };
+    const bound = coveragePages(connection, '13', query);
+    expect(client.directoryCoverage).not.toHaveBeenCalled();
+    query.allow[0] = 'mutated';
+    const running = bound.traversal.restart();
+    expect(client.directoryCoverage).toHaveBeenCalledWith(
+      '13',
+      {
+        path: '雪/\\x',
+        allow: [' **/a\\?.txt '],
+        block: ['**/*.log'],
+        limit: 50,
+        cursor: undefined,
+      },
+      expect.any(AbortSignal),
+    );
+    const signal = vi.mocked(client.directoryCoverage).mock.calls[0]![2]!;
+    connection.metadataChanged();
+    expect(signal.aborted).toBe(true);
+    release({ revision: '1', items: [], next_cursor: null });
+    await running;
+    expect(bound.traversal.state.status).toBe('idle');
+    expect(bound.traversal.state.pages).toHaveLength(0);
+    bound.dispose();
+    connection.dispose();
+  });
   it('freezes literal replica rules and cancels obsolete comparisons without eager calls', async () => {
     const client = createClient();
     let release!: (value: { revision: string; items: never[]; next_cursor: null }) => void;
