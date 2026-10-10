@@ -30,11 +30,11 @@
 
 <nav aria-label="Result pages">
   {#if paged}
-    <p>Page {page}. Earlier pages retained from page {firstRetained}.</p>
+    <p role="status">Page {page}. Earlier pages retained from page {firstRetained}.</p>
     <button disabled={busy || !canPrevious} onclick={previous}>Previous page</button>
     <button disabled={busy || !canNext} onclick={next}>Next page</button>
   {:else}
-    <p>{loaded} loaded</p>
+    <p role="status">{loaded} loaded</p>
     {#if busy}
       <button disabled>Loading page…</button>
     {:else if canMore}

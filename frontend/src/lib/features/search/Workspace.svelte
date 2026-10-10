@@ -435,7 +435,9 @@
   </p>
 {/if}
 {#if !dirty && !parseError && view.status === 'success' && items.length === 0}
-  <p>No matching observations. Try another literal query or deliberately choose Search history.</p>
+  <p role="status">
+    No matching observations. Try another literal query or deliberately choose Search history.
+  </p>
 {/if}
 {#if items.length}
   {#if view.paged}<p>{items.length} observations displayed on this page.</p>{/if}

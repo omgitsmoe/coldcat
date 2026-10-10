@@ -1,7 +1,8 @@
 # Coldcat frontend plan
 
 Status: F0–F11a implemented, including the full deployed-Go real-browser operation matrix
-and revision/reconnection/write-reconciliation scenarios. F11b–F12 pending;
+and revision/reconnection/write-reconciliation scenarios. F11b automated checks/evidence implemented,
+with manual assistive-technology feedback and target/budget agreement still pending; F12 pending;
 backend gate unresolved. This is not release acceptance closure.
 The first-usable-slice real-backend harness precedes F7/comparisons; see the
 [core integration interface and coverage](../frontend/README.md#real-backend-core-integration-f11a-core).
@@ -653,6 +654,12 @@ full F11a revision/reconnect and later feature integration also run through `npm
 
 ### F11b — accessibility, responsive behavior, and frontend responsiveness
 
+- **Implemented evidence:** deployed screen/state axe checks at desktop/320px, native keyboard
+  and delayed-request behavior, bounded DOM/heap and instrumented Chromium measurements; see
+  [F11b evidence and required owner checklist](../frontend/tests/F11b-acceptance.md).
+  This package is **not accepted**: target hardware/budgets need owner agreement and subsequent
+  measurement; the required manual screen-reader checklist needs actual tester feedback or an
+  explicit unresolved release deferral. Automated checks do not establish spoken usability.
 - **Prerequisites:** integrated feature screens.
 - **Scope:** keyboard/manual screen-reader audit, automated accessibility checks, narrow
   layout, reduced motion, delayed-backend responsiveness, bounded DOM/memory review, and

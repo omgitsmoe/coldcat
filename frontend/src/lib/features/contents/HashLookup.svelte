@@ -47,7 +47,6 @@
   );
 </script>
 
-<h1>Contents</h1>
 <h2>Hash lookup</h2>
 <p>
   Look up an explicit algorithm and digest across all complete inventories. Different algorithms do

@@ -163,8 +163,9 @@ stop responding and can be rebound, and owned directories disappear. `test:hosti
 final assets-acquisition fault. Browser fixtures always close in `finally`; no workspace catalog,
 benchmark directory or concurrently owned catalog is opened.
 
-F11a is complete; F11b manual screen-reader/keyboard, responsive/high-contrast/reduced-motion
-audits and agreed responsiveness measurements remain pending, as do F12 final release checks.
+F11a is complete. F11b automated accessibility/keyboard/responsive checks and instrumented
+browser evidence are implemented; see the [F11b evidence and required owner checklist](tests/F11b-acceptance.md).
+Manual screen-reader feedback and agreed target/budget acceptance remain pending, as do F12 checks.
 No performance budget, supported-browser policy or backend gate is approved by this suite.
 
 ## Wire client and domain helpers
@@ -644,5 +645,6 @@ remain F12 work.
 - `tests/serve-built.ts` is a test-only reference host with broader document fallback to
   exercise future nested URLs. Do not ship it or copy it as the production security handler.
 
-Manual screen-reader/keyboard audits and browser support/measurement thresholds remain
-F11b/F12 work. No backend benchmark or full Go race check is needed for pure frontend tasks.
+Manual screen-reader feedback and browser support/measurement agreement remain F11b/F12 work;
+automated checks and measured evidence are in the [F11b checklist](tests/F11b-acceptance.md).
+No backend benchmark or full Go race check is needed for pure frontend tasks.
