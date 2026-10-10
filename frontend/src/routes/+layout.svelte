@@ -12,6 +12,7 @@
   {#snippet navigation()}
     <nav aria-label="Main navigation">
       <a href={resolve('/')}>Search</a>
+      <a href={resolve('/contents')}>Hash lookup</a>
     </nav>
   {/snippet}
   {@render children()}

@@ -1,7 +1,15 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { searchFixture } from '../fixtures/api';
+import { contentFixture, locationsFixture } from '../fixtures/details';
 
 async function ready(page: Page) {
+  await page.route('**/api/v1/contents/1**', (r) =>
+    r.fulfill({
+      json: new URL(r.request().url()).pathname.endsWith('/observations')
+        ? locationsFixture()
+        : contentFixture(),
+    }),
+  );
   await page.route('**/healthz', (r) => r.fulfill({ json: { status: 'ready' } }));
   await page.route('**/api/v1/catalog', (r) =>
     r.fulfill({
@@ -252,10 +260,10 @@ test('typing replaces history; discrete filters, selected links, Back and reload
   await page.goBack();
   await expect(page.getByRole('searchbox')).toHaveValue('report');
   await expect(page.getByRole('link', { name: 'report', exact: true })).toBeVisible();
-  expect(calls).toBe(before + 1);
+  expect(calls).toBe(before);
   await page.reload();
   await expect(page.getByRole('link', { name: 'report', exact: true })).toBeVisible();
-  expect(calls).toBe(before + 2);
+  expect(calls).toBe(before + 1);
   await expect(page.getByRole('button', { name: 'Open selected content' })).toHaveCount(0);
 });
 

@@ -17,7 +17,8 @@ export function errorPresentation(error: unknown, resource = 'Resource') {
       title: 'Backend unavailable',
       detail: 'Retained data is not freshly verified. Retry the connection.',
     };
-  if (error.status === 404) return { title: `${resource} not found`, detail: error.message };
+  if (error.kind === 'http' && error.status === 404)
+    return { title: `${resource} not found`, detail: error.message };
   if (error.status === 400 || error.kind === 'request')
     return {
       title: 'Check submitted parameters',

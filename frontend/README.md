@@ -1,8 +1,9 @@
 # Coldcat frontend
 
-The primary search workspace, shell, request/page lifecycle, and wire/domain helpers are
-implemented. Detail/browsing features and Go asset hosting remain separate packages. Backend acceptance remains
-open. Architecture: [ADR 0002](../doc/adr/0002-static-browser-frontend.md).
+The primary search workspace, content/location and observation details, hash lookup, shell,
+request/page lifecycle, and wire/domain helpers are implemented. Disk/directory browsing and
+Go asset hosting remain separate packages. Backend acceptance remains open.
+Architecture: [ADR 0002](../doc/adr/0002-static-browser-frontend.md).
 
 ## Toolchain and commands
 
@@ -200,15 +201,54 @@ Connection invalidation clears selection/scroll and retires or marks pages unver
   destination. The selected observation is independent of content's location scope.
 - The retained session is reused only for the same connection and search inputs, with successful
   pages. Otherwise search refetches page one. An application/document reload always refetches.
-  Until detail routes exist, their normal links load the not-found boundary and Back uses this
-  reconstruction path. F4/F11a must extend browser integration to surviving in-app sessions,
-  scroll restoration and the full search/detail/location workflow.
+  F4 browser coverage now exercises search → content → observation → return within the same
+  application, retained selection/scroll, ordinary Back, and first-page refetch after reload.
+  F11a still owns the real-catalog workflow proof.
 
 Mocked browser coverage includes delayed first pages and continuations, Unicode/IME scheduling,
 keyboard guards/preference, invalid filters, failures/stale cursors, URL history, first-page
 reconstruction and later rows past the retention bound. These tests do not establish backend
 performance or real-catalog workflow acceptance. Manual screen-reader/input-method audits remain
 F11b work.
+
+### Content and observation details (F4 handoff)
+
+- `/contents/[id]` uses the F2 `contentDetail` and `locationPages` adapters independently.
+  Initial navigation issues exactly two feature requests: summary with `scope=history` to
+  expose all-complete-inventory counts, and locations with `scope=current` by default.
+  Current counts remain explicitly separate from historical distinct disks/disk-paths and
+  repeated observations. No per-location requests are issued.
+- Location scope/limit and validated `return_to`/`observation` follow the existing route
+  builders/parsers. Scope/resource/query changes destroy the old owners immediately. History
+  pagination uses F2's ten-page retention and explicit later-page navigation, stale-cursor
+  reset and independent retry. A disconnected continuation retry restarts page one rather
+  than reusing suspended cursors. Selection is still linked even when absent from the loaded
+  page/current scope; it does not trigger an observation fetch.
+- `/observations/[id]` fetches only its embedded-context DTO and uses its supplied other-current
+  counts (not content-level subtraction). Content links preserve search context; disk and
+  inventory links target F5, and containing-directory links target F6 with snapshot plus
+  literal path, including `path=` for root. The DTO has no `is_current` flag; the observation
+  page does not infer one from dates or invent a historical/current badge.
+- Successful detail sections survive an independent failure. On disconnect, retained identity
+  is explicitly unverified; reconnect/revision/metadata invalidation clears it. Feature retries
+  are manual, not shell readiness retries. Plain traversal-class getters are projected into
+  reactive paging flags in the subscription, so controls update after every page transition.
+- `/contents` currently hosts `HashLookup.svelte`, not the F8 content explorer. F8 should compose
+  this form with its list. `lookupInput(algorithm, digest)` and `algorithms` derive validation
+  from generated descriptors, preserve input case, and search history explicitly. Supported
+  digest lengths remain server-owned because OpenAPI specifies only hex byte pairs. The form
+  separates known, valid 404, malformed/error and obsolete-request states; a known result has
+  an ordinary content link, defaulting its locations to current.
+- Shared `CopyButton.svelte` takes `text`/`label` and reports rejected clipboard writes;
+  `DateValue.svelte` takes `value`/`meaning`, labels source mtime versus capture/import time,
+  preserves null and exposes exact UTC fractional seconds. F5/F6 can reuse them. Decimal
+  presentation continues to use F1's BigInt-safe helpers.
+
+F4 checks cover independent failures (including disconnect/reconnect), huge decimals,
+zero/unknown values, date labels, selected context, safe return/path links, copy success/failure,
+explicit hash identity and stale lookup responses, current/history traversal and bounded later
+pages. These are mocked-browser tests; no Go checks, catalog access or real-backend acceptance
+is implied. Optional manual accessibility/responsive audits remain F11b.
 
 Start the backend separately with a disposable catalog, following
 [backend integration](../doc/backend-integration.md). Stop it before CLI catalog operations;
@@ -242,7 +282,8 @@ manual retry. It never supplies cached/demo responses as proof of backend readin
   `/contents/[id]`, `/observations/[id]`, `/disks`, `/disks/[id]`, `/snapshots/[id]`, and
   `/snapshots/[id]/directory`. Return `index.html` for their direct document requests;
   query strings do not change asset dispatch. Arbitrary directory paths stay in `?path=`.
-- Only `/` is implemented through F3. A built nested navigation loads the shell and displays
+- `/`, `/contents`, `/contents/[id]`, and `/observations/[id]` are implemented through F4.
+  Other built nested navigation loads the shell and displays
   the client “Page not found” boundary until that feature route exists. Unknown routes
   are not approved production fallback destinations.
 - `tests/serve-built.ts` is a test-only reference host with broader document fallback to
