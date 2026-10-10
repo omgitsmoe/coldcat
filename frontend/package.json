@@ -18,6 +18,7 @@
     "test:proxy": "node --test tests/proxy.test.ts",
     "test:e2e": "npm run build && playwright test",
     "test:real": "playwright test --config playwright.real.config.ts",
+    "test:deployed": "npm run build && COLDCAT_REQUIRE_MATRIX=1 playwright test --config playwright.deployed.config.ts",
     "test:real-harness": "node --test tests/real/harness.test.ts",
     "test:hosting": "npm run build && playwright test --config playwright.hosting.config.ts",
     "test:hosting-harness": "npm run build && node --test tests/hosting/harness.test.ts",

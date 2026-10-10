@@ -25,7 +25,9 @@ function record(path: string, hash: string, size: string, mtime = '') {
   return `${mtime},${size},sha256,${hash} ${path}\n`;
 }
 
-export const inventories = [
+export type Inventory = { name: string; label: string; capturedAt: string; records: string };
+
+export const inventories: Inventory[] = [
   {
     name: 'alpha-current',
     label: fixture.label,

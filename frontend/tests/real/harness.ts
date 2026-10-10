@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer, type ViteDevServer } from 'vite';
 import { backendTarget, proxyRules } from '../../dev-proxy.ts';
-import { fixture, inventories } from './fixture.ts';
+import { fixture, inventories, type Inventory } from './fixture.ts';
 import type { components } from '../../src/lib/api/generated/wire.ts';
 
 const run = promisify(execFile);
@@ -19,6 +19,9 @@ export type Catalog = {
   pid: number;
   diskID: string;
   snapshots: components['schemas']['Snapshot'][];
+  stopBackend: () => Promise<void>;
+  restartBackend: () => Promise<void>;
+  importInventory: (inventory: Inventory) => Promise<void>;
   close: () => Promise<void>;
 };
 
@@ -47,6 +50,20 @@ export async function startCatalog(
   let closing: Promise<void> | undefined;
   const lifetime = new AbortController();
   const commands = new Set<Promise<unknown>>();
+  let transitioning = false;
+  async function transition(action: () => Promise<void>) {
+    if (closing) throw new Error('Catalog is closing');
+    if (transitioning) throw new Error('Catalog lifecycle operation already in progress');
+    transitioning = true;
+    const pending = action();
+    commands.add(pending);
+    try {
+      await pending;
+    } finally {
+      commands.delete(pending);
+      transitioning = false;
+    }
+  }
   async function command(binary: string, args: string[], timeout: number) {
     const pending = run(binary, args, {
       cwd: repository,
@@ -114,48 +131,52 @@ export async function startCatalog(
       (await cli('snapshot', 'list', '--disk-id', disk.id, '--json')).stdout,
     ) as components['schemas']['Snapshot'][];
     onStage?.('imported', { root, diskID: disk.id, snapshots });
-    child = spawn(
-      binary,
-      [
-        '--db',
-        join(root, 'catalog.sqlite'),
-        'serve',
-        '--listen',
-        '127.0.0.1:0',
-        ...(assetsDirectory === undefined ? [] : ['--assets', assetsDirectory]),
-      ],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
-    );
-    let logs = '';
-    let launchError: Error | undefined;
-    child.on('error', (error) => {
-      launchError = error;
-    });
-    child.stdout?.on('data', (chunk) => {
-      logs = (logs + chunk).slice(-16_384);
-    });
-    child.stderr?.on('data', (chunk) => {
-      logs = (logs + chunk).slice(-16_384);
-    });
-    const deadline = Date.now() + 30_000;
-    let backendOrigin: string | undefined;
-    while (Date.now() < deadline) {
-      if (launchError) throw launchError;
-      if (child.exitCode !== null || child.signalCode !== null)
-        throw new Error(`Backend exited before readiness: ${logs}`);
-      backendOrigin = logs.match(/serving (http:\/\/127\.0\.0\.1:\d+)/)?.[1];
-      if (backendOrigin) {
-        const health = await fetch(`${backendOrigin}/healthz`, {
-          signal: AbortSignal.timeout(1000),
-        });
-        if (health.ok && (await health.json()).status === 'ready') break;
+    async function launch(listen = '127.0.0.1:0') {
+      child = spawn(
+        binary,
+        [
+          '--db',
+          join(root, 'catalog.sqlite'),
+          'serve',
+          '--listen',
+          listen,
+          ...(assetsDirectory === undefined ? [] : ['--assets', assetsDirectory]),
+        ],
+        { stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      let logs = '';
+      let launchError: Error | undefined;
+      child.on('error', (error) => {
+        launchError = error;
+      });
+      child.stdout?.on('data', (chunk) => {
+        logs = (logs + chunk).slice(-16_384);
+      });
+      child.stderr?.on('data', (chunk) => {
+        logs = (logs + chunk).slice(-16_384);
+      });
+      const deadline = Date.now() + 30_000;
+      let backendOrigin: string | undefined;
+      while (Date.now() < deadline) {
+        if (launchError) throw launchError;
+        if (child.exitCode !== null || child.signalCode !== null)
+          throw new Error(`Backend exited before readiness: ${logs}`);
+        backendOrigin = logs.match(/serving (http:\/\/127\.0\.0\.1:\d+)/)?.[1];
+        if (backendOrigin) {
+          const health = await fetch(`${backendOrigin}/healthz`, {
+            signal: AbortSignal.timeout(1000),
+          });
+          if (health.ok && (await health.json()).status === 'ready') break;
+        }
+        await delay(25);
       }
-      await delay(25);
+      if (!backendOrigin || Date.now() >= deadline)
+        throw new Error(`Backend readiness deadline exceeded: ${logs}`);
+      if (!child.pid) throw new Error('Backend PID unavailable');
+      onStage?.('backend', { root, backendOrigin, pid: child.pid });
+      return backendOrigin;
     }
-    if (!backendOrigin || Date.now() >= deadline)
-      throw new Error(`Backend readiness deadline exceeded: ${logs}`);
-    if (!child.pid) throw new Error('Backend PID unavailable');
-    onStage?.('backend', { root, backendOrigin, pid: child.pid });
+    const backendOrigin = await launch();
     let origin = backendOrigin;
     if (assetsDirectory === undefined) {
       vite = await createServer({
@@ -170,7 +191,7 @@ export async function startCatalog(
       await vite.listen();
       const proxyOrigin = vite.resolvedUrls?.local[0];
       if (!proxyOrigin) throw new Error('Frontend origin unavailable');
-      origin = proxyOrigin;
+      origin = new URL(proxyOrigin).origin;
     }
     for (const path of ['healthz', 'api/v1/catalog']) {
       const response = await fetch(new URL(path, origin), { signal: AbortSignal.timeout(5000) });
@@ -181,10 +202,41 @@ export async function startCatalog(
       root,
       origin,
       backendOrigin,
-      pid: child.pid,
+      get pid() {
+        if (!child?.pid) throw new Error('Backend PID unavailable');
+        return child.pid;
+      },
       diskID: disk.id,
       snapshots,
       close,
+      async stopBackend() {
+        await transition(async () => {
+          if (child) await terminate(child);
+        });
+      },
+      async restartBackend() {
+        await transition(async () => {
+          if (child && child.exitCode === null && child.signalCode === null)
+            throw new Error('Stop the backend before restarting');
+          await launch(new URL(backendOrigin).host);
+        });
+      },
+      async importInventory(inventory: Inventory) {
+        await transition(async () => {
+          if (child && child.exitCode === null && child.signalCode === null)
+            throw new Error('Stop the backend before importing');
+          const path = join(root, `${inventory.name}.cshd`);
+          await writeFile(path, '# version 1\n' + inventory.records);
+          await cli(
+            'import',
+            '--label',
+            inventory.label,
+            '--captured-at',
+            inventory.capturedAt,
+            path,
+          );
+        });
+      },
     };
     onStage?.(assetsDirectory === undefined ? 'proxy' : 'assets', catalog);
     return catalog;

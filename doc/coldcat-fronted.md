@@ -1,6 +1,7 @@
 # Coldcat frontend plan
 
-Status: F0–F10 and F11a core integration implemented. F11b–F12/full F11a pending;
+Status: F0–F11a implemented, including the full deployed-Go real-browser operation matrix
+and revision/reconnection/write-reconciliation scenarios. F11b–F12 pending;
 backend gate unresolved. This is not release acceptance closure.
 The first-usable-slice real-backend harness precedes F7/comparisons; see the
 [core integration interface and coverage](../frontend/README.md#real-backend-core-integration-f11a-core).
@@ -568,7 +569,7 @@ if available and do not run large backend benchmarks alongside browser acceptanc
 the landing page; keyboard search to known locations works; basic directory navigation works.
 Run the core real-backend browser tests before adding comparison/management scope.
 The separate `npm run test:real` and `npm run test:real-harness` commands cover this bounded core;
-full F11a revision/reconnect and later feature integration remain pending.
+full F11a revision/reconnect and later feature integration also run through `npm run test:deployed`.
 
 ### F7 — disk creation/editing
 
@@ -634,6 +635,13 @@ full F11a revision/reconnect and later feature integration remain pending.
 
 ### F11a — real-backend workflow integration
 
+- **Implemented interface:** `npm run test:deployed` builds then runs the complete real-browser
+  suite against Go-only same-origin hosting, with an OpenAPI-derived 18-operation coverage gate.
+  `npm run test:real` preserves development/proxy coverage. Owned stop/import/restart, stale
+  cursors, same/changed-revision reconnect clearing and committed POST/PATCH response-loss
+  reconciliation are covered; see the
+  [full integration matrix and ownership contract](../frontend/README.md#full-real-backend-integration-f11a).
+  Revision is not catalog identity; reconnect tests assert clearing, not cross-catalog safety.
 - **Prerequisites:** F3–F6; extend incrementally for F7–F9.
 - **Scope:** disposable fixture/import/server harness, real browser workflows, revision and
   reconnect scenarios, contract coverage matrix, and targeted fixes in coordination with

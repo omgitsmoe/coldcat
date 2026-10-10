@@ -24,6 +24,7 @@ npx playwright install chromium
 npm run test:e2e
 npm run test:real-harness
 npm run test:real
+npm run test:deployed
 npm run test:hosting-harness
 npm run test:hosting
 ```
@@ -60,8 +61,9 @@ markup/query/backslash/composed/decomposed Unicode segments. The newest capture 
 older captures, deliberately distinguishing capture order from import order. IDs and import dates
 come from CLI output; tests never assume sequential IDs or use unrelated OpenAPI example IDs.
 
-`tests/real/harness.ts` exports `startCatalog(onStage?)` →
-`{ root, origin, backendOrigin, pid, diskID, snapshots, close }`. `close()` is idempotent and
+`tests/real/harness.ts` exports `startCatalog(onStage?, absoluteBuildDirectory?)` →
+`{ root, origin, backendOrigin, pid, diskID, snapshots, stopBackend, importInventory,
+restartBackend, close }`. `close()` is idempotent and
 awaits command cancellation, proxy close and backend termination before removing owned files.
 Startup failure and SIGINT/SIGTERM use the same cleanup; SIGKILL cannot run teardown.
 Readiness requires the Go listen announcement, ready health response, and successful proxied
@@ -69,7 +71,10 @@ health/catalog reads. `onStage('imported' | 'backend' | 'proxy', acquired)` is s
 injection for cleanup tests, not a catalog mutation interface. `npm run test:real-harness` checks
 success and failure after each stage, including process exit, released ports and directory removal.
 Never run import/CLI operations while the returned backend is alive. Later revision/reconnect
-tests must stop the server before any additional import and explicitly reacquire ownership.
+tests use `stopBackend()` before `importInventory(inventory)` and `restartBackend()`.
+Import/restart while serving and concurrent lifecycle operations fail before acquiring ownership.
+Restart reuses the owned loopback address; `pid` reflects the replacement process. Close also
+awaits active lifecycle operations, then terminates the current backend and removes owned files.
 
 The core browser suite asserts a successful **browser-originated** request for every currently
 exposed read (run the full suite, not a filtered single test, for its coverage assertion):
@@ -103,10 +108,64 @@ known/unknown sizes and content distributed across two current destinations with
 complete copy, explicit pagination, destination links and empty selection. The source-only
 `distributed 雪` directory exists in the oldest alpha inventory; beta contains its known-size
 identity and gamma its unknown-size identity under unrelated paths.
-Full F11a still needs outage/reconciliation write integration, stop/import/restart revision
-and reconnect cases, and the full operation matrix against the F10 built host.
+The full F11a integration below extends these workflows to the deployed Go host and lifecycle faults.
 F11b manual accessibility/responsive audits and F12 final integration checks remain separate.
 These correctness tests neither establish performance budgets nor close the unresolved backend gate.
+
+### Full real-backend integration (F11a)
+
+`npm run test:deployed` builds static assets and runs **all** `tests/real/*.spec.ts` through
+`playwright.deployed.config.ts`. `origin === backendOrigin`: only Go serves HTTP; Node is the
+build/test runner, not a runtime application/proxy service. The unchanged `test:real` command
+runs the same workflows through the development proxy. Run Playwright suites sequentially.
+
+The deployed command requires the contract matrix reporter to see successful browser-originated
+responses for all **18 UI-exposed operations** in local OpenAPI. Test-runner API requests do not
+count. The 19th contract operation, `GET /api/v1/snapshots/{id}/directories`, is deliberately not
+exposed/preloaded. A missing operation fails the full command. For focused development without
+the full-matrix gate, build first and use
+`npx playwright test --config playwright.deployed.config.ts tests/real/lifecycle.spec.ts`.
+
+The core read matrix above plus these rows form the full exposed-operation matrix:
+
+| Operation                                       | Real browser evidence                                                                                                                                                                                                 |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/disks`                            | `writes.spec.ts`: precise creation and verified persisted metadata; `lifecycle.spec.ts`: committed response loss and manual label reconciliation without a second POST                                                |
+| `PATCH /api/v1/disks/{id}`                      | `writes.spec.ts`: conflict, changed-only fields, null clearing and unchanged revision; `lifecycle.spec.ts`: committed response loss, outage, retained draft, blocked Save, reconciliation and refreshed search labels |
+| `GET /api/v1/snapshots/{id}/directory/replicas` | `replicas.spec.ts`: historical literal source/current destinations, same-disk copy, real continuation, whole/filtered equality and empty selection                                                                    |
+| `GET /api/v1/snapshots/{id}/directory/coverage` | `coverage.spec.ts`: distributed partial copies, known/unknown source bytes, explicit continuation, destination links and empty selection                                                                              |
+
+`lifecycle.spec.ts` additionally tests search, contents, locations, disks, snapshot history,
+directory entries, exact replicas and coverage separately:
+
+- Stop Go, import a newer complete inventory offline, restart at the same address, then submit
+  the retained cursor: real `409 stale_cursor`, discarded traversal, explicit cursor-free first
+  page with the new revision. No old/new pages are appended together.
+- Stop Go, provoke a failed continuation, restart **without changing revision**, refresh shell
+  readiness, and assert retained rows/destinations and continuation controls disappear. No feature
+  request or comparison runs automatically; explicit reload/Apply starts without a cursor.
+- A successful metadata-only rename retires the same-query search session and selection even
+  without a disconnect or revision change; ordinary Back refetches updated labels without a cursor.
+- A changed-revision reconnect refreshes catalog context and clears search selection/restoration.
+  Revision is not catalog identity: these checks prove conservative clearing on reconnect, not
+  safe cursor reuse across switched/recreated catalogs.
+
+The two uncertain-write tests use Chromium CDP **response-stage transport fault injection**:
+Go really commits and returns 200/201, then the harness stops Go and drops that actual response
+before the application receives it. They never substitute a response body or fake a successful
+write. Recovery only retries readiness; manual reconciliation reads the persisted disk. These
+checks complement mocked uncommitted/absent-label and paginated reconciliation branches.
+
+`npm run test:real-harness` requires existing `build/` for its Go-assets cases (run `npm run build`
+first). It checks startup success/faults and both host modes' stop/import/restart success,
+post-restart failure, and offline import failure: original/replacement PIDs exit, health ports
+stop responding and can be rebound, and owned directories disappear. `test:hosting-harness` separately covers the
+final assets-acquisition fault. Browser fixtures always close in `finally`; no workspace catalog,
+benchmark directory or concurrently owned catalog is opened.
+
+F11a is complete; F11b manual screen-reader/keyboard, responsive/high-contrast/reduced-motion
+audits and agreed responsiveness measurements remain pending, as do F12 final release checks.
+No performance budget, supported-browser policy or backend gate is approved by this suite.
 
 ## Wire client and domain helpers
 
@@ -279,7 +338,7 @@ Connection invalidation clears selection/scroll and retires or marks pages unver
   pages. Otherwise search refetches page one. An application/document reload always refetches.
   F4 browser coverage now exercises search → content → observation → return within the same
   application, retained selection/scroll, ordinary Back, and first-page refetch after reload.
-  F11a still owns the real-catalog workflow proof.
+  F11a's deployed suite also exercises the real-catalog workflow.
 
 Mocked browser coverage includes delayed first pages and continuations, Unicode/IME scheduling,
 keyboard guards/preference, invalid filters, failures/stale cursors, URL history, first-page
@@ -379,8 +438,8 @@ is still unresolved.
   `safeSearchReturn` remains search-only, so F3 restoration is not broadened. Direct directory
   entry links from F3–F5 keep their established snapshot/literal-path-only contract.
 - Feature-isolated browser evidence remains mocked. **F11a core** now provides the separate
-  `test:real` imported-catalog workflow described above, before F7/comparisons. Full F11a still
-  owns later write/comparison and stop/import/restart scenarios. `test:e2e` continues to own
+  `test:real` imported-catalog workflow described above, before F7/comparisons. Full F11a now
+  covers later write/comparison and stop/import/restart scenarios. `test:e2e` continues to own
   the mocked built-static host only; never reuse the workspace catalog or benchmark directories.
 
 ### Disk creation and editing (F7 handoff)
@@ -411,7 +470,7 @@ is still unresolved.
 - Mocked browser coverage owns precision/range, changed-only/null/omission, conflict retention,
   uncertain POST/PATCH and manual pagination, post-write read failure, retained search invalidation
   and stale-context draft rebasing. The bounded real write test above complements, but does not
-  close, full F11a restart/outage/reconciliation or F11b accessibility audits.
+  replace the full F11a restart/outage/reconciliation tests or F11b accessibility audits.
 
 ### Distinct-content explorer (F8 handoff)
 
@@ -432,7 +491,7 @@ is still unresolved.
   zeros nonnegative, using exact BigInt arithmetic. Null size differs from known zero.
 - Unit/mocked browser coverage includes invalid combinations, huge decimals, literal membership,
   canceled late requests, bounded later pages, page errors and stale restart. The bounded real
-  test uses only the existing disposable imported-catalog harness. Full F11a still owns stop/
+  test uses only the existing disposable imported-catalog harness. Full F11a covers stop/
   import/restart revision and reconnect acceptance; F11b owns manual accessibility/responsiveness.
   The backend gate remains unresolved.
 
@@ -497,12 +556,10 @@ tests/browser/replicas.spec.ts tests/browser/directories.spec.ts`. Real imported
   `npm run test:real -- tests/real/coverage.spec.ts`; run the full `npm run test:real` suite for
   core operation coverage and fixture regression checks. Run mocked and real Playwright
   commands sequentially: both configurations use the same default `test-results/` directory.
-- **Full F11a handoff:** keep the disposable offline-import ownership/cleanup contract. Add
-  real stop/import/restart cursor invalidation and same-revision reconnect clearing across
-  search, contents, directory entries, replicas and coverage; verify no obsolete destinations
-  or cursors survive and no comparison reruns automatically. Add real uncertain-write/outage
+- **Full F11a integration:** the lifecycle suite and deployed contract matrix described above
+  cover real stop/import/restart, same-revision reconnect clearing, uncertain-write/outage
   reconciliation and F10 production same-origin built-host workflows. Existing write, contents,
-  replica and coverage suites complement the core read matrix; they do not close full F11a.
+  replica and coverage suites run in both host modes as part of full F11a.
   F11b accessibility/manual responsiveness and F12 release checks remain pending. Backend
   acceptance stays unresolved; no Go benchmark or full race run belongs to this package.
 
@@ -556,12 +613,13 @@ Node is only the build/test runner. `npm run test:hosting-harness` builds then c
 and failure cleanup after import/backend/asset-host acquisition. Run browser suites sequentially
 because they share `test-results/`.
 
-For full F11a, `startCatalog(onStage?, assetsDirectory?)` in `tests/real/harness.ts` selects
+For full F11a, `startCatalog(onStage?, absoluteBuildDirectory?)` in `tests/real/harness.ts` selects
 built Go hosting when given an absolute build-directory path. Returned `origin` then equals
 `backendOrigin`, no proxy is created, and the final fault-injection stage is `assets` rather
 than `proxy`. The unchanged default still tests the development proxy. Cleanup/ownership and
-stop-before-import rules apply to both modes. The bounded smoke is not the full F11a matrix
-or F11b/F12 acceptance; final Go race checks remain F12 work.
+stop-before-import rules apply to both modes. `test:deployed` supplies the full F11a matrix;
+the bounded smoke alone is not full integration or F11b/F12 acceptance. Final Go race checks
+remain F12 work.
 
 - `npm run build` writes `build/index.html` and `build/_app/` assets. Serve at origin root;
   a subpath deployment is not configured. No runtime Node service is required.
