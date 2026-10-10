@@ -17,6 +17,8 @@
     "test:unit": "vitest run",
     "test:proxy": "node --test tests/proxy.test.ts",
     "test:e2e": "npm run build && playwright test",
+    "test:real": "playwright test --config playwright.real.config.ts",
+    "test:real-harness": "node --test tests/real/harness.test.ts",
     "build": "vite build",
     "api:generate": "node scripts/generate-api.mjs",
     "api:check": "node scripts/generate-api.mjs --check",

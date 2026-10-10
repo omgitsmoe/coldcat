@@ -1,7 +1,9 @@
 # Coldcat frontend plan
 
-Status: F0–F6 complete. F7–F12 pending; backend gate unresolved.
-Next checkpoint: F11a core real-backend integration before F7 or comparisons.
+Status: F0–F6 and F11a core integration implemented. F7–F12/full F11a pending;
+backend gate unresolved. This is not release acceptance closure.
+The first-usable-slice real-backend harness precedes F7/comparisons; see the
+[core integration interface and coverage](../frontend/README.md#real-backend-core-integration-f11a-core).
 
 ## Implementation approvals
 
@@ -565,6 +567,8 @@ if available and do not run large backend benchmarks alongside browser acceptanc
 **First usable slice checkpoint:** F3–F6 work against real imported fixtures. Search remains
 the landing page; keyboard search to known locations works; basic directory navigation works.
 Run the core real-backend browser tests before adding comparison/management scope.
+The separate `npm run test:real` and `npm run test:real-harness` commands cover this bounded core;
+full F11a revision/reconnect and later feature integration remain pending.
 
 ### F7 — disk creation/editing
 

@@ -21,6 +21,8 @@ npm run test:proxy
 npm run build
 npx playwright install chromium
 npm run test:e2e
+npm run test:real-harness
+npm run test:real
 ```
 
 Linux also needs Playwright's Chromium system libraries. For an image without them, provision
@@ -36,6 +38,57 @@ HTTP fixture and Vite process in-process, verifies real forwarding and connectio
 reused server. Its health responses are intercepted or unavailable; it does not start Go,
 open a catalog, or prove real-backend workflows (F11a). Browser fixtures never touch the
 workspace catalog.
+
+### Real-backend core integration (F11a core)
+
+`npm run test:real` uses `playwright.real.config.ts`, not the mocked static-host config.
+It requires the Go toolchain, installed frontend dependencies, and local Playwright Chromium.
+`/tmp/opencode` must exist and be writable; the harness creates only owned
+`coldcat-browser-*` temporary directories there. It builds a temporary CLI binary, creates
+three disks and imports five small CSHD inventories **offline**, then starts Go on an OS-assigned
+loopback port and Vite's real same-origin proxy on another OS-assigned port. No reused server,
+fixed port, browser request interception, workspace catalog or benchmark fixture is involved.
+This tests the development/proxy integration, not F10 production asset hosting.
+
+`tests/real/fixture.ts` is the deterministic source: same names/different hashes, same hash under
+different names, three same-disk locations and two other disks, repeated historical observations,
+historical-only content, unknown size/mtime, known zero, short Unicode names, long paths and literal
+markup/query/backslash/composed/decomposed Unicode segments. The newest capture is imported before
+older captures, deliberately distinguishing capture order from import order. IDs and import dates
+come from CLI output; tests never assume sequential IDs or use unrelated OpenAPI example IDs.
+
+`tests/real/harness.ts` exports `startCatalog(onStage?)` →
+`{ root, origin, backendOrigin, pid, diskID, snapshots, close }`. `close()` is idempotent and
+awaits command cancellation, proxy close and backend termination before removing owned files.
+Startup failure and SIGINT/SIGTERM use the same cleanup; SIGKILL cannot run teardown.
+Readiness requires the Go listen announcement, ready health response, and successful proxied
+health/catalog reads. `onStage('imported' | 'backend' | 'proxy', acquired)` is synchronous fault
+injection for cleanup tests, not a catalog mutation interface. `npm run test:real-harness` checks
+success and failure after each stage, including process exit, released ports and directory removal.
+Never run import/CLI operations while the returned backend is alive. Later revision/reconnect
+tests must stop the server before any additional import and explicitly reacquire ownership.
+
+The core browser suite asserts a successful **browser-originated** request for every currently
+exposed read (run the full suite, not a filtered single test, for its coverage assertion):
+
+| Real operation                                               | Core browser evidence                                                                                                                                            |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /healthz`, `/api/v1/catalog`                            | Shell readiness through the proxy                                                                                                                                |
+| `GET /api/v1/search`                                         | Keyboard filename search, case-insensitive matching, exact short Unicode, directory membership, current/history and pagination                                   |
+| `GET /api/v1/contents/lookup`                                | Uppercase SHA-256 digest lookup through the actual form                                                                                                          |
+| `GET /api/v1/contents/{id}`                                  | Linked identity, distinct current disks/locations versus repeated history, zero/unknown metadata                                                                 |
+| `GET /api/v1/contents/{id}/observations`                     | Current/history locations and real cursor pagination; exactly two detail requests, no per-location observation fetches                                           |
+| `GET /api/v1/observations/{id}`                              | Selected path, source/capture/import dates, replica counts and keyboard context links                                                                            |
+| `GET /api/v1/disks`, `/api/v1/disks/{id}`                    | Pagination, literal metadata, exact large capacity and incomplete cataloged total                                                                                |
+| `GET /api/v1/disks/{id}/snapshots`, `/api/v1/snapshots/{id}` | Capture-ordered history, provenance and root entry                                                                                                               |
+| `GET /api/v1/snapshots/{id}/directory`, `/directory/entries` | Root/child/literal deep reloads, recursive sizes, membership boundaries, paging, replica filters retaining directory rows and historical source/current replicas |
+
+Core navigation uses Tab/Enter and search arrows, with ordinary Back restoration and first-page
+reconstruction after document reload. Request guards reject writes, unsolicited comparisons or
+directories-only preloads, API errors and browser JS errors. Full F11a still needs F7–F9 write/list/
+comparison workflows, stop/import/restart revision and reconnect cases, and F10 built-host runs.
+F11b manual accessibility/responsive audits and F12 final integration checks remain separate.
+These correctness tests neither establish performance budgets nor close the unresolved backend gate.
 
 ## Wire client and domain helpers
 
@@ -306,13 +359,10 @@ is still unresolved.
   selected observation. F4/F5 detail pages validate it and label it “Return to directory”.
   `safeSearchReturn` remains search-only, so F3 restoration is not broadened. Direct directory
   entry links from F3–F5 keep their established snapshot/literal-path-only contract.
-- Browser evidence is mocked, not proof of real catalog integration. Next is **F11a core**
-  before F7/comparisons: own a disposable catalog, offline imports, backend/proxy child
-  processes and ports, readiness and cleanup; exercise search → content → observation →
-  directory, literal/root/history paths, real membership boundaries and directory rows under
-  replica filters. Stop the server before import/revision scenarios. Do not touch the workspace
-  catalog or benchmark directories. A separate real-backend command/config is still needed;
-  `test:e2e` continues to own the mocked built-static host only.
+- Feature-isolated browser evidence remains mocked. **F11a core** now provides the separate
+  `test:real` imported-catalog workflow described above, before F7/comparisons. Full F11a still
+  owns later write/comparison and stop/import/restart scenarios. `test:e2e` continues to own
+  the mocked built-static host only; never reuse the workspace catalog or benchmark directories.
 
 Start the backend separately with a disposable catalog, following
 [backend integration](../doc/backend-integration.md). Stop it before CLI catalog operations;
