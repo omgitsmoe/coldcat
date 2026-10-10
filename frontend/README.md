@@ -1,8 +1,8 @@
 # Coldcat frontend
 
 The primary search workspace, content/location and observation details, hash lookup, read-only
-disk/inventory pages, shell, request/page lifecycle, and wire/domain helpers are implemented.
-Directory browsing, disk writes and Go asset hosting remain separate packages. Backend acceptance
+disk/inventory pages, directory browsing/sizing, shell, request/page lifecycle, and wire/domain helpers are implemented.
+Disk writes, comparisons and Go asset hosting remain separate packages. Backend acceptance
 remains open.
 Architecture: [ADR 0002](../doc/adr/0002-static-browser-frontend.md).
 
@@ -165,8 +165,9 @@ their feature routes exist; the shell does not register placeholder pages for fu
 - F4: `parseContentRoute` → `{ context, locations }`; `contentURL(id, locations, context)`
   preserves independent history and search-return state. `parseDetailContext` handles
   observation routes. `DetailContext` has `returnTo` and selected `observation`; invalid returns
-  fail explicitly. `safeSearchReturn` accepts only local search URLs, with no fragments,
-  nested returns or cursors. It returns undefined for invalid destinations.
+  fail explicitly. `safeSearchReturn` accepts only local search URLs. `safeDetailReturn` also
+  accepts validated snapshot-directory URLs, preserving literal paths and filters. Neither
+  permits fragments, nested returns or cursors; invalid destinations return undefined.
 - F5: `parsePageLimit` for the disk list, `parseInventoryRoute` for disk detail/history
   limit plus validated detail context, and `parseDetailContext` for snapshot detail;
   IDs come from route parameters.
@@ -274,8 +275,7 @@ is implied. Optional manual accessibility/responsive audits remain F11b.
   validated search return/selected-observation context. F4 observation/location links carry it
   into F5; disk/inventory navigation preserves it. Existing one-argument calls remain valid.
 - **F6:** root actions use `directoryBrowseURL(snapshotID, { path: '' })`, yielding literal
-  `?path=` with no detail context. No directory implementation is included; these entry links
-  become browsable when F6 lands. Reuse `InventorySummary`/`DateValue` for context if useful.
+  `?path=` with no detail context. These entry links are browsable through F6.
 - **F7:** compose write controls with `DiskMetadata`/`DiskDetail`; call
   `connection.metadataChanged()` after writes/reconciliation and manually refetch metadata.
   F5 installs no create/edit forms, write requests, or metadata-version assumptions.
@@ -284,6 +284,35 @@ Browser coverage is mocked (pagination including later retained-page transitions
 empty inventories, unknown/zero/large totals, literal markup, date meanings, return validation,
 stale cursors and disconnect/reconnect). Real-catalog integration remains F11a; the backend gate
 is still unresolved.
+
+### Directory browsing and sizing (F6 handoff)
+
+- `/snapshots/[id]/directory` composes `features/directories/Browse.svelte` with independent
+  `directoryDetail` and `directoryPages` owners. Initial navigation makes two feature requests;
+  no disk/detail per-row requests, directories-only tree, or comparisons are preloaded.
+- Breadcrumbs split only literal `/`; root includes the embedded snapshot's disk ID. Case,
+  Unicode composition and backslashes are preserved. Child-directory links retain entry filters.
+  Immediate directories remain navigation entries under replica bounds; recursive mode asks
+  the server for files only. Membership and ordering remain backend-owned.
+- Summary sizes cover all descendants independent of entry filters: per-path recursive bytes
+  versus once-per-identity unique bytes, known subtotals, unknown counts and completeness.
+  Redundancy is a textual per-file-occurrence histogram against current other disks.
+  Source current/history badges come from the DTO, not dates; historical sources still use
+  current destination replicas. File counts use supplied observation-specific other counts.
+- Filters use explicit Apply, exact or range bounds, disks/locations and page limit. Editing
+  immediately retires entries; it does not change the unfiltered summary. Paging retains F2's
+  bound, manual retry and stale reset. Owners dispose on route changes and destruction.
+- Content/observation anchors carry `return_to` with the directory URL (no cursor), plus the
+  selected observation. F4/F5 detail pages validate it and label it “Return to directory”.
+  `safeSearchReturn` remains search-only, so F3 restoration is not broadened. Direct directory
+  entry links from F3–F5 keep their established snapshot/literal-path-only contract.
+- Browser evidence is mocked, not proof of real catalog integration. Next is **F11a core**
+  before F7/comparisons: own a disposable catalog, offline imports, backend/proxy child
+  processes and ports, readiness and cleanup; exercise search → content → observation →
+  directory, literal/root/history paths, real membership boundaries and directory rows under
+  replica filters. Stop the server before import/revision scenarios. Do not touch the workspace
+  catalog or benchmark directories. A separate real-backend command/config is still needed;
+  `test:e2e` continues to own the mocked built-static host only.
 
 Start the backend separately with a disposable catalog, following
 [backend integration](../doc/backend-integration.md). Stop it before CLI catalog operations;
@@ -318,10 +347,9 @@ manual retry. It never supplies cached/demo responses as proof of backend readin
   `/snapshots/[id]/directory`. Return `index.html` for their direct document requests;
   query strings do not change asset dispatch. Arbitrary directory paths stay in `?path=`.
 - `/`, `/contents`, `/contents/[id]`, `/observations/[id]`, `/disks`, `/disks/[id]`, and
-  `/snapshots/[id]` are implemented through F5.
-  Other built nested navigation loads the shell and displays
-  the client “Page not found” boundary until that feature route exists. Unknown routes
-  are not approved production fallback destinations.
+  `/snapshots/[id]`, and `/snapshots/[id]/directory` are implemented through F6.
+  Unknown routes display the client “Page not found” boundary and are not approved
+  production fallback destinations.
 - `tests/serve-built.ts` is a test-only reference host with broader document fallback to
   exercise future nested URLs. Do not ship it or copy it as the production security handler.
 

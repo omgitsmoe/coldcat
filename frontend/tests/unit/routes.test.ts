@@ -11,9 +11,35 @@ import {
   directoryBrowseURL,
   comparisonURL,
   safeSearchReturn,
+  safeDetailReturn,
 } from '../../src/lib/state/routes';
 
 describe('literal route state', () => {
+  it('preserves a validated literal directory return without broadening search-session returns', () => {
+    const returnTo = directoryBrowseURL('1', {
+      path: 'foo/É e\u0301\\x ?#%',
+      recursive: false,
+      other_replicas: '0',
+    });
+    const context = { returnTo, observation: '3' };
+    expect(safeSearchReturn(returnTo)).toBeUndefined();
+    expect(safeDetailReturn(returnTo)).toBe(returnTo);
+    expect(
+      parseContentRoute(
+        new URL(contentURL('1', { scope: 'current' }, context), 'http://local').searchParams,
+      ).context,
+    ).toEqual(context);
+    for (const value of [
+      '/snapshots/0/directory?path=',
+      '/snapshots/1/directory?cursor=x',
+      '/snapshots/1/directory?return_to=%2F',
+      '/snapshots/1/directory?path=foo&path=foobar',
+      '//evil/snapshots/1/directory',
+      '/snapshots/1/directory#x',
+    ]) {
+      expect(safeDetailReturn(value)).toBeUndefined();
+    }
+  });
   it('keeps inventory paging and validated detail context independent', () => {
     const context = { observation: '9007199254740993', returnTo: '/?q=+literal%26' };
     for (const build of [routes.disk, routes.snapshot]) {

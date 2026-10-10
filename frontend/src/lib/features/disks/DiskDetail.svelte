@@ -49,7 +49,11 @@
   <pre>{search}</pre>
 {:else if route}
   {#if route.context.returnTo}<p>
-      <a href="{resolve('/')}{route.context.returnTo.slice(1)}">Return to search</a>
+      <a href="{resolve('/')}{route.context.returnTo.slice(1)}"
+        >{route.context.returnTo.startsWith('/snapshots/')
+          ? 'Return to directory'
+          : 'Return to search'}</a
+      >
     </p>{/if}
   <section aria-labelledby="disk-metadata">
     <h2 id="disk-metadata">Disk metadata</h2>

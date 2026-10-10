@@ -156,7 +156,7 @@ export function parseDetailContext(params: URLSearchParams): DetailContext {
     id(context.observation);
   }
   if (params.has('return_to')) {
-    context.returnTo = safeSearchReturn(params.get('return_to')!);
+    context.returnTo = safeDetailReturn(params.get('return_to')!);
     if (context.returnTo === undefined) throw new Error('Invalid search return destination');
   }
   return context;
@@ -165,7 +165,7 @@ export function parseDetailContext(params: URLSearchParams): DetailContext {
 function detailURL(path: string, context: DetailContext = {}) {
   const params = new URLSearchParams();
   if (context.returnTo !== undefined) {
-    const value = safeSearchReturn(context.returnTo);
+    const value = safeDetailReturn(context.returnTo);
     if (value === undefined) throw new Error('Invalid search return destination');
     params.set('return_to', value);
   }
@@ -195,6 +195,28 @@ export function directoryBrowseURL(snapshot: string, query: DirectoryRoute): str
     `/snapshots/${id(snapshot)}/directory` +
     encodeQuery(contract['GET /api/v1/snapshots/{id}/directory/entries'], query)
   );
+}
+
+export function safeDetailReturn(value: string): string | undefined {
+  const search = safeSearchReturn(value);
+  if (search !== undefined) return search;
+  if (
+    !value.startsWith('/') ||
+    value.startsWith('//') ||
+    value.includes('\\') ||
+    value.includes('#')
+  )
+    return undefined;
+  try {
+    const url = new URL(value, 'http://coldcat.local');
+    const match = /^\/snapshots\/([1-9][0-9]*)\/directory$/.exec(url.pathname);
+    if (url.origin !== 'http://coldcat.local' || !match) return undefined;
+    id(match[1]!);
+    parseDirectory(url.searchParams);
+    return url.pathname + url.search;
+  } catch {
+    return undefined;
+  }
 }
 
 export function comparisonURL(

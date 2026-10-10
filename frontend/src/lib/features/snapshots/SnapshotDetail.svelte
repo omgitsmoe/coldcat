@@ -46,7 +46,11 @@
   <pre>{search}</pre>
 {:else if context}
   {#if context.returnTo}<p>
-      <a href="{resolve('/')}{context.returnTo.slice(1)}">Return to search</a>
+      <a href="{resolve('/')}{context.returnTo.slice(1)}"
+        >{context.returnTo.startsWith('/snapshots/')
+          ? 'Return to directory'
+          : 'Return to search'}</a
+      >
     </p>{/if}
   <RequestFeedback
     status={view.status}

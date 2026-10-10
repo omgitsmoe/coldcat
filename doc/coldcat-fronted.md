@@ -1,6 +1,7 @@
 # Coldcat frontend plan
 
-Status: F0–F5 complete. F6–F12 pending; backend gate unresolved.
+Status: F0–F6 complete. F7–F12 pending; backend gate unresolved.
+Next checkpoint: F11a core real-backend integration before F7 or comparisons.
 
 ## Implementation approvals
 
