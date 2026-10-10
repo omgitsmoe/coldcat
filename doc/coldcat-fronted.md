@@ -1,8 +1,8 @@
 # Coldcat frontend plan
 
-Status: F0–F1 complete, including browser smoke. F2–F12 pending; backend gate unresolved.
+Status: F0–F2 complete. F3–F12 pending; backend gate unresolved.
 
-## Implementation approvals and package progress
+## Implementation approvals
 
 On 2026-10-10 the user authorized frontend development in parallel with the unresolved
 backend gate, approved the full F0–F12 initial scope, npm, SvelteKit static SPA, same-origin
@@ -10,100 +10,9 @@ Go hosting with an explicit asset directory, and desktop-only disableable type-t
 enabled by default. Creating the architecture ADR is explicitly approved. These approvals
 do not close or waive the backend gate.
 
-### F0 focused execution plan
-
-1. Record the architecture decision and static nested-route hosting contract.
-2. Write unit, component, and browser smoke behavior tests before implementation.
-3. Bootstrap pinned dependencies/engines/lockfile, strict checks/lint, and minimal shell.
-4. Verify clean install, checks, build, loopback API proxy, visible backend failure, and
-   built nested-route smoke; record actual evidence and any blockers.
-5. Commit only F0 files and hand off to F1; no feature UI or Go asset hosting in this package.
-
-At the F0 boundary, F1–F12 were pending. API type generation/drift scripts belong to F1.
-
-### F0 evidence and handoff (2026-10-10)
-
-- Tests written before implementation: proxy boundary validation, shell readiness/failure/
-  manual retry, built entry/nested reload and visible backend failure smoke.
-- Pinned Node 24.21.0/npm 11.19.0, exact dependencies and npm lockfile. Current stable
-  SvelteKit 3.0.1 uses inline `sveltekit(...)` Vite configuration and `$app/tsconfig`;
-  TypeScript 6.0.3 satisfies its peer range (latest TypeScript 7 does not).
-- Passed: `npm ci` (audit: zero vulnerabilities), `npm run check` (zero errors/warnings),
-  `npm run lint`, `npm run test:unit` (7 tests), `npm run test:proxy` (1 integration test),
-  and `npm run build`. Proxy refusal returns a real 502, not the SPA shell or mock data.
-- Browser blocker resolved in the current image: after the user reported preinstalled
-  system dependencies, `npm ci` and project-local `npx playwright install chromium`
-  succeeded, followed by `npm run test:e2e` (build and **2 passing Chromium smoke tests**).
-  Entry shell, nested reload/client not-found boundary, and visible backend failure are
-  exercised. No global browser, executable override, or production fallback was needed.
-  Strict checks (zero errors/warnings), lint, 7 unit/component tests, and the proxy
-  integration test passed again. F0 acceptance is complete; F1 was not started.
-- Historical attempts failed before browser assertions on missing `libnspr4.so`; the
-  authorized `npx playwright install-deps chromium` also failed at `su` authentication.
-  Those results are superseded by the passing project-local run in the current image;
-  no privileged OS dependency reinstall or bootstrap code change was needed this time.
-- [ADR 0002](adr/0002-static-browser-frontend.md) records the authorized architecture.
-  [Frontend README](../frontend/README.md) defines scripts, proxy ownership and built-route
-  contract. Static test host is not Go hosting or a production dispatch implementation.
-- Changed scope: `frontend/`, this progress document, ADR 0002. Root untracked `AGENTS.md`
-  received only brief verified-command guidance from the permitted documentation subagent;
-  leave it untracked to avoid committing unrelated preexisting user content. Workspace
-  catalogs and benchmark directory remain untouched. No Go checks/benchmarks were run.
-- F1 handoff: implement generation/drift scripts, wire client and numeric/domain helpers.
-  Shared shell currently checks only health once with manual retry; replace its temporary
-  connection lifecycle in F2. No feature routes, search preference, tables or Go assets yet.
-  Manual screen-reader audits and finalized browser/performance targets are deferred to
-   F11b/F12, not claimed as passed here. F0 has no remaining acceptance blocker.
-
-### F1 focused execution plan
-
-1. Write behavioral tests for every wrapper, response invariants, error categories,
-   cancellation, literal query/repeated glob encoding, changed-only PATCH and domain helpers.
-2. Generate wire types and runtime descriptors from local OpenAPI with reproducible drift checks.
-3. Implement explicit thin same-origin wrappers, shared decoding/errors and decimal/date/path
-   helpers; keep serializable wire values and typed fixtures. No UI or traversal state.
-4. Run frontend checks and smoke, record actual evidence/interfaces, and commit only F1 files.
-
-### F1 evidence and handoff (2026-10-10)
-
-- Behavioral tests preceded implementation (initial runs failed on missing modules).
-  Every one of the 19 documented operations has an explicit wrapper and success-example
-  contract coverage. Tests cover required/shared response invariants, huge decimal text,
-  null/zero, literal/Unicode URL encoding, empty roots, repeated/escaped globs, opaque cursors,
-  structured errors, HTML/proxy failure, transport/body-stream failure, cancellation and
-  changed-only disk PATCH. Numeric newline/prototype-key regression cases are also covered.
-- `npm run api:generate` reproducibly derives committed wire types and runtime schema
-  descriptors from local OpenAPI; `npm run api:check` checks drift without writes.
-  `npm run test:api-generation` proves deterministic output, source/output drift, read-only
-  drift failures, and rejection of unsupported assertions/reference siblings (2 tests).
-  The contract-subset generator is not a general OpenAPI implementation. It rejects unsupported
-  constructs rather than silently weakening validation; no handwritten per-DTO schemas.
-- Tooling tradeoff: `openapi-typescript@7.13.0` requires TypeScript 5 and its install failed
-  against pinned TypeScript 6. No forced peer override, dependency/lockfile change or toolchain
-  downgrade was made. A separate ADR for this generator choice was proposed, not created.
-- Passed after clean `npm ci` (zero vulnerabilities): strict check (zero errors/warnings),
-  lint, **79 unit/component tests**, generated drift check, **2 generator tests**, real proxy
-  integration (**1 test**, expected ECONNREFUSED/502), static build and **2 Chromium smoke
-  tests** through `npm run test:e2e`. Unit/check/lint/drift passed again after final numeric
-  and response-extra-property hardening. Browser smoke covers the unchanged F0 shell only;
-  no claim of real Go backend workflow coverage (F11a) or browser performance acceptance.
-- Interfaces: `createClient(fetcher?)` / `Client`, generated `components` and `operations`,
-  `Query<operation>` / `Result<operation>`, `ApiError` kinds/status/code/uncertain-write flag,
-  `buildDiskPatch`, exact decimal/count/byte/percentage/capacity helpers, distinctly labeled
-  dates retaining exact UTC, literal breadcrumbs/containing-directory and directory URL helpers.
-  Reads and writes accept optional signals; query wrappers take the signal after the query.
-  Wire objects remain serializable strings/nulls, not BigInts. See the frontend README for
-  endpoint naming, error categorization and helper constraints.
-- F2 handoff: integrate the client into the shell; add latest-request generations, explicit
-  lifecycle, connection context and cursor/revision invalidation. Cancellation alone does not
-  ensure response ordering. No retries, caches, UI tables, feature routes, search state machine,
-  backend query-combination validation or Go hosting were added. Empty PATCH is rejected;
-  uncertain writes require reload/reconciliation before resubmission.
-- Changed scope: frontend API/format/generated files, typed fixtures/tests, generation scripts,
-  package scripts, frontend README and this progress document. The permitted documentation
-  subagent appended brief verified-command guidance to preexisting untracked root `AGENTS.md`;
-  it stays untracked. Catalogs/benchmark directories remain untouched. No Go checks,
-  benchmarks or full race run. F1 has no remaining acceptance blocker; backend gate stays open.
+[ADR 0002](adr/0002-static-browser-frontend.md) records the authorized architecture.
+[Frontend README](../frontend/README.md) defines setup, hosting and shared feature interfaces.
+Execution results, transient blockers and package handoffs belong in sessions/PRs, not this plan.
 
 ## 1. Goal, scope, and release boundaries
 
@@ -754,8 +663,7 @@ Only the integration owner edits shared registrations/configuration during paral
 
 ## 9. Implementation commands and gates
 
-The frontend package establishes the F0/F1 scripts below. Actual execution evidence and the
-resolved historical browser host blocker are recorded above:
+The frontend package establishes the scripts below. Report execution evidence in sessions/PRs:
 
 - `npm ci`: reproducible installation in `frontend/`.
 - `npm run dev`: dev server with fixed API/readiness proxy.

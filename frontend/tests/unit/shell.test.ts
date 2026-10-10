@@ -7,21 +7,38 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('bootstrap shell readiness', () => {
-  it('has landmarks and reports readiness without catalog requests', async () => {
-    const request = vi.fn().mockResolvedValue(new Response('{"status":"ready"}'));
+const json = (value: unknown) =>
+  new Response(JSON.stringify(value), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+const catalog = {
+  revision: '0',
+  scope: 'current',
+  disk_count: '0',
+  file_count: '0',
+  content_count: '0',
+};
+
+describe('shell connection', () => {
+  it('has landmarks and catalog-backed readiness', async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(json({ status: 'ready' }))
+      .mockResolvedValueOnce(json(catalog));
     vi.stubGlobal('fetch', request);
     render(Shell);
     expect(screen.getByRole('main')).toBeTruthy();
     expect(await screen.findByText('Backend ready')).toBeTruthy();
-    expect(request).toHaveBeenCalledExactlyOnceWith('/healthz');
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls.map(([url]) => url)).toEqual(['/healthz', '/api/v1/catalog']);
   });
 
   it('reports outage, then retries only when asked', async () => {
     const request = vi
       .fn()
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-      .mockResolvedValueOnce(new Response('{"status":"ready"}'));
+      .mockResolvedValueOnce(json({ status: 'ready' }))
+      .mockResolvedValueOnce(json(catalog));
     vi.stubGlobal('fetch', request);
     render(Shell);
     expect(
@@ -29,7 +46,7 @@ describe('bootstrap shell readiness', () => {
     ).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Retry connection' }));
     expect(await screen.findByText('Backend ready')).toBeTruthy();
-    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenCalledTimes(3);
   });
 
   it.each([

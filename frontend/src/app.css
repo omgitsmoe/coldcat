@@ -26,6 +26,21 @@ button {
   padding: 0.4rem 0.75rem;
   cursor: pointer;
 }
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+input,
+select,
+textarea {
+  font: inherit;
+}
 :focus-visible {
   outline: 3px solid #ffcb69;
   outline-offset: 3px;
