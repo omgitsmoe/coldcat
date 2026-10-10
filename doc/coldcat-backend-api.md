@@ -310,8 +310,11 @@ For each milestone, first write behavioral acceptance tests, then implement the 
   history late failure was interrupted by the outer deadline. A duplicate/shared-only rerun
   confirms the observation DELETE exceeds the 30-second cleanup context; checked reference
   plans are indexed. Diagnostic errors/tests were added, not a cleanup algorithm or timeout fix.
-  Profile that DELETE before choosing an optimization; deep failure is undiagnosed and history
-  failure remains unmeasured. Publication-failure timing is unmeasured.
+  The renewed guarded production-shaped cleanup profile completed in 34.454 seconds under
+  its diagnostic test context, with pre-recovery preservation/integrity checks passing.
+  Page-fetch/spill I/O is a substantial cost; no safe SQL fix or 30-second policy pass is
+  established. Deep failure is undiagnosed and history failure remains unmeasured.
+  Publication-failure timing is unmeasured.
 - [ ] Measure true **physical** journal peak using a suitable filesystem and validated
   allocation/free/reservation instrumentation. Blocked on that environment; logical VFS
   accounting or sampled apparent file lengths are not an approved replacement.
@@ -333,8 +336,12 @@ For each milestone, first write behavioral acceptance tests, then implement the 
    of the one-million baseline, and history late failure hit the outer deadline. The three
    success cases passed; do not infer failure correctness or timings from them.
    A bounded shared-only reproduction confirms observation cleanup deadline expiration;
-   indexed plans do not establish a safe optimization. Profile DELETE/trigger costs on an
-   owned fixture, then reproduce only affected failures. Keep the 30-second policy unless
+    indexed plans do not establish a safe optimization. The production-shaped million cleanup
+    profile passed integrity/preservation at 34.454 seconds, exceeding the production deadline;
+    its test-only context does not close this failure. Profile evidence identifies page-fetch
+    and dirty-page spill I/O as substantial extra cost, with filesystem/content-cardinality
+    differences confounded against the synthetic fixture. Isolate cache/index-locality costs,
+    then reproduce only affected failures after a justified fix. Keep the 30-second policy unless
    an ADR proposal and user approval justify changing it. Publication-failure timing and
    distribution-specific RSS/transaction/journal evidence are unmeasured; select required
    operational measurements for the approved scope rather than expanding workloads indefinitely.

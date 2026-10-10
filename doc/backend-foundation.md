@@ -1803,6 +1803,89 @@ Focused `TestCleanupProfile` tests passed normally (0.113 seconds) and in one se
 race check (2.032 seconds). `go vet ./...` and diff checks passed; the full race suite
 was not repeated.
 
+#### Renewed million-input cleanup profile
+
+After explicit renewed authorization on 2026-10-10, availability checks found Python
+3.12.3 and Go 1.27.1 on PATH. The earlier `Permission denied: shell` was a generic tool
+authorization rejection, not a missing-Python error; its exact rule remains unidentified.
+The newly authorized attempt executed once at `c118ff1`, without production changes:
+
+```sh
+go test ./internal/importer -run '^$' \
+  -bench '^BenchmarkDistributionCleanup/1000000$' -benchtime=1x \
+  -cpuprofile=/tmp/opencode/production-cleanup-before.cpu \
+  -outputdir=/tmp/opencode -timeout=30m -v
+```
+
+The Python guard ran that command in `/workspace`, with a uniquely named
+`TMPDIR=/workspace/.production-cleanup-profile-*`, a preflight and one-second free-space
+monitor at 2,147,483,648 bytes, and an isolated child process group. There was no shorter
+outer deadline. The guard did not interrupt the passing command. The benchmark completed
+in 200.029 package seconds, including untimed fixture setup and preservation checks;
+isolated cleanup took **34.453970230 seconds**. This is diagnostic completion under the
+test context, **not a pass under production's 30-second cleanup policy**. The original
+deadline failure remains unresolved.
+
+All assertions passed: one million failed observations and their unsealed search entries
+were removed, the completed million-observation baseline and 10,000 shared contents were
+preserved, staging was empty, and root/current-search, directory membership, foreign-key
+and full external-content FTS checks passed. The independent read-only table/invariant
+inspection passed before recovery-capable application open, so reopening did not hide
+leftover failed rows. The fixture exercises shared contents but generation-distinct paths;
+it is not a million-scale shared-path preservation measurement.
+
+The labelled cleanup profile sampled 16.84 CPU seconds. B-tree index positioning accounted
+for 7.91 cumulative seconds (47.0%), of which 5.56 were page-fetch/initialization descendants.
+Pager stress accounted for 4.13 seconds (24.5%), almost entirely dirty-page writeout (4.10);
+`pwrite` accounted for 4.81 seconds and `pread` for 1.13. Flat syscall samples were 5.67
+seconds (33.7%). FTS deletion accounted for 4.55 cumulative seconds (27.0%), including
+2.55 seconds of merge-level work. Cumulative costs overlap and must not be added.
+
+Compared with the recorded synthetic 15.184-second rollback run, wall time increased by
+19.27 seconds, sampled CPU by 4.93 seconds and flat syscall time by 3.63 seconds. FTS
+deletion increased by only 0.49 sampled seconds. This identifies page fetching, dirty-page
+spilling and I/O as substantial additional work, rather than a large new FTS-only cost or
+an observed missing index. It does not assign each spill to a specific SQL index or prove
+the entire wall-time difference has one cause. Current filesystem inspection reports
+`/workspace` on `fuseblk`, while `/tmp/opencode` is on a separate overlay mount; prior
+synthetic fixtures used ordinary Go temporary storage instead of workspace TMPDIR. The
+production fixture also has 10,000 contents rather than the synthetic fixture's 500,
+changing content-index locality. Filesystem, cardinality and commit/rollback differences
+are confounded, not a controlled paired comparison. Earlier profile files were unavailable
+in the current container; their recorded figures were used without repeating those runs.
+A fresh in-memory driver probe returned `cache_size=-2000`, `cache_spill=483` and
+`page_size=4096`; this establishes driver defaults, not measured runtime cache statistics
+from the now-removed benchmark catalog. The application DSN does not override cache size.
+
+No safe bounded SQL optimization follows from these samples. Both content lookup indexes
+serve existing query contracts; dropping them without evidence could regress queries, and
+changing deletion locality can trade content-index locality for path-index locality. The
+prior speculative search predeletion was not reinstated. The next targeted experiment
+should isolate page-cache/index locality on the same filesystem and fixture shape before
+choosing a SQL change. If adopting a larger bounded SQLite cache is proposed, document an
+ADR for approval: context is dirty-page spill cost under the fixed cleanup deadline;
+alternatives are SQL locality changes and leaving current cache behavior unchanged;
+consequences include additional native memory/RSS and different I/O behavior. Cache budgets
+are not approved, and no cache, deadline, constraint, atomicity or indexing policy changed.
+No ADR was automatically created. Deep-known failure remains undiagnosed and history late
+failure unmeasured; neither was rerun, and no successful million matrix case was repeated.
+
+After the benchmark passed, the wrapper failed preserving its binary with Python
+`Path.rename`: `OSError: [Errno 18] Invalid cross-device link`. This was an OS filesystem
+error between the two mounts, not a tool permission denial or benchmark failure. The log
+and CPU profile were intact; `mv` subsequently preserved the owned binary without rerunning
+the command. The exception preceded metadata persistence, so initial/minimum free-space
+values and wrapper duration are unknown and not reconstructed. The owned temporary root
+was removed normally; original artifacts and the workspace catalog were untouched. Local
+artifacts are `/tmp/opencode/production-cleanup-profile-buv1gf1r/{output.log,importer.test,
+wrapper-error.txt}`, `/tmp/opencode/production-cleanup-before.cpu`, and the guard source
+`/tmp/opencode/run-production-million-profile.py`. They are not repository deliverables
+and provide no true physical journal-peak claim.
+
+This follow-up changes documentation only. Focused normal cleanup tests passed in 0.255
+seconds and cleanup-profile regression tests in 0.148 seconds. `go vet ./...` and diff
+checks passed. No race suite was repeated, and no additional million benchmark was run.
+
 ## Verification and follow-on work
 
 ### Final implementation checks
