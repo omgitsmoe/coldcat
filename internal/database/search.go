@@ -70,7 +70,7 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
  THEN 1 ELSE 2 END AS rank FROM retrieved_paths p WHERE instr(` + column + `,?)>0)`
 		args = append(args, folded, folded, folded, folded)
 	}
-	query := currentSnapshots + `, ` + ranked + `,
+	query := searchCurrentSnapshots + `, ` + ranked + `,
  paths AS MATERIALIZED (SELECT p.* FROM ranked_paths p`
 	if limit > 0 {
 		// Each selected path has a qualifying observation after the anchor. Keeping
@@ -82,24 +82,36 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 			query += ` AND p.path>=?`
 			args = append(args, after.Path)
 		}
-		query += ` AND EXISTS (
- SELECT 1 FROM observation o JOIN snapshot s ON s.id=o.snapshot_id
- LEFT JOIN current_snapshot cs ON cs.id=s.id
+		query += ` AND EXISTS (SELECT 1 FROM `
+		if searchHasReplicaBounds(f) {
+			// Replica bounds require current scope. Prevent flattening so historical
+			// observations are discarded before counts; LIMIT -1 does not truncate the path.
+			query += `(SELECT o.id,o.content_id,o.snapshot_id,o.path,current_cs.disk_id
+ FROM observation o
+ JOIN search_current_snapshot current_cs ON current_cs.id=o.snapshot_id
+ WHERE o.path=p.path LIMIT -1) o WHERE (?=0 OR o.disk_id=?)
+ AND (?=0 OR o.snapshot_id=?)`
+		} else {
+			query += `observation o JOIN snapshot s ON s.id=o.snapshot_id
+ LEFT JOIN search_current_snapshot cs ON cs.id=s.id
  WHERE o.path=p.path AND s.state='complete' AND (?='history' OR cs.id IS NOT NULL)
- AND (?=0 OR s.disk_id=?) AND (?=0 OR s.id=?)
- AND (?='' OR substr(o.path,1,length(?)+1)=?||'/') AND (p.rank,o.path,o.id)>(?,?,?)`
-		args = append(args, f.Scope,
+ AND (?=0 OR s.disk_id=?) AND (?=0 OR s.id=?)`
+			args = append(args, f.Scope)
+		}
+		query += ` AND (?='' OR substr(o.path,1,length(?)+1)=?||'/')
+ AND (p.rank,o.path,o.id)>(?,?,?)`
+		args = append(args,
 			f.DiskID, f.DiskID, f.SnapshotID, f.SnapshotID,
 			f.Directory, f.Directory, f.Directory,
 			searchRank(after.Relevance), after.Path, after.ID)
-		metric := `(SELECT `
+		var metric string
 		if f.ReplicaMetric == base.ReplicaDisks {
-			metric += `COUNT(DISTINCT cc.disk_id)`
+			metric = `(SELECT COUNT(DISTINCT cc.disk_id) FROM observation co
+ JOIN search_current_snapshot cc ON cc.id=co.snapshot_id WHERE co.content_id=o.content_id)-1`
 		} else {
-			metric += `COUNT(*)`
+			metric = `(SELECT COUNT(*) FROM observation co JOIN search_current_snapshot cc
+ ON cc.id=co.snapshot_id WHERE co.content_id=o.content_id)-1`
 		}
-		metric += ` FROM observation co JOIN current_snapshot cc ON cc.id=co.snapshot_id
- WHERE co.content_id=o.content_id)-1`
 		for _, bound := range []struct {
 			value *int64
 			op    string
@@ -123,7 +135,7 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 	query += `), matches AS (
  SELECT o.id,o.content_id,o.snapshot_id,o.path,p.name,cs.id IS NOT NULL AS is_current,p.rank
  FROM paths p CROSS JOIN observation o ON o.path=p.path
- JOIN snapshot s ON s.id=o.snapshot_id LEFT JOIN current_snapshot cs ON cs.id=s.id
+ JOIN snapshot s ON s.id=o.snapshot_id LEFT JOIN search_current_snapshot cs ON cs.id=s.id
  WHERE s.state='complete' AND (?='history' OR cs.id IS NOT NULL)
  AND (?=0 OR s.disk_id=?) AND (?=0 OR s.id=?)
  AND (?='' OR substr(o.path,1,length(?)+1)=?||'/')
@@ -131,7 +143,7 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 	args = append(args, f.Scope,
 		f.DiskID, f.DiskID, f.SnapshotID, f.SnapshotID,
 		f.Directory, f.Directory, f.Directory)
-	if f.OtherReplicas == nil && f.MinOtherReplicas == nil && f.MaxOtherReplicas == nil {
+	if !searchHasReplicaBounds(f) {
 		return query + `, eligible AS (SELECT * FROM matches) `, args
 	}
 	query += `, candidate_contents AS MATERIALIZED (SELECT DISTINCT content_id FROM matches),
@@ -149,11 +161,43 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 	return query, args
 }
 
+// Replica subqueries must reuse this set instead of reselecting current snapshots
+// for each candidate observation, particularly when disks have extensive history.
+const searchCurrentSnapshots = currentSnapshots + `,
+ search_current_snapshot AS MATERIALIZED (SELECT * FROM current_snapshot)`
+
 const searchReplicaCounts = `
- (SELECT COUNT(*) FROM observation co JOIN current_snapshot cs ON cs.id=co.snapshot_id
+ (SELECT COUNT(*) FROM observation co JOIN search_current_snapshot cs ON cs.id=co.snapshot_id
  WHERE co.content_id=c.content_id) AS locations,
  (SELECT COUNT(DISTINCT cs.disk_id) FROM observation co
- JOIN current_snapshot cs ON cs.id=co.snapshot_id WHERE co.content_id=c.content_id) AS disks`
+ JOIN search_current_snapshot cs ON cs.id=co.snapshot_id WHERE co.content_id=c.content_id) AS disks`
+
+func searchHasReplicaBounds(f base.SearchFilters) bool {
+	return f.OtherReplicas != nil || f.MinOtherReplicas != nil || f.MaxOtherReplicas != nil
+}
+
+func (db *DB) searchDiskReplicaBoundsImpossible(
+	ctx context.Context, f base.SearchFilters,
+) (bool, error) {
+	if f.ReplicaMetric != base.ReplicaDisks {
+		return false, nil
+	}
+
+	lower := f.OtherReplicas
+	if lower == nil {
+		lower = f.MinOtherReplicas
+	}
+	if lower == nil || *lower == 0 {
+		return false, nil
+	}
+
+	// One current snapshot per disk bounds a content's disk replicas catalog-wide,
+	// regardless of search membership. Disk count does not bound location replicas.
+	var impossible bool
+	err := db.db.QueryRowContext(ctx, currentSnapshots+
+		`SELECT COUNT(*)<=? FROM current_snapshot`, *lower).Scan(&impossible)
+	return impossible, err
+}
 
 func searchRank(value string) int {
 	switch value {
@@ -230,6 +274,17 @@ func (db *DB) Search(
 		if f.DiskID != 0 && f.DiskID != disk {
 			return result, fmt.Errorf("%w: snapshot does not belong to disk", ErrValidation)
 		}
+	}
+
+	impossible, err := db.searchDiskReplicaBoundsImpossible(ctx, f)
+	if err != nil {
+		return result, err
+	}
+	if impossible {
+		if after.ID > 0 {
+			return result, fmt.Errorf("%w: invalid search cursor anchor", ErrValidation)
+		}
+		return result, nil
 	}
 
 	rank := searchRank(after.Relevance)
