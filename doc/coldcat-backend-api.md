@@ -147,7 +147,13 @@ Use the existing application layer as the shared backend:
 - [x] Configure and test per-connection SQLite foreign keys. Acquire Windows/Unix exclusive catalog ownership before opening/migration/recovery and hold it for the session; reject competing sessions and simultaneous in-session imports/catalog queries.
 - [x] Exercise server/import overlap through the server's shared initialization path, including competing server/import child-process nonzero exits. SQLite write locking alone does not enforce this contract because reads may still be allowed.
 - [x] Keep bounded batch commits initially.
-- [ ] **Partial:** sampled journal growth and transaction API boundary durations measured for full-index successful imports and late-failure cleanup at 50,000/1,000,000 files; true peak journal storage and broader import distributions remain open. These durations include begin through completed commit/rollback, not SQLite lock-hold time. Do not change to a single import-wide transaction on these samples alone; WAL is not a requirement for concurrent import/read access in this scope.
+- [ ] **Partial:** sampled journal file sizes and transaction API boundary durations measured
+  for full-index successful imports and late-failure cleanup at 50,000/1,000,000 files;
+  broader import distributions remain open. File sizes are sufficient journal evidence
+  under the approved scope; exact physical peak accounting was scrapped on 2026-10-10.
+  These durations include begin through completed commit/rollback, not SQLite lock-hold
+  time. Do not change to a single import-wide transaction on these samples alone; WAL is
+  not a requirement for concurrent import/read access in this scope.
 
 ## 4. CLI surface
 
@@ -277,7 +283,7 @@ For each milestone, first write behavioral acceptance tests, then implement the 
   Cold/history acceptance scope still needs agreement; HTTP p95 is unmeasured and the
   required latency metric must be selected. Million-input operational import successes are
   measured; all three late failures now pass after the approved five-minute cleanup policy.
-  True physical journal peak remains open. Removed fuzzy measurements are
+  Journal file sizes are sufficient; physical peak instrumentation was scrapped. Removed fuzzy measurements are
   historical only.
 - [x] Check query plans for latest-snapshot selection and observation content/snapshot/path lookups (`TestQueryIndexes`).
 - [x] Check exact hash lookup and content observation-page indexes; add focused 50,000-observation warm-query benchmarks for hash lookup and first/deep pages.
@@ -327,9 +333,10 @@ For each milestone, first write behavioral acceptance tests, then implement the 
   search/directory/content/FK/FTS assertions, with cleanup tails 31.89/60.91/22.42 seconds.
   No successful case was repeated. Publication-failure timing remains unmeasured; budgets
   and the final gate are not approved. See the foundation's approved policy section.
-- [ ] Measure true **physical** journal peak using a suitable filesystem and validated
-  allocation/free/reservation instrumentation. Blocked on that environment; logical VFS
-  accounting or sampled apparent file lengths are not an approved replacement.
+- **Scrapped (user-approved, 2026-10-10):** exact physical journal-peak measurement and
+  allocation/free/reservation instrumentation. Journal file-size measurements are sufficient,
+  including the existing sampled maxima. Preserve the investigation and capture findings in
+  [physical-journal-measurement.md](physical-journal-measurement.md) as historical reference.
 - [x] Document schema initialization, pre-0.1 reset policy, import publication/cleanup/recovery, locking, and query semantics in `doc/backend-foundation.md`.
 - [ ] Final backend gate: the principal workflow and every planned endpoint are exercised by contract tests; measured search behavior is acceptable; OpenAPI examples are usable by a future frontend.
 
@@ -352,10 +359,7 @@ For each milestone, first write behavioral acceptance tests, then implement the 
    Publication-failure timing and distribution-specific RSS/transaction/journal evidence
    remain unmeasured; select required operational measurements for the approved scope rather
    than expanding workloads indefinitely. This closes only the fixed distribution slice.
-4. **Provide physical journal-peak instrumentation:** this requirement remains deliberately
-   blocked on a suitable filesystem and validated physical allocation accounting, with no
-   approved logical/polling substitute. Operational acceptance stays Partial.
-5. **Approve the final backend gate** after these decisions/evidence are resolved. Contract
+4. **Approve the final backend gate** after these decisions/evidence are resolved. Contract
    handoff and final correctness checks are complete; they do not authorize frontend work.
 
 ### Active acceptance sequence
@@ -418,8 +422,9 @@ extractors, thumbnails, and Wails remain deferred.
    rollback-journal sizes of 134.4/534.9 MB, with no nonzero WAL/SHM samples; total
    durations were 32.71/31.54 seconds. Polling can miss brief peaks, file sizes are not
    allocated storage or cumulative writes, and these runs do not isolate instrumentation
-   overhead or approve a transaction-policy change. True peak journal storage remains
-   open. Results and reproduction commands are in `backend-foundation.md`.
+   overhead or approve a transaction-policy change. These file-size measurements satisfy
+   the approved journal evidence scope; exact physical peak accounting was scrapped.
+   Results and reproduction commands are in `backend-foundation.md`.
    **Full-index transaction boundary timing measured:** a generated test-only Go overlay
    wraps the unchanged transaction body, including completed commit/rollback and deferred
    failure cleanup. `BenchmarkImportTransactions` verifies transaction counts and phase
@@ -457,14 +462,17 @@ extractors, thumbnails, and Wails remain deferred.
    committed counts and cleanup are checked before reopening can mask abandoned rows.
    These are kernel-accounted maxima for this fixture/environment, not a universal bound,
    cold-performance result or acceptance decision. Other container activity was not
-   controlled; broader import distributions and true physical peak storage remain open.
+    controlled; broader import distributions remain open. Physical peak tracing was scrapped.
     Results, scope and commands are in `backend-foundation.md`. `60adce8` fixes the parent's
     pre-recovery inspection to use an escaped absolute `file:` URI with `mode=ro`; tests
     prove write rejection, missing-file noncreation and special-character path handling.
     Existing RSS numbers predate the inspection fix; no numerical equivalence is inferred.
-    **True physical journal peak remains blocked:** suitable filesystem-aware
-    allocation/free/reservation instrumentation is required. Faster polling or logical VFS
-    writes/truncates cannot satisfy this requirement and were not approved as replacements.
+    **Physical journal-peak tracing scrapped (2026-10-10):** the user judged its effort
+    disproportionate to its usefulness and approved file-size measurements as sufficient.
+    Existing sampled maxima remain labelled as file sizes, not exact physical peaks.
+    The host investigation, lifecycle fixture and capture findings are retained in
+    [physical-journal-measurement.md](physical-journal-measurement.md); no further tracing
+    or physical allocation instrumentation is required for acceptance.
    **Standalone full-index recovery measured:**
    `BenchmarkFullIndexRecovery` covers 50,000/1,000,000 abandoned observations before
    and after directory construction, with completed-data preservation and index-integrity

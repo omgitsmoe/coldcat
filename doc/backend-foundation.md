@@ -1372,8 +1372,9 @@ Total durations are close to the earlier heap-only samples (1.364 / 1.242 and
 sampler overhead. Sampling adds work to the operation, and these one-iteration
 results are not latency p95 or an acceptance decision. Zero WAL/SHM maxima mean no
 nonzero sizes were observed, not that polling proves those files never existed.
-Transaction API durations are measured separately below. True peak journal storage,
-broader import distributions, filesystem-cold workloads, and approved budgets remain
+Transaction API durations are measured separately below. Journal file sizes are sufficient
+under the user-approved scope; exact physical peak accounting was scrapped on 2026-10-10.
+Broader import distributions, filesystem-cold workloads, and approved budgets remain
 open. Child-process RSS measurements for this fixture are recorded below.
 
 ### Full-index import transaction durations
@@ -1533,10 +1534,15 @@ measurement slice for this fixture only. Long/deep paths, known/shared-size enri
 repeated contents, history-heavy imports, cold behavior, approved budgets and optimization
 of slow cases remain separate work. No backend gate or acceptance limit is approved.
 
-**Blocked — true physical peak journal storage:** the requested physical requirement
-has not been replaced by logical VFS growth, apparent lengths or faster polling.
-It requires a suitable filesystem and validated allocation/free/reservation instrumentation;
-that environment/evidence is not available in this slice. Agree the accounting boundary
+**Scrapped — exact physical peak journal storage (user-approved, 2026-10-10):** journal
+file-size measurements, including the existing sampled maxima, are sufficient. The user
+judged filesystem-level tracing disproportionate to its usefulness. No further physical
+allocation instrumentation is required, and this is no longer a backend acceptance blocker.
+Measured file sizes remain labelled accurately; no exact physical peak is claimed.
+
+Historical rationale for the former requirement is retained below. It would have required
+a suitable filesystem and validated allocation/free/reservation instrumentation, with an
+agreed accounting boundary
 (journal alone or simultaneous catalog/sidecar/temporary storage), without weakening the
 physical requirement. An event-complete trace must preserve file identity
 across creation, growth, truncation, unlink and close (including open-but-unlinked files)
@@ -1548,6 +1554,14 @@ filesystem-aware allocation/free/reservation evidence or an instrumented filesys
 with the chosen accounting scope and trace overhead validated. Faster `stat` polling
 does not provide that evidence. This RSS slice makes no true peak journal claim and
 does not change transaction policy.
+
+Host feasibility and a disposable ext4 lifecycle capture fixture are now documented in
+[physical journal measurement validation](physical-journal-measurement.md). Upstream
+7.2.6 free tracepoints precede completion, and reported `st_blocks` includes delayed
+allocation reservations. The first privileged lifecycle capture contains every fixture
+checkpoint. Completed-free accounting and instrumentation validation were not completed
+before the task was scrapped. No physical journal peak is established; acquired information
+and the harness are retained as historical reference.
 
 ### Fixed operational import distributions
 
@@ -1644,8 +1658,8 @@ go test ./internal/importer -run '^$' \
 Execution permission is no longer the blocker. Two observed cleanup failures and one
 interrupted case leave the million-input slice incomplete. The original matrix did not
 change production code. Publication-failure timing, broader import RSS/journal/transaction
-distributions, physical peak storage, cold measurements and approved budgets remain open.
-Logical journal accounting is not an approved substitute for the blocked physical-peak requirement.
+distributions, cold measurements and approved budgets remain open. The former physical-peak
+requirement was scrapped on 2026-10-10; journal file-size measurements are sufficient.
 
 #### Bounded cleanup diagnosis
 
@@ -2086,7 +2100,8 @@ No existing fixture, log, user artifact, workspace catalog or lock was accessed 
 The interrupted `.million-distributions-3388537839` and old `.million-cleanup-577680217`
 roots remain preserved. These runs complete the fixed million-input success/late-parse-failure
 measurement slice, not publication-failure timing, distribution-specific RSS/transaction/
-journal evidence, physical peak storage, supported limits/budgets or final gate approval.
+journal evidence, supported limits/budgets or final gate approval. Exact physical peak
+accounting was subsequently scrapped; journal file-size measurements are sufficient.
 
 The new context regression checks its deadline against before/after timestamps for exactly
 five minutes and verifies explicit cancellation; it does not sleep for the deadline. Existing
@@ -2127,7 +2142,8 @@ Those historical failures were resolved by the approved five-minute policy and t
 passing failure reruns above. Operational acceptance remains Partial. The concrete
 [remaining decisions and blockers](coldcat-backend-api.md#remaining-decisions-and-blockers)
 are supported limits/budgets, cold boundary/latency metric, selecting any remaining operational
-measurements, true physical journal-peak instrumentation and final gate approval.
+measurements and final gate approval. Physical journal-peak instrumentation was scrapped
+on 2026-10-10 and is no longer a blocker; journal file-size measurements are sufficient.
 
 ### Content lists and redundancy
 
