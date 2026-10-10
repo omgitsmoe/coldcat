@@ -1,7 +1,7 @@
 # Coldcat frontend
 
-Shell, route state, request/page lifecycle, and wire/domain helpers are implemented; no catalog
-feature UI or Go asset hosting yet. Backend acceptance remains
+The primary search workspace, shell, request/page lifecycle, and wire/domain helpers are
+implemented. Detail/browsing features and Go asset hosting remain separate packages. Backend acceptance remains
 open. Architecture: [ADR 0002](../doc/adr/0002-static-browser-frontend.md).
 
 ## Toolchain and commands
@@ -181,6 +181,35 @@ input; no global printable handler or preference persistence is installed by the
 
 ## Development
 
+### Search workspace and F4/F6 links
+
+`lib/features/search/` owns literal query validation, 200 ms scheduling, selection, keyboard
+interaction and one retained in-memory search session (at most ten pages; 50 items by default). Filter drafts
+retire results immediately and dispatch only on Apply. Typing uses replacement navigation;
+discrete filter submissions create history. Only the type-to-search preference is persisted
+(`coldcat.typeToSearch`); responses, cursors and selection are never stored in browser storage.
+Connection invalidation clears selection/scroll and retires or marks pages unverified via F2.
+
+- Content links use `contentURL(id, { scope: 'current' }, { returnTo, observation })`.
+  Search history does **not** silently enable historical locations on content detail.
+- Observation links use `routes.observation(id, { returnTo, observation })`.
+- Directory links use `directoryBrowseURL(snapshotID, { path: containingDirectory(path) })`;
+  root stays the literal empty path. F6 does not receive detail-context parameters.
+- `return_to` is the ordinary search URL with query/filters and no cursor. F4 parses it with
+  `parseContentRoute` / `parseDetailContext`; render a native return anchor using the validated
+  destination. The selected observation is independent of content's location scope.
+- The retained session is reused only for the same connection and search inputs, with successful
+  pages. Otherwise search refetches page one. An application/document reload always refetches.
+  Until detail routes exist, their normal links load the not-found boundary and Back uses this
+  reconstruction path. F4/F11a must extend browser integration to surviving in-app sessions,
+  scroll restoration and the full search/detail/location workflow.
+
+Mocked browser coverage includes delayed first pages and continuations, Unicode/IME scheduling,
+keyboard guards/preference, invalid filters, failures/stale cursors, URL history, first-page
+reconstruction and later rows past the retention bound. These tests do not establish backend
+performance or real-catalog workflow acceptance. Manual screen-reader/input-method audits remain
+F11b work.
+
 Start the backend separately with a disposable catalog, following
 [backend integration](../doc/backend-integration.md). Stop it before CLI catalog operations;
 never remove a lock file. Then:
@@ -213,7 +242,7 @@ manual retry. It never supplies cached/demo responses as proof of backend readin
   `/contents/[id]`, `/observations/[id]`, `/disks`, `/disks/[id]`, `/snapshots/[id]`, and
   `/snapshots/[id]/directory`. Return `index.html` for their direct document requests;
   query strings do not change asset dispatch. Arbitrary directory paths stay in `?path=`.
-- Only `/` is implemented in F0. A built nested navigation loads the shell and displays
+- Only `/` is implemented through F3. A built nested navigation loads the shell and displays
   the client “Page not found” boundary until that feature route exists. Unknown routes
   are not approved production fallback destinations.
 - `tests/serve-built.ts` is a test-only reference host with broader document fallback to

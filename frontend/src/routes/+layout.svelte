@@ -2,10 +2,12 @@
   import '../app.css';
   import { resolve } from '$app/paths';
   import Shell from '../lib/components/Shell.svelte';
+  import GlobalShortcut from '../lib/features/search/GlobalShortcut.svelte';
   let { children } = $props();
 </script>
 
 <Shell>
+  <GlobalShortcut />
   {#snippet brand()}<a class="brand" href={resolve('/')}>Coldcat</a>{/snippet}
   {#snippet navigation()}
     <nav aria-label="Main navigation">

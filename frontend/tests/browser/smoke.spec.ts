@@ -20,7 +20,7 @@ test('built shell loads on entry and nested reload without fake data', async ({ 
     }),
   );
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Coldcat frontend foundation' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Search', exact: true })).toBeVisible();
   await expect(page.getByRole('status')).toHaveText('Backend ready');
   await page.goto('/snapshots/123/directory?path=literal%2F%E9%9B%AA');
   await page.reload();
