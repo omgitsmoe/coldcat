@@ -20,6 +20,7 @@
   import Sizes from './Sizes.svelte';
   import Entries from './Entries.svelte';
   import Filters from './Filters.svelte';
+  import Replicas from './Replicas.svelte';
   let { id, search }: { id: string; search: string } = $props();
   const connection = useConnection();
   type Detail = Result<'GET /api/v1/snapshots/{id}/directory'>;
@@ -32,6 +33,7 @@
   let view = $state<TraversalState<Page>>({ status: 'idle', pages: [], active: 0, paged: false });
   let items = $state<Page['items']>([]);
   let draft = $state(false);
+  let tab = $state<'entries' | 'replicas'>('entries');
   let paging = $state({ busy: false, canMore: false, canNext: false, canPrevious: false });
   const source = $derived(detail.status === 'success' ? detail.value : view.pages[0]?.value);
   $effect(() => {
@@ -144,48 +146,63 @@
       </section>
     {/if}
   </section>
-  <section aria-label="Directory entry listing">
-    <h2>Entries</h2>
-    <Filters {id} {query} {retire} {resume} />
-    {#if draft}<p role="status">Filters changed; apply to load entries.</p>
-    {:else}
-      <RequestFeedback
-        status={view.status}
-        error={view.error}
-        resource="Directory entries"
-        {retry}
-      />
-      {#if view.status !== 'stale'}<button
-          disabled={paging.busy}
-          onclick={() => void pagesOwner?.traversal.restart()}>Reload entries</button
-        >{/if}
-      {#if view.status === 'idle'}<p>Entries invalidated; reload results.</p>{/if}
-      {#if view.pages.length}
-        {#if view.error}<p>Previously loaded entries; not freshly verified.</p>{/if}
-        <p>
-          {view.pages[0]!.value.is_current
-            ? 'Current source inventory'
-            : 'Historical source inventory'}. Other replica counts refer to current destination
-          inventories, not historical copies.
-        </p>
-        {#if items.length}<Entries {items} {id} {query} returnTo={directoryBrowseURL(id, query)} />
-        {:else}<p>
-            No entries match this listing. This does not imply an empty recursive summary.
-          </p>{/if}
-        <PageControls
-          {...paging}
-          paged={view.paged}
-          page={view.active}
-          firstRetained={view.pages[0]!.number}
-          loaded={items.length}
-          complete={view.pages.at(-1)!.value.next_cursor === null}
-          more={() => void pagesOwner?.traversal.more()}
-          next={() => void pagesOwner?.traversal.next()}
-          previous={() => pagesOwner?.traversal.previous()}
+  <nav aria-label="Directory views">
+    <button aria-pressed={tab === 'entries'} onclick={() => (tab = 'entries')}>Entries</button>
+    <button aria-pressed={tab === 'replicas'} onclick={() => (tab = 'replicas')}
+      >Exact tree copies</button
+    >
+  </nav>
+  {#if tab === 'replicas'}
+    {#key `${id}:${query.path}`}<Replicas {id} path={query.path!} />{/key}
+  {:else}
+    <section aria-label="Directory entry listing">
+      <h2>Entries</h2>
+      <Filters {id} {query} {retire} {resume} />
+      {#if draft}<p role="status">Filters changed; apply to load entries.</p>
+      {:else}
+        <RequestFeedback
+          status={view.status}
+          error={view.error}
+          resource="Directory entries"
+          {retry}
         />
+        {#if view.status !== 'stale'}<button
+            disabled={paging.busy}
+            onclick={() => void pagesOwner?.traversal.restart()}>Reload entries</button
+          >{/if}
+        {#if view.status === 'idle'}<p>Entries invalidated; reload results.</p>{/if}
+        {#if view.pages.length}
+          {#if view.error}<p>Previously loaded entries; not freshly verified.</p>{/if}
+          <p>
+            {view.pages[0]!.value.is_current
+              ? 'Current source inventory'
+              : 'Historical source inventory'}. Other replica counts refer to current destination
+            inventories, not historical copies.
+          </p>
+          {#if items.length}<Entries
+              {items}
+              {id}
+              {query}
+              returnTo={directoryBrowseURL(id, query)}
+            />
+          {:else}<p>
+              No entries match this listing. This does not imply an empty recursive summary.
+            </p>{/if}
+          <PageControls
+            {...paging}
+            paged={view.paged}
+            page={view.active}
+            firstRetained={view.pages[0]!.number}
+            loaded={items.length}
+            complete={view.pages.at(-1)!.value.next_cursor === null}
+            more={() => void pagesOwner?.traversal.more()}
+            next={() => void pagesOwner?.traversal.next()}
+            previous={() => pagesOwner?.traversal.previous()}
+          />
+        {/if}
       {/if}
-    {/if}
-  </section>
+    </section>
+  {/if}
 {/if}
 
 <style>

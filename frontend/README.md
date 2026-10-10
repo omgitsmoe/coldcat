@@ -2,8 +2,8 @@
 
 The primary search workspace, content/location and observation details, hash lookup,
 disk/inventory pages and disk creation/editing, distinct-content explorer, directory browsing/sizing, shell, request/page
-lifecycle, and wire/domain helpers are implemented.
-Comparisons and Go asset hosting remain separate packages. Backend acceptance
+lifecycle, directory exact replicas with a shared literal rule editor, and wire/domain helpers are implemented.
+Content coverage and Go asset hosting remain separate packages. Backend acceptance
 remains open.
 Architecture: [ADR 0002](../doc/adr/0002-static-browser-frontend.md).
 
@@ -93,7 +93,10 @@ POST/PATCH, a real label conflict, exact large capacity, null clearing, persiste
 and an unchanged inventory revision. It does not simulate uncertain writes by intercepting real API
 traffic. The separate `tests/real/contents.spec.ts` covers F8 membership, alias deduplication,
 catalog-wide disks/locations, presets, historical-only zero-safe counts and real pagination.
-Full F11a still needs outage/reconciliation write integration, F9 comparison
+The separate `tests/real/replicas.spec.ts` covers F9a historical literal paths, current
+destination inventories, same-disk copies, explicit one-item pagination, whole/filtered
+equality and empty selection without comparison preloading.
+Full F11a still needs outage/reconciliation write integration, F9b coverage
 workflows, stop/import/restart revision and reconnect cases, and F10 built-host runs.
 F11b manual accessibility/responsive audits and F12 final integration checks remain separate.
 These correctness tests neither establish performance budgets nor close the unresolved backend gate.
@@ -425,6 +428,39 @@ is still unresolved.
   test uses only the existing disposable imported-catalog harness. Full F11a still owns stop/
   import/restart revision and reconnect acceptance; F11b owns manual accessibility/responsiveness.
   The backend gate remains unresolved.
+
+### Directory exact replicas (F9a handoff)
+
+- The directory route offers Entries / Exact tree copies views. Opening the comparison view
+  makes no request; only **Apply and compare** executes. Returning to Entries, changing source
+  inventory/path or leaving the route disposes comparison work. No coverage placeholder or
+  endpoint call is added. Browsing still loads its independent F6 summary and entry page.
+- `features/directories/rules.ts` exports `Rules = { allow: string[]; block: string[] }`
+  and `ruleInput(draft): Rules`: validate combined row/UTF-8 limits and NUL, then copy literal
+  arrays. No trimming, splitting, normalization or browser glob interpretation occurs.
+  An empty row is invalid; no rows means no rules. Backend syntax errors remain visible HTTP errors.
+- **F9b shared interface:** `RuleEditor.svelte` is controlled by `draft: Rules`,
+  `changed(next: Rules)` and `apply(validatedCopy: Rules)` callbacks. It provides row add/remove,
+  validation, examples and block-wins explanation. The owning comparison feature retains draft
+  and applied copies separately, retires results immediately in `changed`, and executes only in
+  `apply`. F9b can reuse this editor/validator and compose its own coverage owner; do not duplicate
+  glob validation or matching. Rules and cursors are not persisted; F9a's view is local route state.
+- `replicaPages(connection, snapshotID, query)` in `state/feature-requests.ts` captures path,
+  copied repeated allow/block arrays and limit, creates no request, and returns F2's standard
+  `{ traversal, dispose }`. The default page size is 50 (editable 1–200). Ten retained pages,
+  explicit next/previous transitions, stale reset and manual retry use the existing lifecycle.
+  Draft/limit edits and Cancel retire pending first/continuation requests and hide output;
+  Apply starts a fresh traversal with no old cursor. Connection invalidation never eagerly reruns.
+- Applied rules and retained/excluded source/destination counts remain visible with successful
+  results. Historical source labels explicitly compare to current destinations. Destination
+  disk, root and inventory have ordinary links; same-disk matches are marked. The backend's
+  `whole_tree_equal` alone selects “Whole tree equal” versus “Equal under these filters”.
+  `empty_comparison` shows “No files selected”, not “no copies” or a backup guarantee.
+- Focused unit files live under `tests/unit/` (the Vitest include); run
+  `npm run test:unit -- tests/unit/rules.test.ts tests/unit/feature-requests.test.ts`.
+  Browser checks: `npm run test:e2e -- tests/browser/replicas.spec.ts tests/browser/directories.spec.ts`.
+  Real bounded integration: `npm run test:real -- tests/real/replicas.spec.ts`, using the existing
+  disposable offline-import harness only. These checks do not close F9b/full F11a/F11b or backend gates.
 
 Start the backend separately with a disposable catalog, following
 [backend integration](../doc/backend-integration.md). Stop it before CLI catalog operations;

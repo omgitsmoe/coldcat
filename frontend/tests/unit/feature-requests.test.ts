@@ -7,6 +7,7 @@ import {
   diskPages,
   snapshotPages,
   directoryPages,
+  replicaPages,
   contentDetail,
   observationDetail,
   diskDetail,
@@ -17,6 +18,42 @@ import { searchFixture } from '../fixtures/api';
 import { ApiError } from '../../src/lib/api/errors';
 
 describe('concrete feature contracts', () => {
+  it('freezes literal replica rules and cancels obsolete comparisons without eager calls', async () => {
+    const client = createClient();
+    let release!: (value: { revision: string; items: never[]; next_cursor: null }) => void;
+    const pending = new Promise<{ revision: string; items: never[]; next_cursor: null }>(
+      (resolve) => {
+        release = resolve;
+      },
+    );
+    client.directoryReplicas = vi.fn().mockReturnValue(pending);
+    const connection = new Connection(client);
+    const query = { path: '雪/\\x', allow: [' **/a\\?.txt ', '**/*.jpg'], block: ['**/*.log'] };
+    const bound = replicaPages(connection, '13', query);
+    expect(client.directoryReplicas).not.toHaveBeenCalled();
+    query.allow[0] = 'mutated';
+    const running = bound.traversal.restart();
+    expect(client.directoryReplicas).toHaveBeenCalledWith(
+      '13',
+      {
+        path: '雪/\\x',
+        allow: [' **/a\\?.txt ', '**/*.jpg'],
+        block: ['**/*.log'],
+        limit: 50,
+        cursor: undefined,
+      },
+      expect.any(AbortSignal),
+    );
+    const signal = vi.mocked(client.directoryReplicas).mock.calls[0]![2]!;
+    bound.traversal.retire();
+    expect(signal.aborted).toBe(true);
+    release({ revision: '1', items: [], next_cursor: null });
+    await running;
+    expect(bound.traversal.state.status).toBe('idle');
+    expect(bound.traversal.state.pages).toHaveLength(0);
+    bound.dispose();
+    connection.dispose();
+  });
   it('freezes search inputs, has equivalent default identity, and creates no speculative requests', async () => {
     const client = createClient();
     client.search = vi.fn().mockResolvedValue(searchFixture());

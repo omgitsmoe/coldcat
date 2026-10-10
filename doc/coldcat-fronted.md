@@ -1,6 +1,6 @@
 # Coldcat frontend plan
 
-Status: F0–F8 and F11a core integration implemented. F9–F12/full F11a pending;
+Status: F0–F9a and F11a core integration implemented. F9b–F12/full F11a pending;
 backend gate unresolved. This is not release acceptance closure.
 The first-usable-slice real-backend harness precedes F7/comparisons; see the
 [core integration interface and coverage](../frontend/README.md#real-backend-core-integration-f11a-core).
@@ -595,6 +595,9 @@ full F11a revision/reconnect and later feature integration remain pending.
 
 ### F9a — directory exact replicas and shared rule editor
 
+- **Implemented interface:** explicit Exact tree copies view on the F6 directory route,
+  controlled literal rule editor and bounded replica traversal; see the
+  [F9a handoff](../frontend/README.md#directory-exact-replicas-f9a-handoff).
 - **Prerequisites:** F6.
 - **Scope:** shared allow/block draft/applied state and limit validation, replicas tab,
   paginated results, filtered/whole-tree labels, and empty-comparison handling.
