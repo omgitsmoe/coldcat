@@ -132,18 +132,48 @@ The contract/integration handoff slice is **complete**, but the final backend ga
 and bounded five-disk [history comparisons](backend-foundation.md#history-heavy-directory-comparisons).
 The balanced 3/12-disk, one/five-snapshot
 [distribution harness](../internal/httpapi/distribution_workflow_benchmark_test.go) and its
-small-fixture correctness audit are committed; the 50,000-current-observation matrix was
-measured, while larger-scale measurements remain open. Consult the canonical results and
+small-fixture correctness audit are committed; the final 200,000-current-observation matrix
+was measured at 20 iterations after the search optimizations (up to one million historical
+observations). Larger bounded directory history also covers 200,000 source files and
+3,050,005 historical observations across five disks / 25 snapshots. Consult canonical results and
 remaining acceptance work in [backend-foundation.md](backend-foundation.md) and the
 [active acceptance sequence](coldcat-backend-api.md#active-acceptance-sequence), rather than
 treating every history-heavy measurement as unfinished. Warm serial means are not p95.
 
-Remaining gates include filesystem-cold acceptance evidence, broader importer and disk/history
-distributions, larger history comparisons, true peak RSS/journal storage, and explicit approval
-of observation/distinct-path limits and latency/storage/import/recovery budgets. Sampled heap
-and journal growth and transaction API durations do not establish those peak bounds. Broad
-search, replica-filter no-match and large filtered directory comparisons have documented slow
-cases that must be improved or explicitly accepted; this audit does neither. Rerun required
-`go test ./...`, `go test -race ./...`, and `go vet ./...` after implementation changes and
-record their results before closing the gate. In-progress cold, RSS and optimization work is
-not accepted by this handoff; follow the active acceptance sequence before frontend work.
+Additional completed slices are distinct from acceptance:
+
+- Cursor-seek and reusable-stream directory optimizations preserve exact filtered verification;
+  warm million-source filtered replicas now take about 11.5 seconds, not the historical
+  7.7-minute baseline. Cumulative allocation is about 2.10 GB/call, not peak memory.
+- Exact search/anchor validation and query-local current snapshot reuse are implemented.
+  Final million-current warm HTTP primary workflow is 1.365 ms; broad pages are 1393/1435 ms.
+  Impossible disk bounds return in 0.076 ms, but valid no-match workloads are not generally cheap.
+- Linux cold harness verifies zero resident catalog pages before each sample. Final million
+  catalog-page-cache-cold **open plus HTTP query** means are about 4.53 seconds for exact
+  and 8.28/8.29 seconds for broad first/next pages. Catalog opening/recovery is timed;
+  runtime/client/server remain warm. This is not standalone cold-query latency, hardware or
+  whole-filesystem coldness, broader history-heavy cold evidence, or p95.
+- Flat full-index imports have transaction API boundary timing, sampled journal growth and
+  isolated Linux child RSS evidence. Million-file child maxima are 55,377,920 / 59,883,520
+  bytes for success / late failure. The lifecycle includes runtime and catalog initialization
+  through close, not import-only memory or universal bounds. The read-only inspection URI
+  fix is tested; existing numeric samples predate it, rather than constituting a rerun.
+- Deep/shared/history-enrichment import harnesses and all six 50,000-input cases are measured;
+  publication rollback is tested separately, not timed.
+
+Remaining gates are explicit: million-input operational distribution runs were rejected twice
+by tool-level permission despite user authorization and sufficient reported disk space, so no
+results exist. Broader import/distribution-specific RSS, transaction and journal evidence,
+publication-failure timing, million-source directory history, broader cold evidence and p95
+remain open. **True physical peak journal storage is blocked on a suitable filesystem and
+validated allocation/free/reservation instrumentation**; logical VFS growth or faster apparent
+file-size polling is not an approved replacement. Sampled heap/journal and transaction API
+durations do not prove physical storage bounds. Propose an ADR for measurement semantics
+before accepting a changed accounting boundary; none is created or approved here.
+
+Observation/distinct-path limits and latency/storage/import/recovery budgets still require
+explicit user approval. Broad search, valid replica-filter no-match and large filtered directory
+comparisons retain slow cases to improve or explicitly accept. The final `go test ./...`,
+`go test -race ./...` and `go vet ./...` checks after the latest implementation are pending
+with the parent session; this documentation does not claim they passed. No frontend work or
+final backend acceptance is authorized by completing these measurement slices.

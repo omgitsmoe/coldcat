@@ -397,6 +397,51 @@ are slow at this scale. The increase is much larger than the 20-fold increase in
 files; these single-iteration results do not establish why. Profiling and explicitly
 approved limitations or improvements are needed before treating this scale as interactive.
 
+#### Committed directory comparison optimizations
+
+The preceding comparison tables are historical pre-optimization baselines, not the
+current implementation's timings. `5e0dcd9` gives SQLite one effective manifest-page
+lower bound: the inclusive subtree prefix initially, then the exclusive cursor.
+Previously SQLite sought to the prefix and repeatedly filtered out prior pages.
+The upper subtree bound and 1,000-row source batches are unchanged.
+
+`bc29c28` then reduces materialization and repeated SQL preparation. Candidate hashing
+and exact equality use reusable streaming row records and canonical encoding buffers;
+`sql.RawBytes` are consumed before their owning cursor advances. Source batches scan
+directly into their final slots, and a temporary-selection upsert is prepared once per
+request. Cancellation is checked before every stream advance, including short streams
+where asynchronous cancellation could otherwise race with EOF. Canonical v1 encoding,
+exact verification, symmetric filters, multiplicity, historical sources and current-only
+destinations are preserved; no schema, API or persistent fingerprint changes are needed.
+Whole-tree fingerprints still prune only unfiltered candidates.
+
+On Linux amd64 / AMD Ryzen 5 9600X, Go 1.27.1, GOMAXPROCS=4, the existing five-disk
+fixture produced the following warm measurements. Each cell is replicas / coverage.
+50,000-source results use three timed iterations; million-source results use one.
+Setup and validation/warm-up are untimed; result assertions are timed. Other session
+work and some focused checks overlapped these runs, so they are not CPU-isolated.
+
+| Source files / selection | Cursor-seek slice | Reusable-stream slice | Stream-slice replicas / coverage B/op |
+| --- | ---: | ---: | ---: |
+| 50,000 / unfiltered | 198.10 / 328.55 ms | 141.41 / 125.79 ms | 25,475,901 / 34,613,141 |
+| 50,000 / block logs | 945.13 / 277.60 ms | 598.50 / 115.52 ms | 107,426,248 / 30,297,162 |
+| 50,000 / allow text | 934.70 / 300.23 ms | 595.42 / 113.92 ms | 107,425,064 / 30,296,608 |
+| 50,000 / empty | 50.83 / 46.30 ms | 46.25 / 44.98 ms | 13,018,733 / 13,019,520 |
+| 1,000,000 / unfiltered | 4.198 / 6.325 s | 2.808 / 2.360 s | 508,838,824 / 690,287,344 |
+| 1,000,000 / block logs | 19.407 / 5.354 s | 11.551 / 2.137 s | 2,096,958,776 / 603,944,400 |
+| 1,000,000 / allow text | 18.246 / 6.421 s | 11.503 / 2.126 s | 2,096,957,976 / 603,942,976 |
+| 1,000,000 / empty | 0.948 / 1.051 s | 0.900 / 0.907 s | 258,654,072 / 258,656,176 |
+
+The same-session pre-seek 50,000-source blocked-log replica mean was 2055.80 ms.
+The million-source pre-seek values above were previously recorded baselines, not a
+fresh paired run. The reusable-stream million command completed in 104.509 seconds,
+including fixture creation and warm-up. Filtered replicas still take about 11.5 seconds
+and cumulatively allocate about 2.10 GB per call. `B/op` is not peak live heap or RSS;
+bounded streaming does not make driver allocation traffic constant. Arbitrary filtered
+candidates remain exhaustively scanned and matching manifests exactly verified.
+Cold/HTTP latency, p95, larger candidate distributions and budget approval remain open.
+Use the existing filtered-comparison commands above with `-timeout=30m`.
+
 #### History-heavy directory comparisons
 
 `BenchmarkDirectoryHistoryComparisons` reuses the five-disk roles above, with
@@ -461,6 +506,36 @@ million-source-file history measurements and the final backend gate remain open.
 `go test ./...`, `go vet ./...`, and the final focused
 `go test -race -p 1 ./internal/database -run '^TestDirectory(History)?Comparison' -timeout=30m`
 passed after the harness changes. Production behavior and schema are unchanged.
+
+#### Larger bounded history comparison slice
+
+`c927983` adds a 200,000-source-file scale to the same history matrix. Five disks with
+five snapshots each contain 610,001 current and 3,050,005 historical observations,
+25 snapshots and 10,000 distinct source contents per snapshot. This avoids accidentally
+selecting a million-source history fixture with roughly 16 million observations.
+
+```sh
+go test ./internal/database -run '^$' \
+  -bench '^BenchmarkDirectoryHistoryComparisons/200000/snapshots_5/' \
+  -benchtime=1x -benchmem -v -timeout=30m
+```
+
+All eight cases passed; the command took 61.523 seconds including setup and warm-up.
+These are exploratory warm single-iteration samples from the active working code,
+not a pinned final-implementation comparison; concurrent container work may affect them.
+The environment is Linux amd64 / Ryzen 5 9600X, Go 1.27.1, GOMAXPROCS=4.
+
+| Source / selection | Replicas (ms) | Coverage (ms) | Replicas B/op | Coverage B/op |
+| --- | ---: | ---: | ---: | ---: |
+| Current / unfiltered | 663.404 | 481.741 | 114,439,192 | 138,135,872 |
+| Current / block logs | 2634.665 | 443.106 | 458,871,928 | 120,872,592 |
+| Oldest / unfiltered | 1202.074 | 504.124 | 200,240,200 | 138,135,520 |
+| Oldest / block logs | 3385.628 | 470.759 | 544,678,824 | 120,871,712 |
+
+The original history fixture semantics, current-only destinations and extra same-disk
+replica of an oldest source still apply. Search indexing is excluded. This completes
+the larger bounded warm slice, not million-source history comparisons, broader/deeper
+candidate distributions, cold evidence, p95 or performance acceptance.
 
 #### Initial directory build and browsing measurements
 
@@ -761,6 +836,128 @@ one fifth as many current observations and substantially fewer distinct paths.
 The bounded history-heavy directory comparisons are described above; other disk/history
 distributions, cold measurements,
 approved budgets, transaction/journal measurements, and the final backend gate remain open.
+
+### Committed search optimizations and final warm HTTP measurements
+
+The earlier HTTP tables are historical baselines. `201534d` inlines retrieval/ranking,
+uses constant exact rank to preserve index order, seeks to the anchor path before
+observation expansion, and validates cursor eligibility from its unique path rather
+than rebuilding all search candidates. Directional 50,000-path warm database means
+fell from 86/109 ms to about 1.2 ms for broad exact first/deep pages, and from
+107/150 ms to 88/59 ms for substring pages. Container contention limits comparisons.
+
+`1383276` materializes current snapshots once per query and rejects historical
+observations before replica counting. Positive exact/minimum **disk** bounds at least
+equal to the number of current snapshots are impossible (other disks cannot exceed
+that count minus one), so they return empty after resource/revision/cursor validation.
+This shortcut does not apply to locations or maximum-only bounds. Membership filters
+do not narrow replica counts; historical-only content still has zero current counts.
+Valid, non-impossible history-heavy no-match searches remain real work: exploratory
+50,000-current balanced database means were about 126–137 ms after this change,
+versus roughly 550–600 ms before. Do not generalize the impossible-bound shortcut
+to all no-match workloads.
+
+The final serial million-current HTTP run after these commits used the existing skewed
+three-disk fixture and 20 iterations per case. It passed in 104.835 seconds. Linux
+amd64 / AMD Ryzen 5 9600X, Go 1.27.1, GOMAXPROCS=4; no other benchmark was active.
+
+| Case | Final mean ms/op |
+| --- | ---: |
+| Exact search | 0.741665 |
+| Selective substring | 0.924235 |
+| Broad first page | 1392.964227 |
+| Broad second page | 1434.524452 |
+| Impossible disk-replica bound | 0.076425 |
+| Content detail | 0.107627 |
+| First location page | 0.177192 |
+| Complete four-request workflow | 1.364552 |
+
+Use the existing `BenchmarkHTTPWorkflow/1000000/` command above. These are warm
+end-to-end serial means, not p95, server-only allocation, general no-match performance
+or approved budgets. Broad search remains a visible latency concern.
+
+### Balanced disk/history HTTP distribution measurements
+
+`372797e` adds `BenchmarkHTTPDistributionWorkflow`: balanced 3/12-disk inventories
+with one/five snapshots per disk at 50,000/200,000 **total current observations**.
+Five generations at the larger scale retain one million historical observations.
+Stable, changed and deleted paths/content are retained, with two same-disk target
+copies on every disk. The independent small-fixture oracle exhausts search and target
+observation pages and checks both replica metrics and current/history metadata.
+Temporary catalogs are built sequentially, reusing one inventory file. Real application
+imports, server startup, cursor preparation and warm-up are untimed; serial loopback
+requests include client/server HTTP, SQL, JSON work and bounded assertions.
+
+The original 50,000-current matrix ran at three iterations per case before the final
+search changes; retain it as exploratory coverage, not a final latency baseline.
+The final 200,000-current matrix passed at 20 iterations in 200.249 seconds on the
+same Linux/Ryzen/Go/GOMAXPROCS environment, with no other benchmark active.
+
+```sh
+go test ./internal/httpapi -run '^$' \
+  -bench '^BenchmarkHTTPDistributionWorkflow/200000/' \
+  -benchtime=20x -benchmem -v -timeout=30m
+```
+
+| Disks / snapshots per disk | Current broad / next ms | History broad / next ms | Impossible disk-bound ms |
+| --- | ---: | ---: | ---: |
+| 3 / 1 | 267.904753 / 276.586023 | 267.462660 / 275.033510 | 0.078410 |
+| 3 / 5 | 446.599399 / 474.607159 | 277.067400 / 285.407123 | 0.081288 |
+| 12 / 1 | 270.116071 / 278.050621 | 269.524175 / 276.797721 | 0.079236 |
+| 12 / 5 | 463.590851 / 489.937366 | 286.481110 / 294.606491 | 0.079286 |
+
+Current exact means span 0.726490–0.784230 ms and current primary workflows
+1.198736–1.512690 ms; history exact spans 0.778201–0.926798 ms and history primary
+workflows 1.251517–2.919731 ms. The no-match row deliberately uses impossible disk
+bounds, not valid bound predicates that happen to find nothing. These warm serial
+means complete this bounded distribution matrix, not p95, broader cold/history
+distributions, representative user inventories or acceptance approval.
+
+### Verified catalog-page-cache-cold HTTP open plus query
+
+`84a27ca` adds Linux-only `BenchmarkHTTPCatalogColdOpen`. Before **every** timed
+sample it closes SQLite, syncs the temporary catalog, applies `POSIX_FADV_DONTNEED`,
+and requires `mincore` to report zero resident catalog pages. Surviving journal/WAL/SHM
+sidecars and eviction/verification failures are rejected, not treated as warm fallbacks.
+Cold responses are compared with validated warm baseline responses, including cursor
+follow-ups. Tests cover residency validation, invalid files, eviction/data preservation,
+sidecars and HTTP open failures.
+
+Catalog opening/recovery occurs **inside** the timed real HTTP request: opening before
+timing would warm schema/recovery pages. The runtime, HTTP client and server remain
+warm; eviction and residency verification are untimed. This verifies catalog-file
+page-cache-cold **open plus query**, not independently cold standalone query latency,
+whole-filesystem/device-cache/hardware coldness, or p95.
+
+Initial three-sample 50,000/million runs at `84a27ca` preceded the later replica-search
+optimization and are historical exploratory evidence, not final-code samples. The final
+million-current run after `1383276` passed in 194.164 seconds at three iterations per
+case, on the same Linux/Ryzen/Go/GOMAXPROCS environment with no other benchmark active.
+Every sample reported zero pre-open resident pages out of 242,233 catalog pages.
+
+```sh
+go test ./internal/httpapi -run '^$' \
+  -bench '^BenchmarkHTTPCatalogColdOpen/1000000/' \
+  -benchtime=3x -benchmem -v -timeout=30m
+```
+
+| Cold open + request | Final mean seconds/op |
+| --- | ---: |
+| Exact search | 4.530065720 |
+| Selective substring | 4.533323759 |
+| Broad first page | 8.275947632 |
+| Impossible disk-replica bound | 4.516135305 |
+| Exact next page | 4.525805919 |
+| Broad next page | 8.291433701 |
+| Content detail | 4.518971756 |
+| Locations | 4.507581923 |
+| Locations next page | 4.513421868 |
+
+Opening/recovery dominates narrow requests. Do not subtract a warm open estimate and
+call the remainder measured standalone cold latency. Broader history-heavy cold runs,
+standalone query/HTTP cold evidence under an agreed boundary, p95 and approved budgets
+remain open. An ADR defining accepted cold/physical-storage measurement semantics is
+proposed, not created or approved here.
 
 ## Filename and path search
 
@@ -1279,7 +1476,13 @@ without a cleanup error. Missing/malformed completion, invalid requests, missing
 or missing/invalid kernel RSS fields fail rather than supply fallback measurements.
 Before application reopening can recover anything, the parent inspects the exited
 child's catalog read-only and rejects incomplete publication or surviving failed-import
-rows. It then runs the shared search, directory, foreign-key and FTS integrity checks.
+rows. `60adce8` corrects this inspection to use an escaped absolute SQLite `file:` URI
+with `mode=ro`; appending that query to a plain filename did not enforce read-only
+opening with modernc. Regressions check write rejection, no creation of a missing catalog,
+and URI-special characters in paths. The child imports and RSS accounting protocol are
+unchanged; the numeric samples below predate this inspection fix, not a remeasurement
+or a claim of measured performance equivalence. The parent then runs the shared search,
+directory, foreign-key and FTS integrity checks.
 Small tests cover both outcomes, protocol/child errors, KiB parsing and rejection of an
 unclean snapshot without silently recovering it.
 
@@ -1323,9 +1526,12 @@ measurement slice for this fixture only. Long/deep paths, known/shared-size enri
 repeated contents, history-heavy imports, cold behavior, approved budgets and optimization
 of slow cases remain separate work. No backend gate or acceptance limit is approved.
 
-**Remaining true peak journal-storage evidence:** first define whether the target is
-apparent lengths, allocated blocks, filesystem reservations, or simultaneous total
-catalog/sidecar/temporary storage. An event-complete trace must preserve file identity
+**Blocked — true physical peak journal storage:** the requested physical requirement
+has not been replaced by logical VFS growth, apparent lengths or faster polling.
+It requires a suitable filesystem and validated allocation/free/reservation instrumentation;
+that environment/evidence is not available in this slice. Agree the accounting boundary
+(journal alone or simultaneous catalog/sidecar/temporary storage), without weakening the
+physical requirement. An event-complete trace must preserve file identity
 across creation, growth, truncation, unlink and close (including open-but-unlinked files)
 and reconcile the simultaneously live allocations with no dropped events. SQLite VFS
 write/truncate/delete instrumentation can explain logical file growth and transaction
@@ -1335,6 +1541,46 @@ filesystem-aware allocation/free/reservation evidence or an instrumented filesys
 with the chosen accounting scope and trace overhead validated. Faster `stat` polling
 does not provide that evidence. This RSS slice makes no true peak journal claim and
 does not change transaction policy.
+
+### Fixed operational import distributions
+
+`bf9f873` adds `BenchmarkImportDistributions` with production search and directory
+indexing enabled. Each scale denotes **new input files** (50,000 or 1,000,000), not
+the baseline-plus-import catalog's total observations. Every measured import runs on
+one disk with completed baseline inventories and generation-prefixed paths:
+
+| Profile | Baseline snapshots | Distinct shared contents | Input metadata/shape |
+| --- | ---: | ---: | --- |
+| `deep_known` | 1 | N | Known 4096-byte sizes; nested disk/year/month/week/day/hour/minute/second/leaf paths |
+| `duplicate_shared` | 1 | N/100 | Known sizes; repeated shared identities |
+| `history_enrichment` | 3 | N | Baselines have unknown sizes; new import supplies 4096-byte sizes |
+
+Success publishes N additional observations; late parse failure commits all ingestion
+batches before a malformed final record and then cleans up, preserving baseline data.
+Shared small fixtures independently assert counts, content sizes, root/deep directory
+summaries, current search and foreign-key/FTS integrity. Publication-trigger failures
+also verify rollback preserves historical unknown sizes and completed metadata; those
+publication-failure timings are **not measured**.
+
+Fixture generation, baseline imports and integrity checks are untimed. Metrics include
+import/ingestion/directory/publication durations, input throughput, continuously sampled
+Go heap and final catalog bytes including baselines and reusable failed-import space.
+Samples are not RSS or proven memory peaks; phase durations are not transaction durations.
+All six 50,000-input success/late-failure cases passed exploratory runs; no million-input
+distribution results exist. The guarded million command was rejected twice by tool-level
+permission despite user authorization and about 36.3 GB free in the working filesystem.
+The larger slice remains pending, not passed, failed by benchmark, or inferred from the
+flat million-file fixture. No additional benchmark was run for this documentation closure.
+
+```sh
+go test ./internal/importer -run '^TestImportDistributionFixtures$' -count=1
+go test ./internal/importer -run '^$' \
+  -bench '^BenchmarkImportDistributions/50000/' -benchtime=1x -benchmem -v -timeout=30m
+```
+
+The analogous `/1000000/` selection requires resolution of the execution permission
+block before running. Broader import RSS/journal/transaction distributions, physical
+peak storage, cold measurements and approved budgets remain open.
 
 ## Verification and follow-on work
 

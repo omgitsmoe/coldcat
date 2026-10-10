@@ -266,15 +266,46 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 ### Milestone E — performance, recovery, and backend handoff
 
 - [ ] Agree a target catalog size and interactive latency budget; a suggested initial benchmark is one million observations, with results tracked for both cold and warm queries.
-- [ ] **Partial:** exact/substring search, pagination, directory query/build/enrichment costs, directory-only recovery, and full-index standalone recovery measured at 50,000/1,000,000 observations; search-and-directory-indexed streaming import and late-failure cleanup measured at 50,000 files; test-only fuzzy candidate/reranking latency measured for 50,000 distinct names and persisted fuzzy latency/storage measured for 50,000/1,000,000 distinct paths. Filesystem-cold queries and broader multi-disk distributions remain. Full-index recovery covers interruption before directory construction and after completed directory construction, preserving a completed snapshot and shared content/search paths. Directory measurements cover wide/deep/high-duplicate trees; see `backend-foundation.md`.
+- [ ] **Partial:** current-schema exact/substring search, pagination, directory query/build/enrichment,
+  directory-only/full-index recovery and flat full-index success/late-failure imports measured
+  at 50,000/1,000,000 observations. Transaction API durations, sampled journal growth and
+  isolated Linux child RSS are measured for the flat import fixture. Balanced warm HTTP
+  distributions cover 3/12 disks and one/five snapshots at 50,000/200,000 current observations;
+  verified catalog-page-cache-cold HTTP open-plus-query covers 50,000/1,000,000 current
+  observations. This is not standalone cold-query or whole-physical-filesystem cold evidence.
+  Broader cold/history, p95, million-input operational import distributions and true physical
+  journal peak remain open. Removed fuzzy measurements are historical context only.
 - [x] Check query plans for latest-snapshot selection and observation content/snapshot/path lookups (`TestQueryIndexes`).
 - [x] Check exact hash lookup and content observation-page indexes; add focused 50,000-observation warm-query benchmarks for hash lookup and first/deep pages.
 - [x] Check content-list keyset and observation query indexes. Benchmark current/history first/deep pages, disk/directory membership and both redundancy metrics at 50,000 and 1,000,000 observations; document the catalog-wide cost of no-match bounds in `backend-foundation.md`. An agreed latency budget and cold-query measurements remain pending.
 - [x] Check search query plans and remove full-catalog observation scans from normal exact/substring retrieval. Page qualifying paths before expanding observations; document measured broad-query costs.
 - [x] Test application/import cancellation propagation and actionable catalog-lock errors; verify database-session recovery on reopen after seeded interruption or cleanup failure.
 - [x] Test HTTP pagination across unchanged reopen/restart and successful offline imports; failed imports preserve cursors, and server startup recovers seeded interrupted state before readiness. Child-process interrupted imports additionally verify application pagination after recovery and invalidation after subsequent publication.
-- [x] Run `go test ./...`, `go test -race ./...`, and `go vet ./...` with the configured Go 1.27.1 toolchain; all passed for the completed foundation. Packages/tests also cross-compiled for Windows amd64 and macOS arm64; runtime tests ran on Linux.
-- [ ] **Partial:** focused content, exact/substring search, directory queries/build/recovery/comparisons, initial fuzzy spike, and search-indexed import benchmarks have run. Initial exact-replica and coverage measurements use 50,000 files. A five-disk fixture now measures filtered replicas and coverage with exact/filtered-only copies and complementary partial-content disks; bounded history-heavy comparisons also cover one/five snapshots per disk at 50,000 source files. Results and scale definitions are in `backend-foundation.md`. Broader distributions, larger history-heavy comparisons, and cold measurements remain. No `justfile` currently exists; adopt its commands if one is introduced.
+- [x] Required tests/race/vet passed for the earlier completed foundation with Go 1.27.1;
+  packages/tests also cross-compiled for Windows amd64 and macOS arm64 (runtime tests on Linux).
+- [ ] Rerun final `go test ./...`, `go test -race ./...` and `go vet ./...` after the latest
+  implementation changes. Slice-level normal tests/vet passed; the parent's final required
+  checks, especially the once-at-end race run, are pending and not claimed by this doc closure.
+- [ ] **Partial:** focused content/search/directory/import benchmarks and both committed
+  directory comparison optimizations measured. Filtered five-disk comparisons cover
+  50,000/million source files; bounded history covers 50,000/200,000 source files with up to
+  25 snapshots and 3,050,005 historical observations. Broader/deeper candidate distributions,
+  million-source history, broader cold evidence, p95 and approved budgets remain.
+  No root `justfile` exists; adopt its commands if introduced. See `backend-foundation.md`.
+- [x] Implement and measure cursor-seek and reusable-stream directory comparison optimizations,
+  preserving exact verification, symmetric filters, canonical encoding and bounded source reads.
+- [x] Implement and measure indexed exact search/anchor validation and query-local current
+  snapshot reuse; preserve exhaustive pagination and catalog-wide replica counts. Impossible
+  disk bounds short-circuit after validation, not general valid no-match bounds.
+- [x] Complete the balanced warm 200,000-current HTTP matrix and final million-current warm
+  workflow / verified catalog-cache-cold open-plus-query reruns. These do not approve performance.
+- [x] Implement fixed deep/shared/history-enrichment import profiles and measure all six
+  50,000-input success/late-parse-failure cases; test publication rollback independently.
+- [ ] Run the million-input operational distribution slice after resolving its twice-rejected
+  tool permission. No results exist; publication-failure timing also remains unmeasured.
+- [ ] Measure true **physical** journal peak using a suitable filesystem and validated
+  allocation/free/reservation instrumentation. Blocked on that environment; logical VFS
+  accounting or sampled apparent file lengths are not an approved replacement.
 - [x] Document schema initialization, pre-0.1 reset policy, import publication/cleanup/recovery, locking, and query semantics in `doc/backend-foundation.md`.
 - [ ] Final backend gate: the principal workflow and every planned endpoint are exercised by contract tests; measured search behavior is acceptable; OpenAPI examples are usable by a future frontend.
 
@@ -308,9 +339,16 @@ extractors, thumbnails, and Wails remain deferred.
    the five-disk directory-only benchmark covers unfiltered, blocked-log, allowed-text,
    and empty selections, checking counts and identities against a small correctness fixture.
    Runs cover 50,000 and 1,000,000 source observations (160,001 and 3,010,001 catalog
-   observations). At the larger scale, filtered replicas take about 7.7 minutes, coverage
-   about 42–43 seconds, and empty comparisons about 38 seconds. These slow cases remain
-   unresolved performance limits, not an acceptance decision.
+    observations). The historical baseline took about 7.7 minutes for filtered replicas,
+    42–43 seconds for coverage and 38 seconds for empty comparisons. `5e0dcd9` fixes
+    repeated-prefix scans with one effective cursor bound; `bc29c28` streams reusable
+    manifest records/encoding buffers and prepares the selection upsert once. The later
+    million-source samples take 11.55/11.50 seconds for blocked-log/allowed-text replicas,
+    2.14/2.13 seconds for their coverage and about 0.90 seconds for empty comparisons.
+    Filtered replicas allocate about 2.10 GB cumulatively rather than 5.40 GB. These warm
+    directory-only runs had possible concurrent session work; allocations are not peak RSS.
+    Canonical fingerprints, exact verification, symmetric selection, historical sources and
+    current destinations remain unchanged. Slow cases still need improvement or approval.
    This does not close the history-heavy or filesystem-cold workload gaps or approve an
    interactive latency budget. See `backend-foundation.md`.
    **Full-index streaming-import measurement harness extended:**
@@ -342,7 +380,15 @@ extractors, thumbnails, and Wails remain deferred.
    took 10.41/4.954 seconds; failure cleanup took 17.61 seconds. These are API wall-clock
    durations, not engine lock-hold measurements, p95, cold performance or acceptance.
    Production behavior is unchanged; overhead is not isolated. True peak storage and
-   broader import distributions remain open. See `backend-foundation.md`.
+    broader import distributions remain open. See `backend-foundation.md`.
+    **Fixed operational distributions partially measured:** `bf9f873` implements deep-known,
+    duplicate/shared and three-baseline history-enrichment profiles, with success and late
+    parse failure after committed batches. All six 50,000-input cases ran; independent tests
+    also cover publication rollback and preserved historical metadata. Million-input runs
+    remain pending: the guarded command was denied twice by tool permission despite user
+    authorization and about 36.3 GB free. There are no million-distribution results to accept.
+    Publication-failure timing and distribution-specific RSS/transaction/journal evidence
+    remain unmeasured. Setup/baseline imports are untimed; sampled heap is not RSS.
    **Isolated Linux process RSS measured:** `BenchmarkImportPeakRSS` runs fresh importer
    children, keeping fixture generation and integrity validation in the parent. It reads
    child `VmHWM` after catalog close and separately records kernel lifetime maximum RSS;
@@ -354,7 +400,13 @@ extractors, thumbnails, and Wails remain deferred.
    These are kernel-accounted maxima for this fixture/environment, not a universal bound,
    cold-performance result or acceptance decision. Other container activity was not
    controlled; broader import distributions and true physical peak storage remain open.
-   Results, scope and commands are in `backend-foundation.md`.
+    Results, scope and commands are in `backend-foundation.md`. `60adce8` fixes the parent's
+    pre-recovery inspection to use an escaped absolute `file:` URI with `mode=ro`; tests
+    prove write rejection, missing-file noncreation and special-character path handling.
+    Existing RSS numbers predate the inspection fix; no numerical equivalence is inferred.
+    **True physical journal peak remains blocked:** suitable filesystem-aware
+    allocation/free/reservation instrumentation is required. Faster polling or logical VFS
+    writes/truncates cannot satisfy this requirement and were not approved as replacements.
    **Standalone full-index recovery measured:**
    `BenchmarkFullIndexRecovery` covers 50,000/1,000,000 abandoned observations before
    and after directory construction, with completed-data preservation and index-integrity
@@ -368,11 +420,18 @@ extractors, thumbnails, and Wails remain deferred.
    exact/selective/broad search, second-page search, replica-filter no-match, content
    detail, location pages, and search → content → all locations. The small shared fixture
    verifies counts, identities and pagination. Twenty-iteration million-scale means were
-   1.438 ms for the complete four-request workflow, 1931 ms for broad first-page search,
+    1.438 ms for the complete four-request workflow, 1931 ms for broad first-page search,
    2979 ms for its second page, and 2582 ms for replica-filter no-match. These are warm
    serial means, not p95 or an acceptance decision. Filesystem-cold measurements,
    broader history-heavy workloads, approved budgets and optimization/acceptance of slow cases
-   remain open. See `backend-foundation.md` for fixture details and reproduction commands.
+    remain open. These are historical pre-optimization means. `201534d` indexes exact
+    pagination and validates anchors without rebuilding all candidates; `1383276` reuses
+    current snapshots and counts replicas only for eligible current observations. The final
+    serial million-current 20-iteration run measures 1.365 ms for the primary workflow,
+    1393/1435 ms for broad first/second pages and 0.076 ms for **impossible** disk bounds.
+    That shortcut is not evidence that general no-match searches are cheap: valid balanced
+    50,000-current history-heavy no-match database samples still take about 126–137 ms.
+    See `backend-foundation.md` for fixture details and reproduction commands.
    **History-heavy warm HTTP measurements complete:** `BenchmarkHTTPHistoryWorkflow` retains five
    snapshots per disk across three disks, with 50,000/1,000,000 total historical
    observations and 10,000/200,000 current observations. It measures current/history
@@ -397,7 +456,28 @@ extractors, thumbnails, and Wails remain deferred.
    and assertions are untimed; search indexing is excluded. These are warm serial
    means, not cold results, p95 or acceptance approval. Broader disk/history
    distributions, larger history-heavy comparisons and the other acceptance gaps
-   remain open. See `backend-foundation.md`.
+    remain open. See `backend-foundation.md`.
+    **Larger bounded directory history measured:** `c927983` adds 200,000 source files,
+    610,001 current / 3,050,005 historical observations across five disks and 25 snapshots.
+    Eight exploratory one-iteration cases passed: current/oldest blocked-log replicas take
+    2.635/3.386 seconds, with coverage 0.443–0.504 seconds across selections. Search indexing
+    is excluded; active-code timing is not pinned final-code, cold or p95 evidence.
+    **Balanced warm HTTP distribution matrix complete:** `372797e` covers 3/12 disks,
+    one/five snapshots and stable/changed/deleted identities at fixed current counts.
+    The final 200,000-current matrix (200,000/one million total historical observations)
+    ran serially at 20 iterations after the search optimizations. Current primary workflows
+    take 1.199–1.513 ms, history primary 1.252–2.920 ms; current broad/next pages range
+    268–490 ms and history broad/next 267–295 ms. Impossible disk-bound means near 0.08 ms
+    are not valid-bound no-match measurements. The earlier 50,000 matrix is exploratory.
+    **Verified catalog-cache-cold open-plus-query slice complete:** `84a27ca` closes SQLite,
+    syncs/evicts the catalog and verifies zero resident pages before each timed HTTP sample.
+    Runtime/client/server remain warm; catalog opening/recovery is inside timing. Initial
+    50,000/million samples precede the latest optimization. The final million run has zero
+    pre-open resident pages out of 242,233 each time: exact/selective requests take about
+    4.53 seconds and broad first/next about 8.28/8.29 seconds. These are three-sample means,
+    not standalone cold-query latency, whole-physical-filesystem/device coldness or p95.
+    Broader history-heavy cold evidence, agreed measurement boundaries and budgets remain
+    open. Propose an ADR for measurement semantics; do not create or approve it automatically.
 5. **Close handoff:** audit endpoint/primary-workflow contract coverage and OpenAPI examples,
    document integration setup (including same-origin serving or explicit development CORS),
    and rerun required correctness checks after any implementation changes. Record unresolved
