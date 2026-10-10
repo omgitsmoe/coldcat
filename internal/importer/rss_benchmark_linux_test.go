@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,8 @@ import (
 
 	"github.com/omgitsmoe/coldcat/internal/base"
 	"github.com/omgitsmoe/coldcat/internal/database"
+	"modernc.org/sqlite"
+	"modernc.org/sqlite/lib"
 )
 
 const importRSSChildEnv = "COLDCAT_IMPORT_RSS_CHILD"
@@ -191,11 +194,20 @@ func runImportRSSChild(ctx context.Context, request importRSSRequest) (importRSS
 	return sample, validateImportRSSResult(request, sample.result)
 }
 
+func openImportRSSCatalogReadOnly(path string) (*sql.DB, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	uri := url.URL{Scheme: "file", Path: absolute, RawQuery: "mode=ro"}
+	return sql.Open("sqlite", uri.String())
+}
+
 func checkImportRSSCatalogBeforeRecovery(
 	ctx context.Context, request importRSSRequest, result importRSSResult,
 ) error {
 	// Read-only inspection precedes application open so recovery cannot mask failed cleanup.
-	raw, err := sql.Open("sqlite", request.Catalog+"?mode=ro")
+	raw, err := openImportRSSCatalogReadOnly(request.Catalog)
 	if err != nil {
 		return err
 	}
@@ -313,6 +325,58 @@ func TestImportRSSUncleanCatalog(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "1 rows in snapshot") {
 			t.Fatalf("unclean snapshot accepted or recovered: %v", err)
 		}
+	}
+}
+
+func TestImportRSSCatalogReadOnly(t *testing.T) {
+	for _, name := range []string{"catalog.sqlite", "catalog ?#%&+é.sqlite"} {
+		t.Run(name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "dir ?#%&+é")
+			assertNoErr(t, os.Mkdir(dir, 0700))
+			path := filepath.Join(dir, name)
+			db, err := database.OpenContext(t.Context(), path)
+			assertNoErr(t, err)
+			t.Cleanup(func() { db.Close() })
+			assertNoErr(t, db.Close())
+			request := importRSSRequest{Catalog: path, Fail: true}
+			assertNoErr(t, checkImportRSSCatalogBeforeRecovery(t.Context(), request, importRSSResult{}))
+			raw, err := openImportRSSCatalogReadOnly(path)
+			assertNoErr(t, err)
+			t.Cleanup(func() { raw.Close() })
+			_, err = raw.ExecContext(t.Context(),
+				"INSERT INTO disk(label,capacity) VALUES('must-not-write',0)")
+			var sqliteErr *sqlite.Error
+			if !errors.As(err, &sqliteErr) || sqliteErr.Code() != sqlite3.SQLITE_READONLY {
+				t.Fatalf("inspection connection did not reject writes as read-only: %v", err)
+			}
+			var disks int
+			assertNoErr(t, raw.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM disk").Scan(&disks))
+			if disks != 0 {
+				t.Fatalf("inspection changed catalog: %d disks", disks)
+			}
+		})
+	}
+}
+
+func TestImportRSSInspectionDoesNotCreateCatalog(t *testing.T) {
+	for _, name := range []string{"missing.sqlite", "missing ?#%&+é.sqlite"} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, name)
+			request := importRSSRequest{Catalog: path, Fail: true}
+			err := checkImportRSSCatalogBeforeRecovery(t.Context(), request, importRSSResult{})
+			if err == nil {
+				t.Fatal("inspection of missing catalog succeeded")
+			}
+			if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("inspection created missing catalog: %v", err)
+			}
+			entries, err := os.ReadDir(dir)
+			assertNoErr(t, err)
+			if len(entries) != 0 {
+				t.Fatalf("inspection created unexpected files: %v", entries)
+			}
+		})
 	}
 }
 
