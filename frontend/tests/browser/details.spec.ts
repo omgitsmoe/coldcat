@@ -3,6 +3,24 @@ import { contentFixture, locationsFixture, observationFixture } from '../fixture
 import { searchFixture } from '../fixtures/api';
 
 async function ready(page: Page) {
+  await page.route('**/api/v1/contents?**', (r) =>
+    r.fulfill({
+      json: {
+        scope: 'current',
+        revision: '9007199254740993',
+        filters: {
+          disk_id: null,
+          directory: '',
+          replica_metric: 'disks',
+          other_replicas: null,
+          min_other_replicas: null,
+          max_other_replicas: null,
+        },
+        items: [],
+        next_cursor: null,
+      },
+    }),
+  );
   await page.route('**/healthz', (r) => r.fulfill({ json: { status: 'ready' } }));
   await page.route('**/api/v1/catalog', (r) =>
     r.fulfill({

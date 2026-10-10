@@ -7,6 +7,7 @@ const exposedReads = [
   '/healthz',
   '/api/v1/catalog',
   '/api/v1/search',
+  '/api/v1/contents',
   '/api/v1/contents/lookup',
   '/api/v1/contents/{id}',
   '/api/v1/contents/{id}/observations',
@@ -44,7 +45,7 @@ test.afterEach(async ({ page }) => {
 });
 
 test.afterAll(() => {
-  expect([...covered].sort(), 'successful browser requests for every F3–F6 exposed read').toEqual(
+  expect([...covered].sort(), 'successful browser requests for every exposed read').toEqual(
     [...exposedReads].sort(),
   );
 });

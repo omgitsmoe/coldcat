@@ -1,6 +1,6 @@
 # Coldcat frontend plan
 
-Status: F0–F7 and F11a core integration implemented. F8–F12/full F11a pending;
+Status: F0–F8 and F11a core integration implemented. F9–F12/full F11a pending;
 backend gate unresolved. This is not release acceptance closure.
 The first-usable-slice real-backend harness precedes F7/comparisons; see the
 [core integration interface and coverage](../frontend/README.md#real-backend-core-integration-f11a-core).
@@ -584,6 +584,8 @@ full F11a revision/reconnect and later feature integration remain pending.
 
 ### F8 — distinct-content/redundancy explorer
 
+- **Implemented interface:** `/contents` composes the bounded distinct-content explorer and
+  F4 hash lookup; see the [F8 handoff](../frontend/README.md#distinct-content-explorer-f8-handoff).
 - **Prerequisites:** F1–F2 and F4.
 - **Scope:** `/contents` list, hash-lookup entry point, membership filters, current/history,
   metric/bounds controls, and explicit redundancy presets.

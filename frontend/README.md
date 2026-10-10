@@ -1,7 +1,7 @@
 # Coldcat frontend
 
 The primary search workspace, content/location and observation details, hash lookup,
-disk/inventory pages and disk creation/editing, directory browsing/sizing, shell, request/page
+disk/inventory pages and disk creation/editing, distinct-content explorer, directory browsing/sizing, shell, request/page
 lifecycle, and wire/domain helpers are implemented.
 Comparisons and Go asset hosting remain separate packages. Backend acceptance
 remains open.
@@ -76,6 +76,7 @@ exposed read (run the full suite, not a filtered single test, for its coverage a
 | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /healthz`, `/api/v1/catalog`                            | Shell readiness through the proxy                                                                                                                                |
 | `GET /api/v1/search`                                         | Keyboard filename search, case-insensitive matching, exact short Unicode, directory membership, current/history and pagination                                   |
+| `GET /api/v1/contents`                                       | Core hash-entry navigation loads the explorer; separate F8 suite tests membership/count semantics and paging                                                     |
 | `GET /api/v1/contents/lookup`                                | Uppercase SHA-256 digest lookup through the actual form                                                                                                          |
 | `GET /api/v1/contents/{id}`                                  | Linked identity, distinct current disks/locations versus repeated history, zero/unknown metadata                                                                 |
 | `GET /api/v1/contents/{id}/observations`                     | Current/history locations and real cursor pagination; exactly two detail requests, no per-location observation fetches                                           |
@@ -90,7 +91,9 @@ comparisons or directories-only preloads, API errors and browser JS errors.
 The separate `tests/real/writes.spec.ts` uses the same disposable harness for browser-originated
 POST/PATCH, a real label conflict, exact large capacity, null clearing, persisted metadata refetch,
 and an unchanged inventory revision. It does not simulate uncertain writes by intercepting real API
-traffic. Full F11a still needs outage/reconciliation write integration, F8–F9 list/comparison
+traffic. The separate `tests/real/contents.spec.ts` covers F8 membership, alias deduplication,
+catalog-wide disks/locations, presets, historical-only zero-safe counts and real pagination.
+Full F11a still needs outage/reconciliation write integration, F9 comparison
 workflows, stop/import/restart revision and reconnect cases, and F10 built-host runs.
 F11b manual accessibility/responsive audits and F12 final integration checks remain separate.
 These correctness tests neither establish performance budgets nor close the unresolved backend gate.
@@ -169,6 +172,7 @@ Named adapters in `feature-requests.ts` supply concrete endpoint contracts:
 | ------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------ |
 | Search (F3)              | `searchPages(connection, SearchRoute)`                                       | none                                             |
 | Content/observation (F4) | `locationPages(connection, contentID, LocationRoute?)`                       | `contentDetail`, `observationDetail`             |
+| Distinct contents (F8)   | `contentsPages(connection, ContentsRoute?)`                                  | none                                             |
 | Disks/snapshots (F5)     | `diskPages(connection, limit?)`, `snapshotPages(connection, diskID, limit?)` | `diskDetail`, `snapshotDetail`                   |
 | Directory (F6)           | `directoryPages(connection, snapshotID, DirectoryRoute?)`                    | `directoryDetail(connection, snapshotID, path?)` |
 
@@ -295,8 +299,8 @@ F11b work.
   is explicitly unverified; reconnect/revision/metadata invalidation clears it. Feature retries
   are manual, not shell readiness retries. Plain traversal-class getters are projected into
   reactive paging flags in the subscription, so controls update after every page transition.
-- `/contents` currently hosts `HashLookup.svelte`, not the F8 content explorer. F8 should compose
-  this form with its list. `lookupInput(algorithm, digest)` and `algorithms` derive validation
+- `/contents` composes `HashLookup.svelte` with the F8 content explorer.
+  `lookupInput(algorithm, digest)` and `algorithms` derive validation
   from generated descriptors, preserve input case, and search history explicitly. Supported
   digest lengths remain server-owned because OpenAPI specifies only hex byte pairs. The form
   separates known, valid 404, malformed/error and obsolete-request states; a known result has
@@ -398,6 +402,29 @@ is still unresolved.
   uncertain POST/PATCH and manual pagination, post-write read failure, retained search invalidation
   and stale-context draft rebasing. The bounded real write test above complements, but does not
   close, full F11a restart/outage/reconciliation or F11b accessibility audits.
+
+### Distinct-content explorer (F8 handoff)
+
+- `/contents` uses `contentsPages` and F2's ten-page bounded traversal, with explicit later-page
+  navigation, retained-page retry, stale reset and disconnect/reconnect invalidation. No per-row
+  detail fetch, automatic all-page loading, bulk action or export is added. Hash lookup remains
+  the independent F4 form; content anchors open ordinary current-location detail links.
+- `ContentsRoute`, `parseContents`, `validateContents` and `contentsURL` preserve literal disk/
+  directory membership (including explicit empty root), scope, metric, bounds and page limit.
+  Invalid bookmarks retain their submitted query visibly and do not dispatch. Draft changes retire
+  pages immediately; explicit Apply creates URL history. Cursors remain session-only.
+- Other disks is the default; locations is explicit. Exact/range bounds are mutually exclusive
+  and current-only. History switching never silently clears bounds. Presets set visible current/
+  disks values (exact zero or minimum one) and require Apply. Clear bounds is explicit.
+- Rows are distinct algorithm/hash identities, not aliases or repeated observations. Current and
+  scoped distinct disks/disk-paths are labeled separately from all-history observation counts.
+  Membership never narrows displayed counts; content-level `otherCount` keeps historical-only
+  zeros nonnegative, using exact BigInt arithmetic. Null size differs from known zero.
+- Unit/mocked browser coverage includes invalid combinations, huge decimals, literal membership,
+  canceled late requests, bounded later pages, page errors and stale restart. The bounded real
+  test uses only the existing disposable imported-catalog harness. Full F11a still owns stop/
+  import/restart revision and reconnect acceptance; F11b owns manual accessibility/responsiveness.
+  The backend gate remains unresolved.
 
 Start the backend separately with a disposable catalog, following
 [backend integration](../doc/backend-integration.md). Stop it before CLI catalog operations;

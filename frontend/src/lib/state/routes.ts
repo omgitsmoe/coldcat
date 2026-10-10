@@ -4,10 +4,50 @@ import { contract, schemas } from '../api/generated/contract';
 import { assertSchema } from '../api/decode';
 import { encodeQuery } from '../api/query';
 import { literalText, validatePath } from '../format/path';
+import { decimal } from '../format/decimal';
 
 export type SearchRoute = Omit<Query<'GET /api/v1/search'>, 'cursor'>;
 export type DirectoryRoute = Omit<Query<'GET /api/v1/snapshots/{id}/directory/entries'>, 'cursor'>;
 export type LocationRoute = Omit<Query<'GET /api/v1/contents/{id}/observations'>, 'cursor'>;
+export type ContentsRoute = Omit<Query<'GET /api/v1/contents'>, 'cursor'>;
+
+export function validateContents(query: ContentsRoute): void {
+  withoutCursor(query);
+  encodeQuery(contract['GET /api/v1/contents'], query);
+  if (query.directory !== undefined) {
+    validatePath(query.directory);
+    if (!query.disk_id) throw new Error('Directory membership requires a disk ID.');
+  }
+  const bounds = [query.other_replicas, query.min_other_replicas, query.max_other_replicas];
+  if (query.scope === 'history' && bounds.some((value) => value !== undefined))
+    throw new Error(
+      'Replica bounds require current scope. Clear bounds explicitly to view history.',
+    );
+  if (query.other_replicas !== undefined && bounds.slice(1).some((value) => value !== undefined))
+    throw new Error('Exact bounds cannot combine with range bounds.');
+  if (
+    query.min_other_replicas !== undefined &&
+    query.max_other_replicas !== undefined &&
+    decimal(query.min_other_replicas) > decimal(query.max_other_replicas)
+  )
+    throw new Error('Minimum exceeds maximum.');
+}
+
+export function parseContents(params: URLSearchParams): ContentsRoute {
+  const query: ContentsRoute = {
+    scope: 'current',
+    replica_metric: 'disks',
+    limit: 50,
+    ...parseQuery('GET /api/v1/contents', params),
+  };
+  validateContents(query);
+  return query;
+}
+
+export function contentsURL(query: ContentsRoute): string {
+  validateContents(query);
+  return '/contents' + encodeQuery(contract['GET /api/v1/contents'], query);
+}
 export interface DetailContext {
   returnTo?: string;
   observation?: string;

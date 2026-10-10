@@ -4,8 +4,8 @@ import { encodeQuery } from '../api/query';
 import type { Connection } from './connection';
 import { RequestSlot } from './request';
 import { CursorTraversal } from './traversal';
-import type { SearchRoute, LocationRoute, DirectoryRoute } from './routes';
-import { withoutCursor } from './routes';
+import type { SearchRoute, LocationRoute, DirectoryRoute, ContentsRoute } from './routes';
+import { withoutCursor, validateContents } from './routes';
 
 function bindTraversal<T, P extends { items: T[]; next_cursor: string | null }>(
   connection: Connection,
@@ -61,6 +61,21 @@ export function locationPages(connection: Connection, id: string, query: Locatio
       Result<'GET /api/v1/contents/{id}/observations'>
     >({ endpoint: 'content-observations', resource: id, query: encoded }, (cursor, signal) =>
       connection.client.contentObservations(id, { ...input, cursor }, signal),
+    ),
+  );
+}
+
+export function contentsPages(connection: Connection, query: ContentsRoute = {}) {
+  const input: ContentsRoute = { scope: 'current', replica_metric: 'disks', limit: 50, ...query };
+  validateContents(input);
+  const encoded = encodeQuery(contract['GET /api/v1/contents'], input);
+  return bindTraversal(
+    connection,
+    new CursorTraversal<
+      Result<'GET /api/v1/contents'>['items'][number],
+      Result<'GET /api/v1/contents'>
+    >({ endpoint: 'contents', resource: '', query: encoded }, (cursor, signal) =>
+      connection.client.contents({ ...input, cursor }, signal),
     ),
   );
 }
