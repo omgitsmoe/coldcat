@@ -163,17 +163,23 @@ Additional completed slices are distinct from acceptance:
 
 Remaining gates are explicit: million-input operational distribution runs were rejected twice
 by tool-level permission despite user authorization and sufficient reported disk space, so no
-results exist. Broader import/distribution-specific RSS, transaction and journal evidence,
-publication-failure timing, million-source directory history, broader cold evidence and p95
-remain open. **True physical peak journal storage is blocked on a suitable filesystem and
-validated allocation/free/reservation instrumentation**; logical VFS growth or faster apparent
+results exist. Publication-failure timing and distribution-specific RSS/transaction/journal
+evidence remain unmeasured; select required operational evidence for the supported scope.
+Larger-than-measured history scenarios depend on selecting supported limits, not a mandatory
+million-source history run. Cold acceptance boundaries and latency metrics need agreement;
+HTTP p95 is unmeasured, not an unconditional new criterion. **True physical peak journal
+storage is blocked on a suitable filesystem and validated allocation/free/reservation
+instrumentation**; logical VFS growth or faster apparent
 file-size polling is not an approved replacement. Sampled heap/journal and transaction API
 durations do not prove physical storage bounds. Propose an ADR for measurement semantics
 before accepting a changed accounting boundary; none is created or approved here.
 
 Observation/distinct-path limits and latency/storage/import/recovery budgets still require
 explicit user approval. Broad search, valid replica-filter no-match and large filtered directory
-comparisons retain slow cases to improve or explicitly accept. The final `go test ./...`,
-`go test -race ./...` and `go vet ./...` checks after the latest implementation are pending
-with the parent session; this documentation does not claim they passed. No frontend work or
-final backend acceptance is authorized by completing these measurement slices.
+comparisons retain slow cases to improve or explicitly accept. Final `go test ./...`,
+`go vet ./...` and `go test -race -p 1 ./... -timeout=30m` passed after the latest
+implementation; the parent ran the full race suite only once at end of work. Package timings
+are in [final implementation checks](backend-foundation.md#final-implementation-checks).
+See the [remaining decisions and blockers](coldcat-backend-api.md#remaining-decisions-and-blockers)
+for the bounded closure list. Operational acceptance stays Partial; no frontend work or
+final backend acceptance is authorized by these successful checks.

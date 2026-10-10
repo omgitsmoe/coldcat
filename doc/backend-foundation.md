@@ -439,7 +439,8 @@ including fixture creation and warm-up. Filtered replicas still take about 11.5 
 and cumulatively allocate about 2.10 GB per call. `B/op` is not peak live heap or RSS;
 bounded streaming does not make driver allocation traffic constant. Arbitrary filtered
 candidates remain exhaustively scanned and matching manifests exactly verified.
-Cold/HTTP latency, p95, larger candidate distributions and budget approval remain open.
+Cold/HTTP acceptance scope, latency metrics and budgets need agreement; these runs do not
+measure HTTP p95. Additional candidate distributions depend on the supported limits selected.
 Use the existing filtered-comparison commands above with `-timeout=30m`.
 
 #### History-heavy directory comparisons
@@ -500,8 +501,9 @@ other distributions. Historical-source replica calls are more expensive and allo
 more because they also verify the current same-disk tree. Blocked-log replicas still
 take about 2.0–2.46 seconds, so slow cases remain explicit. These warm serial means
 are not filesystem-cold latency, p95, statistical significance or approved budgets.
-Larger candidate-directory counts, changed/deleted-content history distributions,
-million-source-file history measurements and the final backend gate remain open.
+The larger bounded history slice below is complete. Larger candidate-directory counts or
+changed/deleted-content history scenarios require selecting supported limits; the original
+plan does not mandate million-source retained-history measurements. The final gate remains open.
 
 `go test ./...`, `go vet ./...`, and the final focused
 `go test -race -p 1 ./internal/database -run '^TestDirectory(History)?Comparison' -timeout=30m`
@@ -534,8 +536,9 @@ The environment is Linux amd64 / Ryzen 5 9600X, Go 1.27.1, GOMAXPROCS=4.
 
 The original history fixture semantics, current-only destinations and extra same-disk
 replica of an oldest source still apply. Search indexing is excluded. This completes
-the larger bounded warm slice, not million-source history comparisons, broader/deeper
-candidate distributions, cold evidence, p95 or performance acceptance.
+the larger bounded warm slice, not performance acceptance. Larger-than-measured history and
+broader/deeper candidates depend on selected supported limits. Cold acceptance scope and
+latency metrics need agreement; these samples are not HTTP p95 evidence.
 
 #### Initial directory build and browsing measurements
 
@@ -910,8 +913,9 @@ Current exact means span 0.726490–0.784230 ms and current primary workflows
 1.198736–1.512690 ms; history exact spans 0.778201–0.926798 ms and history primary
 workflows 1.251517–2.919731 ms. The no-match row deliberately uses impossible disk
 bounds, not valid bound predicates that happen to find nothing. These warm serial
-means complete this bounded distribution matrix, not p95, broader cold/history
-distributions, representative user inventories or acceptance approval.
+means complete this bounded distribution matrix, not representative user inventories or
+acceptance approval. Additional cold/history scenarios depend on selected supported limits;
+HTTP p95 is unmeasured and the acceptance latency metric must be agreed.
 
 ### Verified catalog-page-cache-cold HTTP open plus query
 
@@ -954,9 +958,10 @@ go test ./internal/httpapi -run '^$' \
 | Locations next page | 4.513421868 |
 
 Opening/recovery dominates narrow requests. Do not subtract a warm open estimate and
-call the remainder measured standalone cold latency. Broader history-heavy cold runs,
-standalone query/HTTP cold evidence under an agreed boundary, p95 and approved budgets
-remain open. An ADR defining accepted cold/physical-storage measurement semantics is
+call the remainder measured standalone cold latency. Required additional history-heavy cold
+runs and standalone query/HTTP evidence depend on the agreed supported scope and cold boundary.
+HTTP p95 is unmeasured; the latency metric and budgets need approval, not an unconditional
+new percentile task. An ADR defining accepted cold/physical-storage measurement semantics is
 proposed, not created or approved here.
 
 ## Filename and path search
@@ -1583,6 +1588,22 @@ block before running. Broader import RSS/journal/transaction distributions, phys
 peak storage, cold measurements and approved budgets remain open.
 
 ## Verification and follow-on work
+
+### Final implementation checks
+
+After the latest implementation, the parent reported all required checks passed:
+
+- `go test ./...`: importer 19.081 seconds; other tested packages cached.
+- `go vet ./...`: passed with no output.
+- `go test -race -p 1 ./... -timeout=30m`: cmd/coldcat 54.532 seconds, app 8.673 seconds,
+  database 43.200 seconds, httpapi 33.556 seconds, importer 653.412 seconds;
+  scripts package has no tests. This was the only end-of-work full race run.
+
+This documentation follow-up runs diff checks only, not another race suite. Correctness
+verification is complete, while operational acceptance remains Partial. The concrete
+[remaining decisions and blockers](coldcat-backend-api.md#remaining-decisions-and-blockers)
+are supported limits/budgets, cold boundary/latency metric, permission-blocked million-input
+distributions, true physical journal-peak instrumentation and final gate approval.
 
 ### Content lists and redundancy
 

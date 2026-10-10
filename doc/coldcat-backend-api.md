@@ -273,8 +273,9 @@ For each milestone, first write behavioral acceptance tests, then implement the 
   distributions cover 3/12 disks and one/five snapshots at 50,000/200,000 current observations;
   verified catalog-page-cache-cold HTTP open-plus-query covers 50,000/1,000,000 current
   observations. This is not standalone cold-query or whole-physical-filesystem cold evidence.
-  Broader cold/history, p95, million-input operational import distributions and true physical
-  journal peak remain open. Removed fuzzy measurements are historical context only.
+  Cold/history acceptance scope still needs agreement; HTTP p95 is unmeasured and the
+  required latency metric must be selected. Million-input operational import distributions
+  and true physical journal peak remain open. Removed fuzzy measurements are historical only.
 - [x] Check query plans for latest-snapshot selection and observation content/snapshot/path lookups (`TestQueryIndexes`).
 - [x] Check exact hash lookup and content observation-page indexes; add focused 50,000-observation warm-query benchmarks for hash lookup and first/deep pages.
 - [x] Check content-list keyset and observation query indexes. Benchmark current/history first/deep pages, disk/directory membership and both redundancy metrics at 50,000 and 1,000,000 observations; document the catalog-wide cost of no-match bounds in `backend-foundation.md`. An agreed latency budget and cold-query measurements remain pending.
@@ -283,14 +284,15 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 - [x] Test HTTP pagination across unchanged reopen/restart and successful offline imports; failed imports preserve cursors, and server startup recovers seeded interrupted state before readiness. Child-process interrupted imports additionally verify application pagination after recovery and invalidation after subsequent publication.
 - [x] Required tests/race/vet passed for the earlier completed foundation with Go 1.27.1;
   packages/tests also cross-compiled for Windows amd64 and macOS arm64 (runtime tests on Linux).
-- [ ] Rerun final `go test ./...`, `go test -race ./...` and `go vet ./...` after the latest
-  implementation changes. Slice-level normal tests/vet passed; the parent's final required
-  checks, especially the once-at-end race run, are pending and not claimed by this doc closure.
+- [x] Final required checks passed after the latest implementation: `go test ./...`,
+  `go vet ./...` and `go test -race -p 1 ./... -timeout=30m`. The parent ran the full race
+  suite only once at end of work; results are recorded in `backend-foundation.md`.
 - [ ] **Partial:** focused content/search/directory/import benchmarks and both committed
   directory comparison optimizations measured. Filtered five-disk comparisons cover
   50,000/million source files; bounded history covers 50,000/200,000 source files with up to
-  25 snapshots and 3,050,005 historical observations. Broader/deeper candidate distributions,
-  million-source history, broader cold evidence, p95 and approved budgets remain.
+  25 snapshots and 3,050,005 historical observations. Larger-than-measured history or
+  broader/deeper candidate scenarios require selecting supported limits, not an unconditional
+  million-source history run. Cold acceptance scope, latency metrics and budgets need agreement.
   No root `justfile` exists; adopt its commands if introduced. See `backend-foundation.md`.
 - [x] Implement and measure cursor-seek and reusable-stream directory comparison optimizations,
   preserving exact verification, symmetric filters, canonical encoding and bounded source reads.
@@ -308,6 +310,26 @@ For each milestone, first write behavioral acceptance tests, then implement the 
   accounting or sampled apparent file lengths are not an approved replacement.
 - [x] Document schema initialization, pre-0.1 reset policy, import publication/cleanup/recovery, locking, and query semantics in `doc/backend-foundation.md`.
 - [ ] Final backend gate: the principal workflow and every planned endpoint are exercised by contract tests; measured search behavior is acceptable; OpenAPI examples are usable by a future frontend.
+
+### Remaining decisions and blockers
+
+1. **Approve supported limits and budgets:** choose observation/distinct-path counts,
+   disk/history/tree scenarios and latency/storage/import/recovery limits; explicitly accept
+   or improve the documented broad-search, valid no-match and filtered-comparison costs.
+   Larger-than-measured history cases are conditional on that scope, not a new mandatory scale.
+2. **Agree cold boundary and latency metric:** verified catalog-page-cache-cold open-plus-query
+   evidence exists; standalone query and whole-filesystem coldness are not established.
+   Choose which additional cold/history evidence is needed within the supported scope.
+   HTTP p95 is unmeasured, not an unconditional criterion added to the original plan.
+3. **Resolve the million-input import permission blocker:** two tool denials left no operational
+   distribution results. No retry is authorized here. Publication-failure timing and
+   distribution-specific RSS/transaction/journal evidence are unmeasured; select required
+   operational measurements for the approved scope rather than expanding workloads indefinitely.
+4. **Provide physical journal-peak instrumentation:** this requirement remains deliberately
+   blocked on a suitable filesystem and validated physical allocation accounting, with no
+   approved logical/polling substitute. Operational acceptance stays Partial.
+5. **Approve the final backend gate** after these decisions/evidence are resolved. Contract
+   handoff and final correctness checks are complete; they do not authorize frontend work.
 
 ### Active acceptance sequence
 
@@ -454,9 +476,9 @@ extractors, thumbnails, and Wails remain deferred.
    means are 576/999 ms for current/oldest unfiltered replicas, 2003/2459 ms for
    blocked-log replicas, and 372–429 ms for coverage. Fixture construction, warm-up
    and assertions are untimed; search indexing is excluded. These are warm serial
-   means, not cold results, p95 or acceptance approval. Broader disk/history
-   distributions, larger history-heavy comparisons and the other acceptance gaps
-    remain open. See `backend-foundation.md`.
+    means, not cold results, p95 or acceptance approval. The larger bounded warm history
+    slice below is complete; scenarios beyond measured limits require selecting supported
+    scope rather than imposing a million-source history run. See `backend-foundation.md`.
     **Larger bounded directory history measured:** `c927983` adds 200,000 source files,
     610,001 current / 3,050,005 historical observations across five disks and 25 snapshots.
     Eight exploratory one-iteration cases passed: current/oldest blocked-log replicas take
@@ -476,8 +498,9 @@ extractors, thumbnails, and Wails remain deferred.
     pre-open resident pages out of 242,233 each time: exact/selective requests take about
     4.53 seconds and broad first/next about 8.28/8.29 seconds. These are three-sample means,
     not standalone cold-query latency, whole-physical-filesystem/device coldness or p95.
-    Broader history-heavy cold evidence, agreed measurement boundaries and budgets remain
-    open. Propose an ADR for measurement semantics; do not create or approve it automatically.
+    Required additional history-heavy cold evidence, measurement boundaries, latency metrics
+    and budgets need agreement; HTTP p95 is unmeasured, not a new unconditional task.
+    Propose an ADR for measurement semantics; do not create or approve it automatically.
 5. **Close handoff:** audit endpoint/primary-workflow contract coverage and OpenAPI examples,
    document integration setup (including same-origin serving or explicit development CORS),
    and rerun required correctness checks after any implementation changes. Record unresolved
