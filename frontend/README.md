@@ -18,10 +18,14 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Linux also needs Playwright's Chromium system libraries. On this host browser launch fails
-because `libnspr4.so` is absent. With system-install approval, provision them using
-`npx playwright install-deps chromium`, then rerun `npm run test:e2e`; installing the browser
-alone does not supply system libraries. Do not treat a launch failure as a browser pass.
+Linux also needs Playwright's Chromium system libraries. They are available in the current
+image: project-local `npm ci`, `npx playwright install chromium`, and `npm run test:e2e`
+passed (2 smoke tests). No global browser or executable override was needed.
+Earlier launches failed on missing `libnspr4.so`; an authorized system dependency install
+failed at `su` authentication. Those are historical results, not a current blocker.
+For a different image without system libraries, provision them with the authorized
+`npx playwright install-deps chromium` using appropriate system privileges. Installing the
+browser alone does not supply system libraries; a launch failure is not a browser pass.
 Chromium is the bootstrap test target, not a finalized supported-browser policy.
 
 `test:unit` runs Vitest/jsdom unit/component tests. `test:proxy` owns a disposable loopback

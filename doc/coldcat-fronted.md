@@ -1,6 +1,6 @@
 # Coldcat frontend plan
 
-Status: F0 implemented; browser acceptance blocked on host dependencies. Backend gate unresolved.
+Status: F0 complete, including browser smoke. F1–F12 pending; backend gate unresolved.
 
 ## Implementation approvals and package progress
 
@@ -31,11 +31,17 @@ F1–F12 remain pending. API type generation/drift scripts belong to F1.
 - Passed: `npm ci` (audit: zero vulnerabilities), `npm run check` (zero errors/warnings),
   `npm run lint`, `npm run test:unit` (7 tests), `npm run test:proxy` (1 integration test),
   and `npm run build`. Proxy refusal returns a real 502, not the SPA shell or mock data.
-- `npx playwright install chromium` succeeded. `npm run test:e2e` built successfully but
-  both smoke cases failed before assertions because Chromium lacks host `libnspr4.so`.
-  **Required blocker:** approve/provision Chromium OS dependencies (normally
-  `npx playwright install-deps chromium`), then rerun the browser suite. F0 acceptance is
-  not complete until smoke passes; no false browser pass or backend approval is recorded.
+- Browser blocker resolved in the current image: after the user reported preinstalled
+  system dependencies, `npm ci` and project-local `npx playwright install chromium`
+  succeeded, followed by `npm run test:e2e` (build and **2 passing Chromium smoke tests**).
+  Entry shell, nested reload/client not-found boundary, and visible backend failure are
+  exercised. No global browser, executable override, or production fallback was needed.
+  Strict checks (zero errors/warnings), lint, 7 unit/component tests, and the proxy
+  integration test passed again. F0 acceptance is complete; F1 was not started.
+- Historical attempts failed before browser assertions on missing `libnspr4.so`; the
+  authorized `npx playwright install-deps chromium` also failed at `su` authentication.
+  Those results are superseded by the passing project-local run in the current image;
+  no privileged OS dependency reinstall or bootstrap code change was needed this time.
 - [ADR 0002](adr/0002-static-browser-frontend.md) records the authorized architecture.
   [Frontend README](../frontend/README.md) defines scripts, proxy ownership and built-route
   contract. Static test host is not Go hosting or a production dispatch implementation.
@@ -47,7 +53,7 @@ F1–F12 remain pending. API type generation/drift scripts belong to F1.
   Shared shell currently checks only health once with manual retry; replace its temporary
   connection lifecycle in F2. No feature routes, search preference, tables or Go assets yet.
   Manual screen-reader audits and finalized browser/performance targets are deferred to
-  F11b/F12, not claimed as passed here. Resolve browser host blocker before declaring F0 done.
+   F11b/F12, not claimed as passed here. F0 has no remaining acceptance blocker.
 
 ## 1. Goal, scope, and release boundaries
 
