@@ -1,0 +1,42 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #e5eaf0;
+  background: #161b22;
+  line-height: 1.5;
+}
+body {
+  margin: 0;
+}
+header,
+main {
+  padding: 1rem 1.5rem;
+}
+header {
+  border-bottom: 1px solid #667080;
+}
+a {
+  color: #a5d4ff;
+}
+.brand {
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+button {
+  font: inherit;
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+}
+:focus-visible {
+  outline: 3px solid #ffcb69;
+  outline-offset: 3px;
+}
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -10rem;
+}
+.skip-link:focus {
+  top: 0.5rem;
+  background: #161b22;
+  padding: 0.5rem;
+}

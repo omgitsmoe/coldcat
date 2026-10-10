@@ -1,6 +1,53 @@
 # Coldcat frontend plan
 
-Status: proposed; no frontend implementation or backend performance acceptance is implied.
+Status: F0 implemented; browser acceptance blocked on host dependencies. Backend gate unresolved.
+
+## Implementation approvals and package progress
+
+On 2026-10-10 the user authorized frontend development in parallel with the unresolved
+backend gate, approved the full F0–F12 initial scope, npm, SvelteKit static SPA, same-origin
+Go hosting with an explicit asset directory, and desktop-only disableable type-to-search
+enabled by default. Creating the architecture ADR is explicitly approved. These approvals
+do not close or waive the backend gate.
+
+### F0 focused execution plan
+
+1. Record the architecture decision and static nested-route hosting contract.
+2. Write unit, component, and browser smoke behavior tests before implementation.
+3. Bootstrap pinned dependencies/engines/lockfile, strict checks/lint, and minimal shell.
+4. Verify clean install, checks, build, loopback API proxy, visible backend failure, and
+   built nested-route smoke; record actual evidence and any blockers.
+5. Commit only F0 files and hand off to F1; no feature UI or Go asset hosting in this package.
+
+F1–F12 remain pending. API type generation/drift scripts belong to F1.
+
+### F0 evidence and handoff (2026-10-10)
+
+- Tests written before implementation: proxy boundary validation, shell readiness/failure/
+  manual retry, built entry/nested reload and visible backend failure smoke.
+- Pinned Node 24.21.0/npm 11.19.0, exact dependencies and npm lockfile. Current stable
+  SvelteKit 3.0.1 uses inline `sveltekit(...)` Vite configuration and `$app/tsconfig`;
+  TypeScript 6.0.3 satisfies its peer range (latest TypeScript 7 does not).
+- Passed: `npm ci` (audit: zero vulnerabilities), `npm run check` (zero errors/warnings),
+  `npm run lint`, `npm run test:unit` (7 tests), `npm run test:proxy` (1 integration test),
+  and `npm run build`. Proxy refusal returns a real 502, not the SPA shell or mock data.
+- `npx playwright install chromium` succeeded. `npm run test:e2e` built successfully but
+  both smoke cases failed before assertions because Chromium lacks host `libnspr4.so`.
+  **Required blocker:** approve/provision Chromium OS dependencies (normally
+  `npx playwright install-deps chromium`), then rerun the browser suite. F0 acceptance is
+  not complete until smoke passes; no false browser pass or backend approval is recorded.
+- [ADR 0002](adr/0002-static-browser-frontend.md) records the authorized architecture.
+  [Frontend README](../frontend/README.md) defines scripts, proxy ownership and built-route
+  contract. Static test host is not Go hosting or a production dispatch implementation.
+- Changed scope: `frontend/`, this progress document, ADR 0002. Root untracked `AGENTS.md`
+  received only brief verified-command guidance from the permitted documentation subagent;
+  leave it untracked to avoid committing unrelated preexisting user content. Workspace
+  catalogs and benchmark directory remain untouched. No Go checks/benchmarks were run.
+- F1 handoff: implement generation/drift scripts, wire client and numeric/domain helpers.
+  Shared shell currently checks only health once with manual retry; replace its temporary
+  connection lifecycle in F2. No feature routes, search preference, tables or Go assets yet.
+  Manual screen-reader audits and finalized browser/performance targets are deferred to
+  F11b/F12, not claimed as passed here. Resolve browser host blocker before declaring F0 done.
 
 ## 1. Goal, scope, and release boundaries
 
@@ -25,10 +72,9 @@ The primary workflow is:
 - **Deferred:** UI imports, snapshot diffs, thumbnails, extraction, jobs, Wails, host file
   opening, downloads, authentication, multi-catalog switching, and Internet deployment.
 
-This user-requested plan supersedes the older backend document's prohibition on frontend
-planning only. It does not approve the remaining backend gate or authorize implementation.
-Before implementation, explicitly approve/waive that gate or authorize frontend development
-in parallel with it. Do not silently mark backend performance tasks complete.
+The explicit implementation approval recorded above supersedes the older backend document's
+frontend prohibition. Development proceeds in parallel with the unresolved backend gate;
+do not silently mark backend performance tasks complete.
 
 Canonical references:
 
@@ -652,8 +698,8 @@ Only the integration owner edits shared registrations/configuration during paral
 
 ## 9. Implementation commands and gates
 
-No frontend package exists today. Establish these scripts during F0 rather than documenting
-them as already working:
+The frontend package now establishes the F0 scripts below; generation/drift scripts remain
+F1 work. Actual execution evidence and the browser host blocker are recorded above:
 
 - `npm ci`: reproducible installation in `frontend/`.
 - `npm run dev`: dev server with fixed API/readiness proxy.
