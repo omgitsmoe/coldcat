@@ -1706,6 +1706,80 @@ is the next undiagnosed completed failure; history late failure remains unmeasur
 or transactional-cleanup policy change requires a proposed ADR covering the decision, context,
 alternatives and consequences, and user approval before implementation; none was made here.
 
+#### Cleanup profiling without a policy change
+
+The next bounded investigation adds two test-only profiling fixtures. Neither changes
+production cleanup, triggers, constraints, migrations, or the 30-second deadline:
+
+- `BenchmarkObservationCleanupRollback` seeds two generation-prefixed inventories in
+  5,000-row transactions with 500 shared contents, builds/publishes the first snapshot,
+  then times the actual observation DELETE and transaction rollback for the second.
+  The second snapshot has no directories, matching the late-parse-failure stage.
+  Post-timing checks verify observation/search counts and external-content FTS integrity.
+- `BenchmarkDistributionCleanup` uses the actual duplicate/shared distribution inputs
+  and production importer. A test-only abort trigger retains the failed snapshot;
+  after dropping it, the benchmark profiles `CleanupImport`, reopens normally to clear
+  the intentionally poisoned handle, and runs the existing completed-data, current-search,
+  directory, staging, foreign-key and FTS assertions. Fixture setup and validation are
+  untimed. Its context is the benchmark context, not the importer's cleanup deadline:
+  this diagnostic measures completion cost and cannot establish deadline compliance.
+
+Both label timed work `phase=cleanup`, so CPU profiles can exclude expensive setup:
+
+```sh
+go test ./internal/importer -run '^$' \
+  -bench '^BenchmarkDistributionCleanup/50000$' -benchtime=1x \
+  -cpuprofile=/tmp/opencode/cleanup.cpu -outputdir=/tmp/opencode -timeout=30m
+go tool pprof -top -relative_percentages -tagfocus=phase=cleanup \
+  /tmp/opencode/cleanup.cpu
+```
+
+On 2026-10-10, the isolated 50,000-row observation DELETE/rollback took 0.476 seconds.
+Exploratory million-row DELETE/rollback measurements took 14.437 seconds with one seed
+transaction per snapshot and 15.184 seconds with 5,000-row seed transactions. These
+synthetic runs used ordinary Go temporary directories, not the production-shaped guarded
+million distribution command; they had no free-space watchdog. They do not reproduce the
+original deadline failure or cover its 10,000 distinct contents and production insertion
+details. The batched run sampled 11.91 cleanup CPU seconds: B-tree index positioning
+accounted for 4.50 cumulative seconds (37.8%), FTS deletion for 4.06 (34.1%), including
+2.16 seconds of FTS merge-level work; syscall samples accounted for 2.04 flat seconds.
+Cumulative percentages can overlap and must not be summed. Wall time includes I/O and
+rollback. This supports substantial indexed/FTS maintenance cost, not a demonstrated
+unindexed or quadratic scan.
+
+A disposable SQL experiment predeleted unsealed search paths owned exclusively by the
+failed snapshot, preserving shared paths, before deleting observations. It took 14.294
+seconds on the same batched synthetic shape versus 15.184 seconds for normal ordering
+(one sample each). The extra query/ordering was not retained: the small unpaired difference
+does not demonstrate a reliable solution to a 30-second failure, and no production-shaped
+million measurement validates it. Production already deletes directories first. Expanded
+plan tests also cover the exact search-delete-trigger lookup and both directory-parent
+membership cascades; all are indexed.
+
+The production-shaped 50,000-input cleanup benchmark passed full preservation and integrity
+checks at 0.505 seconds of isolated cleanup (3.050 seconds including setup/verification).
+Its first development run exposed the expected poisoned-handle read rejection; reopening
+after cleanup fixes the benchmark, not production. A guarded production-shaped million
+profile command was denied by tool permission before execution. No attempt bypassed that
+denial, no successful million matrix case was repeated, and no deep/history failure rerun
+was made. The original duplicate/shared observation deadline failure therefore remains
+unresolved; this investigation does not claim an optimization or deadline pass.
+
+Next: obtain execution approval for the guarded production-shaped cleanup profile and
+compare its trigger/FTS/journal costs with this synthetic result before selecting a SQL
+change. If meeting the deadline instead requires deferred indexing or non-atomic cleanup,
+propose an ADR with context, alternatives and consequences for approval; those are policy
+changes, not safe local optimizations. No ADR or new production subsystem was created.
+
+Focused normal cleanup/index/publication tests and distribution-fixture tests passed;
+the latter took 12.380 seconds. The final 50,000-row rollback benchmark, including its
+new rollback/FTS assertions, passed at 0.475 seconds. `go vet ./...` and `git diff --check`
+passed. One final serial focused race command covering cleanup/index/publication and
+distribution fixtures passed (database 1.567 seconds, importer 439.734 seconds); the
+full race suite was not repeated. CPU profiles remain local under `/tmp/opencode/`
+(`cleanup-million-batched.cpu`, `cleanup-million-bulk.cpu`,
+`production-cleanup-small.cpu`) and are not repository deliverables.
+
 ## Verification and follow-on work
 
 ### Final implementation checks

@@ -51,11 +51,19 @@ func TestImportCleanupReferenceIndexes(t *testing.T) {
 			"sqlite_autoindex_observation_1"},
 		{"shared path", "SELECT 1 FROM observation WHERE path=? AND snapshot_id!=?",
 			"observation_path_snapshot"},
+		{"search delete trigger", "SELECT 1 FROM observation WHERE path=?",
+			"observation_path_snapshot"},
 		{"search path", "DELETE FROM search_path WHERE path=? AND sealed=?",
 			"sqlite_autoindex_search_path_1"},
 		{"directory file cascade",
 			"SELECT 1 FROM directory_file WHERE observation_id=? AND snapshot_id=?",
 			"INTEGER PRIMARY KEY"},
+		{"directory membership cascade",
+			"SELECT 1 FROM directory_content WHERE snapshot_id=? AND directory_path=?",
+			"sqlite_autoindex_directory_content_1"},
+		{"directory parent cascade",
+			"SELECT 1 FROM directory_file WHERE snapshot_id=? AND directory_path=?",
+			"directory_file_parent"},
 	}
 	for _, query := range queries {
 		args := make([]any, strings.Count(query.query, "?"))
