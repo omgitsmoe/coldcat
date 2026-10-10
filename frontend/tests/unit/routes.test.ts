@@ -5,6 +5,7 @@ import {
   parseDirectory,
   parseDetailContext,
   parseContentRoute,
+  parseInventoryRoute,
   contentURL,
   searchURL,
   directoryBrowseURL,
@@ -13,6 +14,24 @@ import {
 } from '../../src/lib/state/routes';
 
 describe('literal route state', () => {
+  it('keeps inventory paging and validated detail context independent', () => {
+    const context = { observation: '9007199254740993', returnTo: '/?q=+literal%26' };
+    for (const build of [routes.disk, routes.snapshot]) {
+      const url = new URL(build('9007199254740993', context), 'http://local');
+      expect(parseDetailContext(url.searchParams)).toEqual(context);
+      url.searchParams.set('limit', '1');
+      expect(parseInventoryRoute(url.searchParams)).toEqual({ context, limit: 1 });
+    }
+    for (const query of [
+      'cursor=x',
+      'limit=0',
+      'limit=1&limit=2',
+      'return_to=%2Fdisks',
+      'scope=history',
+    ]) {
+      expect(() => parseInventoryRoute(new URLSearchParams(query))).toThrow();
+    }
+  });
   it('round trips defaults, literal whitespace, Unicode, empty roots and huge IDs', () => {
     const input = parseSearch(
       new URLSearchParams('q=+%E9%9B%AA%26%3F+&disk_id=9007199254740993&directory='),

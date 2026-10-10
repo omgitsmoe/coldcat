@@ -184,11 +184,11 @@ test('observation detail uses supplied other counts, exact date meanings and lit
   );
   await expect(page.getByRole('link', { name: 'Inventory 1' })).toHaveAttribute(
     'href',
-    '/snapshots/1',
+    '/snapshots/1?return_to=%2F%3Fq%3Dreport&observation=9007199254740993',
   );
   await expect(page.getByRole('link', { name: 'Disk <archive>' })).toHaveAttribute(
     'href',
-    '/disks/1',
+    '/disks/1?return_to=%2F%3Fq%3Dreport&observation=9007199254740993',
   );
   await expect(page.getByRole('link', { name: 'Content 1' })).toHaveAttribute(
     'href',

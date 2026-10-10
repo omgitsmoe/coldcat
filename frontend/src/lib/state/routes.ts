@@ -97,6 +97,15 @@ export function parsePageLimit(params: URLSearchParams): { limit: number } {
   return { limit: 50, ...parseQuery('GET /api/v1/disks', params) };
 }
 
+export function parseInventoryRoute(params: URLSearchParams) {
+  const context = new URLSearchParams();
+  const paging = new URLSearchParams();
+  for (const [name, value] of params) {
+    (['return_to', 'observation'].includes(name) ? context : paging).append(name, value);
+  }
+  return { context: parseDetailContext(context), ...parsePageLimit(paging) };
+}
+
 export function parseContentRoute(params: URLSearchParams) {
   const context = new URLSearchParams();
   const locations = new URLSearchParams();
@@ -174,8 +183,9 @@ export const routes = {
   content: (value: string, context?: DetailContext) => detailURL(`/contents/${id(value)}`, context),
   observation: (value: string, context?: DetailContext) =>
     detailURL(`/observations/${id(value)}`, context),
-  disk: (value: string) => `/disks/${id(value)}`,
-  snapshot: (value: string) => `/snapshots/${id(value)}`,
+  disk: (value: string, context?: DetailContext) => detailURL(`/disks/${id(value)}`, context),
+  snapshot: (value: string, context?: DetailContext) =>
+    detailURL(`/snapshots/${id(value)}`, context),
 } as const;
 
 export function directoryBrowseURL(snapshot: string, query: DirectoryRoute): string {

@@ -1,8 +1,9 @@
 # Coldcat frontend
 
-The primary search workspace, content/location and observation details, hash lookup, shell,
-request/page lifecycle, and wire/domain helpers are implemented. Disk/directory browsing and
-Go asset hosting remain separate packages. Backend acceptance remains open.
+The primary search workspace, content/location and observation details, hash lookup, read-only
+disk/inventory pages, shell, request/page lifecycle, and wire/domain helpers are implemented.
+Directory browsing, disk writes and Go asset hosting remain separate packages. Backend acceptance
+remains open.
 Architecture: [ADR 0002](../doc/adr/0002-static-browser-frontend.md).
 
 ## Toolchain and commands
@@ -166,7 +167,9 @@ their feature routes exist; the shell does not register placeholder pages for fu
   observation routes. `DetailContext` has `returnTo` and selected `observation`; invalid returns
   fail explicitly. `safeSearchReturn` accepts only local search URLs, with no fragments,
   nested returns or cursors. It returns undefined for invalid destinations.
-- F5: `parsePageLimit` for list/history URLs; IDs come from route parameters.
+- F5: `parsePageLimit` for the disk list, `parseInventoryRoute` for disk detail/history
+  limit plus validated detail context, and `parseDetailContext` for snapshot detail;
+  IDs come from route parameters.
 - F6: `parseDirectory` → `DirectoryRoute`. Comparison tab/rule UI remains F9-owned.
 
 Parsers reject unknown/repeated scalar parameters, invalid enum/boolean/integer/ID values,
@@ -250,6 +253,38 @@ explicit hash identity and stale lookup responses, current/history traversal and
 pages. These are mocked-browser tests; no Go checks, catalog access or real-backend acceptance
 is implied. Optional manual accessibility/responsive audits remain F11b.
 
+### Read-only disks and inventories (F5 handoff)
+
+- `/disks` uses `diskPages`, displaying embedded metadata/latest complete capture without
+  per-row requests. `/disks/[id]` uses independent `diskDetail` and `snapshotPages` owners;
+  history follows server capture-time order, not import dates. `limit` is URL state; cursors
+  are not. `InventoryPages.svelte` projects reactive paging flags and retains F2's ten-page
+  bound with explicit later-page navigation, stale reset, and manual retry.
+- Unknown-size files make the cataloged total **Unknown** while keeping the exact known-byte
+  subtotal and unknown-file count visible. Repeated contents count per path. No inventory
+  (`cataloged=null`) differs from a complete empty inventory (`0 B`, complete). Declared
+  capacity is metadata, never measured usage or a free-space calculation. Empty states explain
+  CLI-only imports and stopping the server before CLI catalog operations.
+- `/snapshots/[id]` fetches only `snapshotDetail`; `InventorySummary.svelte` renders capture/import
+  dates, explicit versus source-inventory-mtime provenance, input format/path and exact counters.
+  Input paths are literal backend provenance, not browser file links. The snapshot DTO has no
+  current flag: only disk history with freshly verified latest metadata labels latest/historical.
+  Disconnect marks retained data unverified; reconnect/revision/metadata clears owners' data.
+- `routes.disk(id, context?)` and `routes.snapshot(id, context?)` now accept the established
+  validated search return/selected-observation context. F4 observation/location links carry it
+  into F5; disk/inventory navigation preserves it. Existing one-argument calls remain valid.
+- **F6:** root actions use `directoryBrowseURL(snapshotID, { path: '' })`, yielding literal
+  `?path=` with no detail context. No directory implementation is included; these entry links
+  become browsable when F6 lands. Reuse `InventorySummary`/`DateValue` for context if useful.
+- **F7:** compose write controls with `DiskMetadata`/`DiskDetail`; call
+  `connection.metadataChanged()` after writes/reconciliation and manually refetch metadata.
+  F5 installs no create/edit forms, write requests, or metadata-version assumptions.
+
+Browser coverage is mocked (pagination including later retained-page transitions, latest/history,
+empty inventories, unknown/zero/large totals, literal markup, date meanings, return validation,
+stale cursors and disconnect/reconnect). Real-catalog integration remains F11a; the backend gate
+is still unresolved.
+
 Start the backend separately with a disposable catalog, following
 [backend integration](../doc/backend-integration.md). Stop it before CLI catalog operations;
 never remove a lock file. Then:
@@ -282,7 +317,8 @@ manual retry. It never supplies cached/demo responses as proof of backend readin
   `/contents/[id]`, `/observations/[id]`, `/disks`, `/disks/[id]`, `/snapshots/[id]`, and
   `/snapshots/[id]/directory`. Return `index.html` for their direct document requests;
   query strings do not change asset dispatch. Arbitrary directory paths stay in `?path=`.
-- `/`, `/contents`, `/contents/[id]`, and `/observations/[id]` are implemented through F4.
+- `/`, `/contents`, `/contents/[id]`, `/observations/[id]`, `/disks`, `/disks/[id]`, and
+  `/snapshots/[id]` are implemented through F5.
   Other built nested navigation loads the shell and displays
   the client “Page not found” boundary until that feature route exists. Unknown routes
   are not approved production fallback destinations.

@@ -27,8 +27,10 @@
           {#if context.observation === item.observation.id}<strong>Selected</strong>{/if}
         </td>
         <td
-          ><a href="{resolve('/')}{routes.disk(item.disk.id).slice(1)}">{item.disk.label}</a>
-          <br /><a href="{resolve('/')}{routes.snapshot(item.snapshot.id).slice(1)}"
+          ><a href="{resolve('/')}{routes.disk(item.disk.id, context).slice(1)}"
+            >{item.disk.label}</a
+          >
+          <br /><a href="{resolve('/')}{routes.snapshot(item.snapshot.id, context).slice(1)}"
             >Inventory {item.snapshot.id}</a
           ></td
         >
