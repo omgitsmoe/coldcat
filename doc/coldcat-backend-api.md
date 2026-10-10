@@ -139,7 +139,8 @@ Use the existing application layer as the shared backend:
 9. **Done at shared initialization:** retain the incomplete marker if cleanup fails, recover abandoned imports before another import or catalog access, and fail startup on recovery failure. Server initialization uses this same path.
 
 - [x] Stage shared-content size enrichment until successful publication and track content introduced by each import for targeted orphan cleanup.
-- [x] Run failure cleanup with a separate 30-second context and report both the original import error and any cleanup failure.
+- [x] Run failure cleanup with a separate five-minute context (user-approved safety deadline,
+  formerly 30 seconds) and report both the original import error and any cleanup failure.
 - [x] Store a streaming, order-sensitive semantic digest of parsed file records plus disk, format, and capture time for duplicate-import detection. Reject accidental repeats with the existing snapshot ID; deliberate repeats require `--allow-repeat`. Comments and equivalent parsed representations do not affect identity.
 - [x] Require explicit `--captured-at` or `--use-source-mtime` and record the capture-time provenance.
 - [x] Define CSHD paths independently of host `filepath`: preserve case/Unicode, use `/` separators, reject absolute paths and parent traversal, and treat backslashes as literal filename characters.
@@ -275,8 +276,8 @@ For each milestone, first write behavioral acceptance tests, then implement the 
   observations. This is not standalone cold-query or whole-physical-filesystem cold evidence.
   Cold/history acceptance scope still needs agreement; HTTP p95 is unmeasured and the
   required latency metric must be selected. Million-input operational import successes are
-  measured, but two late-failure cleanup assertions failed and one case was interrupted;
-  that slice and true physical journal peak remain open. Removed fuzzy measurements are
+  measured; all three late failures now pass after the approved five-minute cleanup policy.
+  True physical journal peak remains open. Removed fuzzy measurements are
   historical only.
 - [x] Check query plans for latest-snapshot selection and observation content/snapshot/path lookups (`TestQueryIndexes`).
 - [x] Check exact hash lookup and content observation-page indexes; add focused 50,000-observation warm-query benchmarks for hash lookup and first/deep pages.
@@ -289,6 +290,8 @@ For each milestone, first write behavioral acceptance tests, then implement the 
 - [x] Final required checks passed after the latest implementation: `go test ./...`,
   `go vet ./...` and `go test -race -p 1 ./... -timeout=30m`. The parent ran the full race
   suite only once at end of work; results are recorded in `backend-foundation.md`.
+  After the five-minute policy change, full normal tests/vet and one final focused serial
+  importer/database race check passed; the earlier full race suite was not repeated.
 - [ ] **Partial:** focused content/search/directory/import benchmarks and both committed
   directory comparison optimizations measured. Filtered five-disk comparisons cover
   50,000/million source files; bounded history covers 50,000/200,000 source files with up to
@@ -305,20 +308,25 @@ For each milestone, first write behavioral acceptance tests, then implement the 
   workflow / verified catalog-cache-cold open-plus-query reruns. These do not approve performance.
 - [x] Implement fixed deep/shared/history-enrichment import profiles and measure all six
   50,000-input success/late-parse-failure cases; test publication rollback independently.
-- [ ] **Partial:** million-input operational distribution command ran after renewed authorization:
-  all three success cases passed, deep/shared late-failure cleanup assertions failed, and
-  history late failure was interrupted by the outer deadline. A duplicate/shared-only rerun
-  confirms the observation DELETE exceeds the 30-second cleanup context; checked reference
-  plans are indexed. Diagnostic errors/tests were added, not a cleanup algorithm or timeout fix.
+- [x] Million-input fixed operational success/late-parse-failure distributions measured:
+  historically, all three success cases passed, deep/shared cleanup assertions failed, and
+  history late failure was interrupted. A duplicate/shared-only rerun confirmed that
+  observation deletion exceeded the old 30-second context; checked reference plans are
+  indexed. The diagnostic stage added errors/tests, not an algorithm or timeout fix.
   The renewed guarded production-shaped cleanup profile completed in 34.454 seconds under
   its diagnostic test context, with pre-recovery preservation/integrity checks passing.
   Page-fetch/spill I/O is a substantial cost; no safe SQL fix or 30-second policy pass is
-  established. Deep failure is undiagnosed and history failure remains unmeasured.
+  established by those diagnostic runs. Deep failure was undiagnosed and history unmeasured
+  until the new-policy reruns below.
   A test-only default/8/32 MiB cleanup-cache slice passed preservation at
   32.527/31.475/28.701 seconds; only the last sample was below 30, with a substantial
   RSS high-water increase and insufficient deadline margin/repetition for acceptance.
-  Cleanup-only cache policy needs an approved ADR and real deadline validation;
-  no production setting changed. Publication-failure timing is unmeasured.
+  These are historical 30-second-policy results. The user approved a five-minute cleanup
+  safety deadline instead of cache changes; production SQLite cache settings are unchanged.
+  One guarded iteration each of shared/deep/history late failure now passes full preservation,
+  search/directory/content/FK/FTS assertions, with cleanup tails 31.89/60.91/22.42 seconds.
+  No successful case was repeated. Publication-failure timing remains unmeasured; budgets
+  and the final gate are not approved. See the foundation's approved policy section.
 - [ ] Measure true **physical** journal peak using a suitable filesystem and validated
   allocation/free/reservation instrumentation. Blocked on that environment; logical VFS
   accounting or sampled apparent file lengths are not an approved replacement.
@@ -335,25 +343,15 @@ For each milestone, first write behavioral acceptance tests, then implement the 
    evidence exists; standalone query and whole-filesystem coldness are not established.
    Choose which additional cold/history evidence is needed within the supported scope.
    HTTP p95 is unmeasured, not an unconditional criterion added to the original plan.
-3. **Resolve observed million-input cleanup failures and the incomplete case:** renewed
-   authorization allowed the run; deep/shared failures left two million observations instead
-   of the one-million baseline, and history late failure hit the outer deadline. The three
-   success cases passed; do not infer failure correctness or timings from them.
-   A bounded shared-only reproduction confirms observation cleanup deadline expiration;
-    indexed plans do not establish a safe optimization. The production-shaped million cleanup
-    profile passed integrity/preservation at 34.454 seconds, exceeding the production deadline;
-    its test-only context does not close this failure. Profile evidence identifies page-fetch
-    and dirty-page spill I/O as substantial extra cost, with filesystem/content-cardinality
-    differences confounded against the synthetic fixture. Isolate cache/index-locality costs,
-    then reproduce only affected failures after a justified fix. The cache sensitivity slice
-    observed 32.527/31.475/28.701 seconds for default/8/32 MiB, with verified restoration and
-    pre-recovery integrity. The 32 MiB sample narrowly finished below 30 but raised lifetime
-    RSS HWM substantially; this is not a deadline-policy pass or approved memory budget.
-    Review the cleanup-only cache ADR proposal before any production implementation;
-    all-import cache changes are outside the evidence. Keep the 30-second policy unless
-   an ADR proposal and user approval justify changing it. Publication-failure timing and
-   distribution-specific RSS/transaction/journal evidence are unmeasured; select required
-   operational measurements for the approved scope rather than expanding workloads indefinitely.
+3. **Select remaining operational evidence:** the observed million-input failures and
+   interrupted case are resolved for the fixed late-parse-failure profiles: user-approved
+   five-minute cleanup and one guarded rerun per failure passed all preservation/integrity
+   checks. The earlier 30-second failures and cache experiments remain historical baselines;
+   cache changes and memory budgets are not approved. An ADR record is proposed for the
+   deadline decision/context/alternatives/consequences, not automatically created.
+   Publication-failure timing and distribution-specific RSS/transaction/journal evidence
+   remain unmeasured; select required operational measurements for the approved scope rather
+   than expanding workloads indefinitely. This closes only the fixed distribution slice.
 4. **Provide physical journal-peak instrumentation:** this requirement remains deliberately
    blocked on a suitable filesystem and validated physical allocation accounting, with no
    approved logical/polling substitute. Operational acceptance stays Partial.

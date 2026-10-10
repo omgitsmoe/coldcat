@@ -161,10 +161,14 @@ Additional completed slices are distinct from acceptance:
 - Deep/shared/history-enrichment import harnesses and all six 50,000-input cases are measured;
   publication rollback is tested separately, not timed.
 
-Remaining gates are explicit: million-input operational distribution runs were rejected twice
-by tool-level permission despite user authorization and sufficient reported disk space, so no
-results exist. Publication-failure timing and distribution-specific RSS/transaction/journal
-evidence remain unmeasured; select required operational evidence for the supported scope.
+Million-input fixed operational distributions now have three passing success samples and
+three passing late-failure samples. Historical 30-second cleanup failures were resolved with
+the user-approved five-minute safety deadline, not SQLite cache changes; each failed profile
+was rerun once under a guard, without repeating successes. See the foundation's
+[policy and samples](backend-foundation.md#approved-five-minute-cleanup-policy).
+Remaining gates are explicit: publication-failure timing and distribution-specific
+RSS/transaction/journal evidence remain unmeasured; select required operational evidence
+for the supported scope.
 Larger-than-measured history scenarios depend on selecting supported limits, not a mandatory
 million-source history run. Cold acceptance boundaries and latency metrics need agreement;
 HTTP p95 is unmeasured, not an unconditional new criterion. **True physical peak journal

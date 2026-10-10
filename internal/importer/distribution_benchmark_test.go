@@ -329,14 +329,15 @@ func BenchmarkImportDistributions(b *testing.B) {
 				b.Run(fmt.Sprintf("%d/%s/late_failure_%t", files, d.name, fail), func(b *testing.B) {
 					baseline := distributionBaseline(b, d)
 					input := writeDistributionInput(b, d, d.history, fail)
-					var elapsed, ingestion, directories, publishing time.Duration
+					var elapsed, ingestion, directories, publishing, cleanupTail time.Duration
 					var peak uint64
 					var samples, catalogBytes int64
 					b.ReportAllocs()
 					for b.Loop() {
 						b.StopTimer()
 						c := openDistributionCatalog(b, d, baseline)
-						var directoriesAt, publishingAt time.Time
+						var directoriesAt, publishingAt, lastBatchAt time.Time
+						var committed int64
 						stop := startImportHeapSampler()
 						b.Cleanup(func() { stop() })
 						b.StartTimer()
@@ -344,7 +345,10 @@ func BenchmarkImportDistributions(b *testing.B) {
 						result, err := Import(b.Context(), c.db, Request{
 							DiskID: c.disk, Path: input, CapturedAt: time.Unix(10, 0),
 							Progress: func(p Progress) error {
+								committed = p.CommittedFiles
 								switch p.Phase {
+								case ProgressImporting:
+									lastBatchAt = time.Now()
 								case ProgressDirectories:
 									directoriesAt = time.Now()
 								case ProgressPublishing:
@@ -362,6 +366,11 @@ func BenchmarkImportDistributions(b *testing.B) {
 						failure := ""
 						if fail {
 							failure = "parse"
+							if committed != int64(files) || lastBatchAt.IsZero() {
+								b.Fatalf("committed files: %d, want %d", committed, files)
+							}
+							ingestion += lastBatchAt.Sub(started)
+							cleanupTail += finished.Sub(lastBatchAt)
 						} else {
 							if directoriesAt.IsZero() || publishingAt.IsZero() {
 								b.Fatal("missing import phase transitions")
@@ -389,8 +398,12 @@ func BenchmarkImportDistributions(b *testing.B) {
 					b.ReportMetric(float64(peak), "sampled-heap-bytes")
 					b.ReportMetric(float64(samples)/float64(b.N), "heap-samples/op")
 					b.ReportMetric(float64(catalogBytes)/float64(b.N), "catalog-bytes/op")
+					b.ReportMetric(ingestion.Seconds()/float64(b.N), "ingestion-s/op")
+					if fail {
+						b.ReportMetric(cleanupTail.Seconds()/float64(b.N), "cleanup-tail-s/op")
+						b.ReportMetric(float64(files), "committed-files/op")
+					}
 					if !fail {
-						b.ReportMetric(ingestion.Seconds()/float64(b.N), "ingestion-s/op")
 						b.ReportMetric(directories.Seconds()/float64(b.N), "directories-s/op")
 						b.ReportMetric(publishing.Seconds()/float64(b.N), "publishing-s/op")
 					}

@@ -142,7 +142,8 @@ existing capture-time/ID tie-break, and invalidates previous pagination cursors.
 Rejected repeats use ordinary failed-import cleanup and preserve cursor validity.
 
 Failure or cancellation immediately runs transactional cleanup with a separate
-30-second context. Cleanup removes observations, staging, and the failed snapshot;
+five-minute context, independent of the cancelled import context. Cleanup removes
+observations, staging, and the failed snapshot;
 it removes import-owned content only if no remaining observations or staging
 reference it. Shared content and previously completed metadata are preserved.
 
@@ -1185,8 +1186,9 @@ publication prerequisites and FTS integrity.
 Large failure measurements exposed unindexed content-reference lookups in existing
 import ownership/staging tables. `import_content_content` and `pending_size_content`
 now index those reverse references, including ownership cascades, with query-plan tests.
-This allows the measured 50,000-file late failure to clean up within the existing
-30-second cleanup deadline and leave the catalog usable.
+This allowed the measured 50,000-file late failure to clean up within the then-current
+30-second cleanup deadline and leave the catalog usable. The current approved deadline
+is five minutes; the historical samples below are not remeasurements under that policy.
 
 ### Historical search measurements and fuzzy spike
 
@@ -1549,6 +1551,11 @@ does not change transaction policy.
 
 ### Fixed operational import distributions
 
+The original matrix and diagnosis/cache sections below record the historical 30-second
+policy and its failures without replacing those baselines. The later
+[approved five-minute policy and failure reruns](#approved-five-minute-cleanup-policy)
+supersede their unresolved-cleanup status and proposed next steps, not their measurements.
+
 `bf9f873` adds `BenchmarkImportDistributions` with production search and directory
 indexing enabled. Each scale denotes **new input files** (50,000 or 1,000,000), not
 the baseline-plus-import catalog's total observations. Every measured import runs on
@@ -1601,7 +1608,7 @@ Both completed late-failure attempts reported at `distribution_benchmark_test.go
 `observation: 2000000, want 1000000`. The initial expected parse-error check passed,
 but failed-import observations remained when cleanup counts were checked. No validated
 failure metrics were emitted; subsequent preservation/integrity checks were not completed.
-The importer has a separate 30-second cleanup context and joins cleanup errors with parse
+The importer then had a separate 30-second cleanup context and joined cleanup errors with parse
 errors, but this benchmark does not print the joined error when the later count assertion
 fails. A cleanup timeout is a hypothesis, not a diagnosed cause. These failures require
 investigation before operational acceptance; the earlier full correctness-suite pass does
@@ -1979,7 +1986,7 @@ Each directory contains `output.log`, `metadata.json`, `cleanup.cpu` and `import
 The one-case guard source is `/tmp/opencode/run-cleanup-cache-case.py`; these run artifacts
 are not repository deliverables. The user catalog and all pre-existing artifacts were untouched.
 
-**ADR proposal for review, not implementation:** consider a cleanup-only bounded cache target
+**Historical ADR proposal, not approved or implemented:** consider a cleanup-only bounded cache target
 (32 MiB is a candidate, not an accepted value), scoped to one pinned cleanup connection
 while retaining atomic cleanup and the 30-second deadline. Context: two smaller diagnostic
 settings exceeded the deadline and one larger setting narrowly finished below it, with a
@@ -1998,11 +2005,107 @@ scope. These one-sample results are insufficient to approve 32 MiB or an all-imp
 No ADR was created and no production cache/deadline/constraint policy changed. Deep-known
 failure remains undiagnosed and history late failure unmeasured; neither was run here.
 
+This cache proposal is not the selected policy: the user subsequently approved the
+five-minute cleanup deadline below, with production cache settings unchanged.
+
 Final focused normal tests passed (importer 0.133 seconds, overlay harness 0.002 seconds),
 all 12 tagged cache correctness cases passed with `-vet=all` (3.418 seconds), and the refactored
 existing 50,000-input cleanup benchmark passed preservation checks (4.075 package seconds).
 `go vet ./...` and diff checks passed. No race suite was repeated: changes are test/harness
 code, and the heap sampler's existing synchronization is unchanged.
+
+#### Approved five-minute cleanup policy
+
+After discussion on 2026-10-10, the user approved a generous **five-minute** failed-import
+cleanup safety deadline. Production `failedImportCleanupTimeout` is now `5*time.Minute`;
+cleanup still starts from `context.Background()`, never the cancelled import context.
+There are no CLI/configuration knobs, SQLite cache changes, new cleanup infrastructure,
+schema changes, deferred indexes or non-atomic batches. The original import error and any
+cleanup error remain joined. Cleanup timeout/failure rolls back the transaction, retains
+the incomplete marker, poisons catalog access and requires successful recovery before
+queries or another import; recovery/startup failure remains fail-fast.
+
+**Proposed ADR record for this approved policy, not automatically created:** decision:
+use a fixed five-minute safety deadline while retaining transactional cleanup and the
+production cache. Context: the old deadline failed real million-input shared cleanup;
+diagnostic default cleanup took 32.527 seconds, while the 32 MiB sample took 28.701 seconds
+with little deadline headroom and substantially higher RSS. Alternatives: retain 30 seconds
+and optimize SQL/locality (no validated fix), raise SQLite cache (unapproved memory budget),
+remove the bound, or defer/split cleanup (changes atomicity/recovery). Consequences: failed
+imports can hold exclusive catalog ownership and delay cancellation return for up to the
+cleanup safety deadline; this is not a latency budget or a guaranteed cleanup duration.
+The bound remains finite, rollback/recovery protection is unchanged, and expiry is reported
+instead of silently extending the deadline. User approval selected this policy, not a cache
+budget, physical-storage claim or final backend acceptance. Creating the ADR record is
+proposed separately; no new ADR file was created.
+
+Only the three million-input late failures were rerun, serially and once each, in separate
+Go commands with `-benchtime=1x -benchmem -v -timeout=30m` and a 30-minute harness allowance.
+All three earlier success cases remain unchanged and were **not repeated**. Each command
+selected exactly `^BenchmarkImportDistributions/1000000/<profile>/late_failure_true$`.
+Go 1.27.1/Linux amd64, AMD Ryzen 5 9600X and four reported Go CPUs match the prior environment;
+there were no overlapping project checks, and other container activity was not controlled.
+
+The benchmark now asserts one million committed files and reports ingestion plus
+`cleanup-tail-s/op`: time from the final committed-batch progress callback through parsing
+the malformed last line and return from deferred cleanup. This is predominantly cleanup,
+but **not an isolated cleanup transaction duration**; it includes the final parse/error tail.
+Heap is continuously sampled Go heap, not RSS or true physical peak storage. All numeric
+values below are individual warm operational samples, not p95 or acceptance limits.
+
+| Million-input late failure | Import s | Ingestion s | Cleanup tail s | Input files/s | Committed files | Sampled heap bytes | Heap samples | Final catalog bytes | B/op | allocs/op | Package s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `duplicate_shared` | 116.0 | 84.08 | 31.89 | 8,622 | 1,000,000 | 6,151,872 | 11,599 | 1,366,511,616 | 2,899,955,296 | 82,970,948 | 181.310 |
+| `deep_known` | 164.2 | 103.3 | 60.91 | 6,089 | 1,000,000 | 7,361,160 | 16,425 | 5,318,967,296 | 3,796,363,952 | 84,021,387 | 507.782 |
+| `history_enrichment` | 60.82 | 38.40 | 22.42 | 16,443 | 1,000,000 | 6,220,904 | 6,083 | 3,417,374,720 | 4,572,450,424 | 122,021,736 | 216.898 |
+
+Exact `ns/op` values in that order were 115,976,458,080 / 164,239,988,524 / 60,816,307,347.
+Each logged only the expected final-line parse error, with no joined cleanup error, and
+exited zero after all assertions. Before any recovery-capable reopening, checks verified
+failed snapshot/observation/staging removal and preservation of complete snapshot/content,
+search-path/trigram, directory/membership/build counts. Root/deep summaries, current search
+and revision, content sizes, foreign keys and full external-content FTS integrity passed.
+History preserved three million baseline observations and one million unknown-size contents;
+the other profiles preserved their one-million-observation baseline. Cleanup leaves reusable
+SQLite pages, so final catalog bytes are not live-data size or physical journal peak.
+
+The Python guard `/tmp/opencode/run-five-minute-failure.py` used unique owned workspace
+TMPDIRs, preflight and one-second available-space checks at **2,147,483,648 bytes**, and
+isolated process groups. It refused an existing importer benchmark process instead of
+duplicating or killing unknown work. There was no 29-minute outer kill. Metadata was saved
+alongside logs on `/tmp/opencode`; no cross-device rename or artifact move was needed.
+
+| Profile | Initial/minimum/final available bytes | Guard samples | Wrapper s | Local log/metadata directory under /tmp/opencode |
+| --- | --- | ---: | ---: | --- |
+| `duplicate_shared` | 32,653,795,328 / 30,470,623,232 / 32,569,155,584 | 182 | 182.270 | `five-minute-duplicate_shared-mnbtsne1` |
+| `deep_known` | 32,568,897,536 / 25,194,770,432 / 32,336,314,368 | 508 | 508.202 | `five-minute-deep_known-9k6apfw7` |
+| `history_enrichment` | 32,333,586,432 / 27,583,303,680 / 32,234,696,704 | 218 | 218.076 | `five-minute-history_enrichment-h3n325iu` |
+
+No guard fired; all newly owned temporary roots were empty and removed with `rmdir` only.
+No existing fixture, log, user artifact, workspace catalog or lock was accessed or modified.
+The interrupted `.million-distributions-3388537839` and old `.million-cleanup-577680217`
+roots remain preserved. These runs complete the fixed million-input success/late-parse-failure
+measurement slice, not publication-failure timing, distribution-specific RSS/transaction/
+journal evidence, physical peak storage, supported limits/budgets or final gate approval.
+
+The new context regression checks its deadline against before/after timestamps for exactly
+five minutes and verifies explicit cancellation; it does not sleep for the deadline. Existing
+committed-batch cancellation and injected cleanup-failure tests verify independent cleanup,
+joined errors, rollback, poisoned access and recovery. Focused normal checks passed
+(importer 13.201 seconds, database 0.183 seconds), then `go test ./... -count=1 -timeout=30m`
+passed (cmd 5.795 seconds, app 1.989, database 3.221, HTTP 4.809, importer 21.237,
+cache-overlay harness 0.002). `go vet ./...` passed. One final focused serial race command
+covering context, committed cancellation, cleanup failure/stages/indexes, profile lifetime,
+distribution fixtures, search and recovery passed (importer 451.859 seconds, database 1.903):
+
+```sh
+go test -race -p 1 ./internal/importer ./internal/database \
+  -run 'Test(FailedImportCleanupContext|ReaderErrorAndCancellationCleanCommittedBatches|CleanupFailurePoisonsQueriesUntilRecovery|ImportCleanup|CleanupProfile|ImportDistributionFixtures|SearchIndexesCleanupAndRecovery|RecoveryIsRequiredBeforeUse|RecoveryPreservesCompletedSnapshotsAndSharedContent)' \
+  -count=1 -timeout=30m
+```
+
+The previously completed full race suite was not repeated. Diff checks passed. No cache
+experiment, additional million run or frontend work was performed.
 
 ## Verification and follow-on work
 
@@ -2020,11 +2123,11 @@ The original matrix follow-up ran benchmarks and documentation diff checks only.
 diagnostic follow-up passed `go test ./...` (importer 22.022 seconds) and `go vet ./...`, plus
 one focused serial race check of cleanup-stage/index, distribution-fixture and cleanup-poisoning
 tests: database 2.047 seconds, importer 454.939 seconds. The full race suite was not repeated.
-The observed million-distribution cleanup failures prevent treating that operational slice
-as correct. Operational acceptance remains Partial. The concrete
+Those historical failures were resolved by the approved five-minute policy and the three
+passing failure reruns above. Operational acceptance remains Partial. The concrete
 [remaining decisions and blockers](coldcat-backend-api.md#remaining-decisions-and-blockers)
-are supported limits/budgets, cold boundary/latency metric, million-input cleanup failures
-and the interrupted history case, true physical journal-peak instrumentation and final gate approval.
+are supported limits/budgets, cold boundary/latency metric, selecting any remaining operational
+measurements, true physical journal-peak instrumentation and final gate approval.
 
 ### Content lists and redundancy
 

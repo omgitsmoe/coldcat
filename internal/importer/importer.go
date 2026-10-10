@@ -51,7 +51,15 @@ type ProgressFunc func(Progress) error
 const (
 	defaultBatchSize     = 5000
 	observationBatchSize = 5000
+
+	// Million-file indexed cleanup exceeds 30 seconds; keep cleanup bounded without
+	// inheriting import cancellation or increasing SQLite's production cache budget.
+	failedImportCleanupTimeout = 5 * time.Minute
 )
+
+func failedImportCleanupContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), failedImportCleanupTimeout)
+}
 
 type Request struct {
 	DiskID         base.DiskId
@@ -174,7 +182,7 @@ func importReader(
 			return
 		}
 
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		cleanupCtx, cancel := failedImportCleanupContext()
 		defer cancel()
 		if cleanupErr := db.CleanupImport(cleanupCtx, snapshotID); cleanupErr != nil {
 			db.ImportCleanupFailed(cleanupErr)
