@@ -1718,9 +1718,11 @@ production cleanup, triggers, constraints, migrations, or the 30-second deadline
   Post-timing checks verify observation/search counts and external-content FTS integrity.
 - `BenchmarkDistributionCleanup` uses the actual duplicate/shared distribution inputs
   and production importer. A test-only abort trigger retains the failed snapshot;
-  after dropping it, the benchmark profiles `CleanupImport`, reopens normally to clear
-  the intentionally poisoned handle, and runs the existing completed-data, current-search,
-  directory, staging, foreign-key and FTS assertions. Fixture setup and validation are
+  after dropping it, the benchmark profiles `CleanupImport`, closes both handles and
+  checks the catalog read-only before any recovery-capable reopen. It then reopens normally
+  to clear the intentionally poisoned handle and runs the existing completed-data,
+  current-search, directory, staging, foreign-key and FTS assertions. Both reopened
+  handles close explicitly before the next iteration. Fixture setup and validation are
   untimed. Its context is the benchmark context, not the importer's cleanup deadline:
   this diagnostic measures completion cost and cannot establish deadline compliance.
 
@@ -1779,6 +1781,27 @@ distribution fixtures passed (database 1.567 seconds, importer 439.734 seconds);
 full race suite was not repeated. CPU profiles remain local under `/tmp/opencode/`
 (`cleanup-million-batched.cpu`, `cleanup-million-bulk.cpu`,
 `production-cleanup-small.cpu`) and are not repository deliverables.
+
+The profiling follow-up fixes per-iteration handle retention: raw pools and application
+catalog locks now close explicitly after assertions, with nil-clearing, idempotent
+fail-safe cleanup. Before `database.OpenContext` can recover anything, inspection uses
+an escaped `file:` URI with `mode=ro`, validates baseline table counts, completed snapshot
+and observation counts, empty staging, absence of orphan contents/search paths, sealed
+search coverage, directory-file identity and root totals, foreign keys and SQLite integrity.
+Read-only FTS queries verify fixture-wide `report` coverage and absence of orphan matching
+postings; these are not a complete FTS external-content integrity check. The existing full
+FTS integrity command still runs after reopening, once the independent read-only checks
+have ruled out leftover failed-snapshot rows.
+
+Regression tests verify three small catalog lifetimes release raw connections and catalog
+locks, reject leftover importing snapshots and missing FTS postings without healing them,
+and reject writes through escaped read-only paths containing `?`, `#` and `%`. The
+50,000-input production-shaped benchmark passed three iterations at 0.510827 seconds/op
+(10.697 seconds including setup and verification); this measures cleanup only and is not
+a million-input deadline result. No denied million command was retried.
+Focused `TestCleanupProfile` tests passed normally (0.113 seconds) and in one serial
+race check (2.032 seconds). `go vet ./...` and diff checks passed; the full race suite
+was not repeated.
 
 ## Verification and follow-on work
 
