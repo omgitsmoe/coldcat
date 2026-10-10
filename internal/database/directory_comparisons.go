@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/binary"
 	"fmt"
 	"hash"
 	"slices"
@@ -16,10 +17,12 @@ import (
 )
 
 const (
-	maxDirectoryPatterns     = 100
-	maxDirectoryPatternBytes = 1024
-	maxDirectoryFilterBytes  = 16384
-	comparisonBatchSize      = 1000
+	maxDirectoryPatterns      = 100
+	maxDirectoryPatternBytes  = 1024
+	maxDirectoryFilterBytes   = 16384
+	comparisonBatchSize       = 1000
+	comparisonRecordColumns   = "o.path,o.content_id,c.hash_type,c.hash,c.size"
+	comparisonManifestColumns = "o.path,c.hash_type,c.hash"
 )
 
 func NormalizeDirectoryComparisonFilters(
@@ -102,14 +105,14 @@ type comparisonRecord struct {
 	size      sql.NullInt64
 }
 
-func comparisonRecordQuery(root, after string) (string, string) {
+func comparisonRecordQuery(root, after, columns string) (string, string) {
 	lower, operator := directoryPrefix(root), ">="
 	if after >= lower {
 		lower, operator = after, ">"
 	}
 
 	// Separate lower bounds let SQLite seek to the prefix and rescan earlier pages.
-	query := `SELECT o.path,o.content_id,c.hash_type,c.hash,c.size
+	query := `SELECT ` + columns + `
  FROM observation o JOIN content c ON c.id=o.content_id
  WHERE o.snapshot_id=? AND o.path` + operator + `? AND o.path<?
  ORDER BY o.path LIMIT ?`
@@ -119,7 +122,7 @@ func comparisonRecordQuery(root, after string) (string, string) {
 func comparisonRecords(
 	ctx context.Context, tx *Tx, snapshotID base.SnapshotId, root, after string, limit int,
 ) ([]comparisonRecord, error) {
-	query, lower := comparisonRecordQuery(root, after)
+	query, lower := comparisonRecordQuery(root, after, comparisonRecordColumns)
 	rows, err := tx.QueryContext(ctx, query, snapshotID, lower, directoryUpper(root), limit)
 	if err != nil {
 		return nil, err
@@ -128,23 +131,70 @@ func comparisonRecords(
 
 	result := make([]comparisonRecord, 0, limit)
 	for rows.Next() {
-		var record comparisonRecord
+		result = append(result, comparisonRecord{})
+		record := &result[len(result)-1]
 
 		if err := rows.Scan(&record.path, &record.contentID, &record.algorithm,
 			&record.digest, &record.size); err != nil {
 			return nil, err
 		}
-
-		result = append(result, record)
 	}
 
 	return result, rows.Err()
 }
 
-func comparisonHashRecord(h hash.Hash, root string, record comparisonRecord) {
-	fingerprintField(h, []byte(comparisonRelative(root, record.path)))
-	fingerprintField(h, []byte(record.algorithm))
-	fingerprintField(h, record.digest)
+type comparisonStream struct {
+	ctx    context.Context
+	rows   *sql.Rows
+	record comparisonRecord
+	digest sql.RawBytes
+	err    error
+}
+
+func openComparisonStream(
+	ctx context.Context, tx *Tx, snapshotID base.SnapshotId, root string,
+) (*comparisonStream, error) {
+	query, lower := comparisonRecordQuery(root, "", comparisonManifestColumns)
+	rows, err := tx.QueryContext(ctx, query, snapshotID, lower, directoryUpper(root), -1)
+	if err != nil {
+		return nil, err
+	}
+	return &comparisonStream{ctx: ctx, rows: rows}, nil
+}
+
+func (s *comparisonStream) next() bool {
+	if err := s.ctx.Err(); err != nil {
+		s.err = err
+		return false
+	}
+	if s.err != nil || !s.rows.Next() {
+		return false
+	}
+	s.err = s.rows.Scan(&s.record.path, &s.record.algorithm, &s.digest)
+	// RawBytes belongs to this cursor and is consumed before its next advance.
+	s.record.digest = s.digest
+	return s.err == nil
+}
+
+func (s *comparisonStream) error() error {
+	if s.err != nil {
+		return s.err
+	}
+	return s.rows.Err()
+}
+
+func comparisonHashRecord(
+	h hash.Hash, root string, record comparisonRecord, buffer []byte,
+) []byte {
+	path := comparisonRelative(root, record.path)
+	buffer = binary.BigEndian.AppendUint64(buffer[:0], uint64(len(path)))
+	buffer = append(buffer, path...)
+	buffer = binary.BigEndian.AppendUint64(buffer, uint64(len(record.algorithm)))
+	buffer = append(buffer, record.algorithm...)
+	buffer = binary.BigEndian.AppendUint64(buffer, uint64(len(record.digest)))
+	buffer = append(buffer, record.digest...)
+	h.Write(buffer)
+	return buffer
 }
 
 func buildSourceSelection(
@@ -159,9 +209,20 @@ func buildSourceSelection(
 		return digest, selection, err
 	}
 
+	insert, err := tx.PrepareContext(ctx, `INSERT INTO selected_directory_content
+ (content_id,occurrences,known_bytes,unknown_size_files) VALUES(?,1,?,?)
+ ON CONFLICT(content_id) DO UPDATE SET
+ occurrences=occurrences+1,known_bytes=known_bytes+excluded.known_bytes,
+ unknown_size_files=unknown_size_files+excluded.unknown_size_files`)
+	if err != nil {
+		return digest, selection, err
+	}
+	defer insert.Close()
+
 	h := sha256.New()
 	fingerprintField(h, []byte("coldcat-directory-comparison-v1"))
 	after := ""
+	var buffer []byte
 
 	for {
 		records, err := comparisonRecords(ctx, tx, f.SnapshotID, f.Path, after,
@@ -178,7 +239,7 @@ func buildSourceSelection(
 			}
 
 			selection.RetainedFileCount++
-			comparisonHashRecord(h, f.Path, record)
+			buffer = comparisonHashRecord(h, f.Path, record, buffer)
 
 			known, unknown := int64(0), int64(1)
 			if record.size.Valid {
@@ -188,12 +249,7 @@ func buildSourceSelection(
 				selection.UnknownSizeFileCount++
 			}
 
-			if _, err := tx.ExecContext(ctx, `INSERT INTO selected_directory_content
- (content_id,occurrences,known_bytes,unknown_size_files) VALUES(?,1,?,?)
- ON CONFLICT(content_id) DO UPDATE SET
- occurrences=occurrences+1,known_bytes=known_bytes+excluded.known_bytes,
- unknown_size_files=unknown_size_files+excluded.unknown_size_files`,
-				record.contentID, known, unknown); err != nil {
+			if _, err := insert.ExecContext(ctx, record.contentID, known, unknown); err != nil {
 				return digest, selection, err
 			}
 		}
@@ -222,28 +278,24 @@ func candidateManifest(
 	fingerprintField(h, []byte("coldcat-directory-comparison-v1"))
 
 	var retained, excluded int64
-	after := ""
+	stream, err := openComparisonStream(ctx, tx, snapshotID, root)
+	if err != nil {
+		return digest, retained, excluded, err
+	}
+	defer stream.rows.Close()
 
-	for {
-		records, err := comparisonRecords(ctx, tx, snapshotID, root, after, comparisonBatchSize)
-		if err != nil {
-			return digest, retained, excluded, err
-		}
-		for _, record := range records {
-			after = record.path
-
-			if !comparisonSelected(f, comparisonRelative(root, record.path)) {
-				excluded++
-				continue
-			}
-
-			retained++
-			comparisonHashRecord(h, root, record)
+	var buffer []byte
+	for stream.next() {
+		if !comparisonSelected(f, comparisonRelative(root, stream.record.path)) {
+			excluded++
+			continue
 		}
 
-		if len(records) < comparisonBatchSize {
-			break
-		}
+		retained++
+		buffer = comparisonHashRecord(h, root, stream.record, buffer)
+	}
+	if err := stream.error(); err != nil {
+		return digest, retained, excluded, err
 	}
 
 	copy(digest[:], h.Sum(nil))
@@ -255,47 +307,33 @@ func manifestsEqual(
 	ctx context.Context, tx *Tx, source base.DirectoryComparisonFilters,
 	candidateSnapshot base.SnapshotId, candidateRoot string,
 ) (bool, error) {
-	var sourceAfter, candidateAfter string
-	var sourceQueue, candidateQueue []comparisonRecord
+	leftStream, err := openComparisonStream(ctx, tx, source.SnapshotID, source.Path)
+	if err != nil {
+		return false, err
+	}
+	defer leftStream.rows.Close()
 
-	next := func(snapshotID base.SnapshotId, root string, after *string,
-		queue *[]comparisonRecord) (*comparisonRecord, error) {
-		for {
-			if len(*queue) == 0 {
-				records, err := comparisonRecords(
-					ctx,
-					tx,
-					snapshotID,
-					root,
-					*after,
-					comparisonBatchSize,
-				)
-				if err != nil {
-					return nil, err
-				}
+	rightStream, err := openComparisonStream(ctx, tx, candidateSnapshot, candidateRoot)
+	if err != nil {
+		return false, err
+	}
+	defer rightStream.rows.Close()
 
-				*queue = records
-				if len(records) == 0 {
-					return nil, nil
-				}
-			}
-
-			record := (*queue)[0]
-			*queue = (*queue)[1:]
-			*after = record.path
-
-			if comparisonSelected(source, comparisonRelative(root, record.path)) {
-				return &record, nil
+	next := func(stream *comparisonStream, root string) (*comparisonRecord, error) {
+		for stream.next() {
+			if comparisonSelected(source, comparisonRelative(root, stream.record.path)) {
+				return &stream.record, nil
 			}
 		}
+		return nil, stream.error()
 	}
 
 	for {
-		left, err := next(source.SnapshotID, source.Path, &sourceAfter, &sourceQueue)
+		left, err := next(leftStream, source.Path)
 		if err != nil {
 			return false, err
 		}
-		right, err := next(candidateSnapshot, candidateRoot, &candidateAfter, &candidateQueue)
+		right, err := next(rightStream, candidateRoot)
 		if err != nil {
 			return false, err
 		}
