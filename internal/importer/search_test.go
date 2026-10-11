@@ -26,7 +26,7 @@ func TestSearchIndexFailureCleansCommittedBatchesAndPreservesSharedPaths(t *test
 	assertEqual(t, count(t, raw, "search_path"), 2)
 	var matches int
 	assertNoErr(t, raw.QueryRow(`SELECT COUNT(*) FROM search_trigram
- WHERE search_trigram MATCH 'path_fold:"tree/file"'`).Scan(&matches))
+ WHERE search_trigram MATCH 'path_fold:("tre" AND "ree" AND "ee/" AND "e/f" AND "/fi" AND "fil" AND "ile")'`).Scan(&matches))
 	assertEqual(t, matches, 2)
 	assertNoErr(t, execSQL(raw,
 		`INSERT INTO search_trigram(search_trigram,rank) VALUES('integrity-check',1)`))

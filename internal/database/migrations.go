@@ -67,9 +67,28 @@ CREATE TRIGGER immutable_content_identity BEFORE UPDATE ON content
 
 type migration func(context.Context, *Tx) error
 
-var migrations = []migration{migrateInitial}
+var migrations = []migration{migrateInitial, migrateCompactSearchSupport}
+
+// Version 2 requires a reader that intersects trigrams rather than issuing
+// positional phrase queries. Existing full-detail indexes need no rewrite.
+func migrateCompactSearchSupport(context.Context, *Tx) error { return nil }
 
 func (db *DB) migrate(ctx context.Context) error {
+	var version int
+	if err := db.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		return err
+	}
+	if version == 1 {
+		// This reader-version bump changes no schema or data, so it must not
+		// reintroduce a catalog-wide validation scan on existing catalogs.
+		if err := db.TransactionContext(ctx, func(tx *Tx) error {
+			_, err := tx.ExecContext(ctx, "PRAGMA user_version=2")
+			return err
+		}); err != nil {
+			return err
+		}
+	}
+
 	return db.applyMigrations(ctx, migrations)
 }
 
@@ -105,7 +124,7 @@ func (db *DB) applyMigrations(ctx context.Context, steps []migration) error {
 		version = next
 	}
 
-	return db.TransactionContext(ctx, func(tx *Tx) error { return checkForeignKeys(ctx, tx) })
+	return nil
 }
 
 func checkForeignKeys(ctx context.Context, tx *Tx) error {

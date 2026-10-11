@@ -109,7 +109,7 @@ func TestSearchIndexesCleanupAndRecovery(t *testing.T) {
 	}
 	for _, query := range []string{
 		`SELECT COUNT(*) FROM search_path`,
-		`SELECT COUNT(*) FROM search_trigram WHERE search_trigram MATCH 'name_fold:"report"'`,
+		`SELECT COUNT(*) FROM search_trigram WHERE search_trigram MATCH 'name_fold:("rep" AND "epo" AND "por" AND "ort")'`,
 	} {
 		var count int
 		if err := db.db.QueryRow(query).Scan(&count); err != nil || count != 1 {

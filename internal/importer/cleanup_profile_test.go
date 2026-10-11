@@ -64,7 +64,8 @@ func TestCleanupProfilePreRecoveryRejectsLeftovers(t *testing.T) {
 			query := "SELECT COUNT(*) FROM snapshot WHERE state='importing'"
 			want := int64(1)
 			if mutation.name == "FTS" {
-				query = "SELECT COUNT(*) FROM search_trigram WHERE search_trigram MATCH 'report'"
+				query = `SELECT COUNT(*) FROM search_trigram
+ WHERE search_trigram MATCH '"rep" AND "epo" AND "por" AND "ort"'`
 				want = 0
 			}
 			if got := distributionCount(t, raw, query); got != want {

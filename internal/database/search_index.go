@@ -20,6 +20,12 @@ func init() {
 		})
 }
 
+const searchTrigramSchema = `CREATE VIRTUAL TABLE search_trigram USING fts5(
+ name_fold, path_fold, content='search_path', content_rowid='id',
+ tokenize='trigram case_sensitive 1', detail=column, columnsize=0
+);
+`
+
 const searchSchema = `
 CREATE TABLE search_path (
  id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
@@ -29,10 +35,7 @@ CREATE TABLE search_path (
 );
 CREATE INDEX search_name ON search_path(name_fold,path);
 CREATE INDEX search_path_fold ON search_path(path_fold);
-CREATE VIRTUAL TABLE search_trigram USING fts5(
- name_fold, path_fold, content='search_path', content_rowid='id',
- tokenize='trigram case_sensitive 1'
-);
+` + searchTrigramSchema + `
 CREATE TRIGGER search_path_insert AFTER INSERT ON search_path BEGIN
  INSERT INTO search_trigram(rowid,name_fold,path_fold)
  VALUES(NEW.id,NEW.name_fold,NEW.path_fold);

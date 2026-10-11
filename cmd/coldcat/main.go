@@ -52,6 +52,7 @@ func newCommand() *cli.Command {
 			diskCommands(),
 			snapshotCommands(),
 			importCommand(),
+			catalogCommand(),
 		},
 	}
 }

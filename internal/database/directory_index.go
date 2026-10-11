@@ -28,6 +28,18 @@ func init() {
 		})
 }
 
+// The membership key is also its storage key, avoiding a second full copy of
+// every ancestor path in a rowid table's primary-key index.
+const directoryContentSchema = `CREATE TABLE directory_content (
+ snapshot_id INTEGER NOT NULL, directory_path TEXT NOT NULL,
+ content_id INTEGER NOT NULL REFERENCES content(id),
+ occurrences INTEGER NOT NULL CHECK(occurrences>0),
+ PRIMARY KEY(snapshot_id,directory_path,content_id),
+ FOREIGN KEY(snapshot_id,directory_path) REFERENCES directory(snapshot_id,path) ON DELETE CASCADE
+) WITHOUT ROWID;
+CREATE INDEX directory_content_reverse ON directory_content(content_id,snapshot_id,directory_path);
+`
+
 const directorySchema = `
 CREATE TABLE directory (
 	 id INTEGER PRIMARY KEY,
@@ -48,23 +60,16 @@ CREATE TABLE directory (
 );
 CREATE INDEX directory_parent ON directory(snapshot_id,parent_path,path);
 CREATE INDEX directory_fingerprint ON directory(fingerprint_version,fingerprint,snapshot_id,path);
-CREATE TABLE directory_content (
- snapshot_id INTEGER NOT NULL, directory_path TEXT NOT NULL,
- content_id INTEGER NOT NULL REFERENCES content(id),
- occurrences INTEGER NOT NULL CHECK(occurrences>0),
- PRIMARY KEY(snapshot_id,directory_path,content_id),
- FOREIGN KEY(snapshot_id,directory_path) REFERENCES directory(snapshot_id,path) ON DELETE CASCADE
-);
-CREATE INDEX directory_content_reverse ON directory_content(content_id,snapshot_id,directory_path);
+` + directoryContentSchema + `
 CREATE TABLE directory_file (
- observation_id INTEGER PRIMARY KEY REFERENCES observation(id) ON DELETE CASCADE,
- snapshot_id INTEGER NOT NULL, directory_path TEXT NOT NULL, path TEXT NOT NULL,
- FOREIGN KEY(snapshot_id,directory_path) REFERENCES directory(snapshot_id,path) ON DELETE CASCADE
+  observation_id INTEGER PRIMARY KEY REFERENCES observation(id) ON DELETE CASCADE,
+  snapshot_id INTEGER NOT NULL, directory_path TEXT NOT NULL, path TEXT NOT NULL,
+  FOREIGN KEY(snapshot_id,directory_path) REFERENCES directory(snapshot_id,path) ON DELETE CASCADE
 );
 CREATE INDEX directory_file_parent
- ON directory_file(snapshot_id,directory_path,path,observation_id);
+  ON directory_file(snapshot_id,directory_path,path,observation_id);
 CREATE TABLE directory_build (
- snapshot_id INTEGER PRIMARY KEY REFERENCES snapshot(id) ON DELETE CASCADE
+  snapshot_id INTEGER PRIMARY KEY REFERENCES snapshot(id) ON DELETE CASCADE
 );
 CREATE TRIGGER directory_build_observation_insert AFTER INSERT ON observation
  BEGIN DELETE FROM directory_build WHERE snapshot_id=NEW.snapshot_id; END;

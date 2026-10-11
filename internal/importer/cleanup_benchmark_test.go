@@ -171,8 +171,10 @@ func checkCleanupCatalogBeforeRecovery(
 		`SELECT COUNT(*) FROM directory_file f JOIN observation o ON o.id=f.observation_id
  WHERE f.snapshot_id!=o.snapshot_id OR f.path!=o.path`,
 		`SELECT COUNT(*) FROM search_path
- WHERE id NOT IN (SELECT rowid FROM search_trigram WHERE search_trigram MATCH 'report')`,
-		`SELECT COUNT(*) FROM search_trigram WHERE search_trigram MATCH 'report'
+ WHERE id NOT IN (SELECT rowid FROM search_trigram
+ WHERE search_trigram MATCH '"rep" AND "epo" AND "por" AND "ort"')`,
+		`SELECT COUNT(*) FROM search_trigram
+ WHERE search_trigram MATCH '"rep" AND "epo" AND "por" AND "ort"'
  AND rowid NOT IN (SELECT id FROM search_path)`,
 	} {
 		var count int64

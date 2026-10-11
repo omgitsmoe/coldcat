@@ -37,6 +37,33 @@ func searchCandidates(f base.SearchFilters) (string, []any) {
 	return searchWindow(f, 0, base.SearchAnchor{})
 }
 
+func searchTrigramMatch(field, folded string) string {
+	runes := []rune(folded)
+	terms := make([]string, 0, len(runes)-2)
+	seen := make(map[string]bool, len(runes)-2)
+	for i := 0; i+3 <= len(runes); i++ {
+		trigram := string(runes[i : i+3])
+		if !seen[trigram] {
+			seen[trigram] = true
+			terms = append(terms, `"`+strings.ReplaceAll(trigram, `"`, `""`)+`"`)
+		}
+	}
+	// Column-only FTS omits positions. Intersect grams, then verify the complete
+	// substring with instr below; balanced groups bound depth for long queries.
+	for len(terms) > 1 {
+		combined := make([]string, 0, (len(terms)+1)/2)
+		for i := 0; i < len(terms); i += 2 {
+			if i+1 == len(terms) {
+				combined = append(combined, terms[i])
+			} else {
+				combined = append(combined, "("+terms[i]+" AND "+terms[i+1]+")")
+			}
+		}
+		terms = combined
+	}
+	return field + "_fold:" + terms[0]
+}
+
 func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (string, []any) {
 	column := "p." + f.Field + "_fold"
 	folded := searchFold(f.Query)
@@ -57,7 +84,7 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 	} else {
 		source = `SELECT p.* FROM search_trigram t
  CROSS JOIN search_path p ON p.id=t.rowid WHERE search_trigram MATCH ?`
-		args = []any{f.Field + `_fold:"` + strings.ReplaceAll(folded, `"`, `""`) + `"`}
+		args = []any{searchTrigramMatch(f.Field, folded)}
 	}
 	var ranked string
 	if f.Match == "exact" {

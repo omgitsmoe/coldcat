@@ -65,7 +65,7 @@ func TestInitialSchemaReopen(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if tables != 16 {
+		if tables != 15 {
 			t.Fatalf("initial schema has %d tables", tables)
 		}
 

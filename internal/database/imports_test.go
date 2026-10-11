@@ -60,7 +60,7 @@ func TestImportCleanupReferenceIndexes(t *testing.T) {
 			"INTEGER PRIMARY KEY"},
 		{"directory membership cascade",
 			"SELECT 1 FROM directory_content WHERE snapshot_id=? AND directory_path=?",
-			"sqlite_autoindex_directory_content_1"},
+			"USING PRIMARY KEY (snapshot_id=? AND directory_path=?)"},
 		{"directory parent cascade",
 			"SELECT 1 FROM directory_file WHERE snapshot_id=? AND directory_path=?",
 			"directory_file_parent"},
