@@ -21,7 +21,8 @@ Optional user-feedback tests are deferred. No required blockers remain for U03.
   static-host foundation inspection; existing U01 capture test is reused, not rewritten.
 - `frontend/AGENTS.md`: local capture command and native focus-testing lesson. Existing
   untracked root `AGENTS.md` is untouched and unstaged.
-- Plan and U01 specification record actual owner approval; U01's original PNGs are untouched.
+- Plan and U01 specification record actual owner approval; U01's original PNG content is preserved
+  externally under the [artifact policy](../artifact-policy.md).
 
 ### Native-element CSS contract
 
@@ -88,18 +89,14 @@ The initial control test assumed programmatic focus after mouse interaction woul
 `:focus-visible`; native Chromium correctly did not. The test now exercises Tab/Shift+Tab,
 not a forced always-on outline or weakened assertion.
 
-All 21 full-page PNGs are preserved in [screenshots/](screenshots/), independently of U01's
-before images. Chromium 156.0.8078.4, en-US, UTC, scale factor 1, 900px viewport height:
-
-| Scenario | 1440 | 1024 | 768 |
-| --- | --- | --- | --- |
-| Native control fixture | [PNG](screenshots/controls-1440.png) | [PNG](screenshots/controls-1024.png) | [PNG](screenshots/controls-768.png) |
-| Search | [PNG](screenshots/search-1440.png) | [PNG](screenshots/search-1024.png) | [PNG](screenshots/search-768.png) |
-| Disks | [PNG](screenshots/disks-1440.png) | [PNG](screenshots/disks-1024.png) | [PNG](screenshots/disks-768.png) |
-| Content history | [PNG](screenshots/content-history-1440.png) | [PNG](screenshots/content-history-1024.png) | [PNG](screenshots/content-history-768.png) |
-| Directory history | [PNG](screenshots/directory-history-1440.png) | [PNG](screenshots/directory-history-1024.png) | [PNG](screenshots/directory-history-768.png) |
-| Search empty | [PNG](screenshots/search-empty-1440.png) | [PNG](screenshots/search-empty-1024.png) | [PNG](screenshots/search-empty-768.png) |
-| Directory summary error | [PNG](screenshots/directory-error-1440.png) | [PNG](screenshots/directory-error-1024.png) | [PNG](screenshots/directory-error-768.png) |
+All 21 full-page PNGs are handoff-only evidence, removed from tracking after preservation at
+`/tmp/opencode/ui-ux-artifact-cleanup-20261011/doc/ui-ux/u02/screenshots/`.
+See [artifact policy and inventory](../artifact-policy.md); this is an environment-local archive,
+not durable repository hosting. Filenames are `{scenario}-{width}.png`: scenarios `controls`,
+`search`, `disks`, `content-history`, `directory-history`, `search-empty`, `directory-error`;
+widths 1440, 1024, 768. Chromium 156.0.8078.4, en-US, UTC, scale factor 1, 900px viewport height.
+Reproduce after build with the U02 capture command above; preserve ignored outputs externally,
+not by copying them into the repository.
 
 All 18 page document widths match their viewport widths. Representative screenshots were
 inspected for dark native surfaces, wrapping and visible focus; these are inspection evidence,

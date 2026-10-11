@@ -39,7 +39,8 @@ explicit emphasized words, an error border and the unchanged Retry connection ac
 - `frontend/tests/visual/u03-shell.spec.ts`, `frontend/playwright.u03.config.ts`: isolated
   Chromium static-host capture and dimension checks. Test clocks freeze existing automatic
   retry scheduling only in tests; production backoff behavior is unchanged.
-- `doc/coldcat-frontend-ui-ux.md`, this handoff and `screenshots/`: progress and durable evidence.
+- `doc/coldcat-frontend-ui-ux.md`, this handoff and `screenshots/manifest.json`: progress and
+  measured evidence; screenshot images are external under the artifact policy below.
 - `frontend/AGENTS.md`: brief new inspection guidance left **unstaged**, as requested.
   Unrelated untracked root instructions/catalog/lock/measurement directory remain untouched.
 
@@ -71,7 +72,7 @@ From `frontend/`, validated:
   state/width combinations and wide workspace/form caps. Bounds, gutters, full document
   width, visible outage action, page errors and shell request counts are asserted.
 - `npx playwright test --config playwright.u01.config.ts`: one passed, all 18 representative
-  page captures have no horizontal document overflow. U01's tracked baseline is unchanged.
+  page captures have no horizontal document overflow. U01's original baseline content is preserved.
   Temporary post-U03 full-page evidence was preserved in
   `/tmp/opencode/u03-representative-pages/` before the next suite; it is not a durable baseline.
 - `npx playwright test tests/browser/shell.spec.ts tests/browser/smoke.spec.ts
@@ -80,15 +81,17 @@ From `frontend/`, validated:
   Existing IME/Back restoration, exact values, independent sections, retained pagination,
   uncertain writes and reconciliation assertions remain intact.
 
-Tracked shell captures are 240px-high viewport crops, Chromium 156.0.8078.4, en-US/UTC,
+External shell captures are 240px-high viewport crops, Chromium 156.0.8078.4, en-US/UTC,
 scale factor 1, from a 900px-high viewport. These are inspected evidence, not pixel goldens.
 [Manifest](screenshots/manifest.json) records bounds, gutters and request-state dimensions.
 
-| State | 1440 | 1024 | 768 |
-| --- | --- | --- | --- |
-| Ready | [PNG](screenshots/ready-1440.png) | [PNG](screenshots/ready-1024.png) | [PNG](screenshots/ready-768.png) |
-| Checking | [PNG](screenshots/checking-1440.png) | [PNG](screenshots/checking-1024.png) | [PNG](screenshots/checking-768.png) |
-| Outage | [PNG](screenshots/unavailable-1440.png) | [PNG](screenshots/unavailable-1024.png) | [PNG](screenshots/unavailable-768.png) |
+The nine handoff-only images were removed from tracking after preservation at
+`/tmp/opencode/ui-ux-artifact-cleanup-20261011/doc/ui-ux/u03/screenshots/`.
+Filenames are `{state}-{width}.png`: states `ready`, `checking`, `unavailable`; widths 1440,
+1024, 768. The manifest's `screenshot` values resolve under its external `imageRoot`.
+See [artifact policy and inventory](../artifact-policy.md); the archive is environment-local,
+not durable hosting. Reproduce after build with the U03 capture command above and preserve
+ignored outputs externally, not as repository images.
 
 ## Constraints and follow-up
 

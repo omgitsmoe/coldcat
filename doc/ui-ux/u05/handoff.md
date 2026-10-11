@@ -113,15 +113,16 @@ decimal capacity, binary known subtotal and Unknown total. Tests assert document
 viewport width for all nine captures. Narrow screenshots were inspected; these are evidence,
 not pixel goldens and do not replace U01's approved pre-redesign baseline.
 
-| State | 1440 | 1024 | 768 |
-| --- | --- | --- | --- |
-| Compact dates/size | [PNG](screenshots/compact-1440.png) | [PNG](screenshots/compact-1024.png) | [PNG](screenshots/compact-768.png) |
-| Expanded precision | [PNG](screenshots/precision-1440.png) | [PNG](screenshots/precision-1024.png) | [PNG](screenshots/precision-768.png) |
-| Declared capacity / incomplete subtotal | [PNG](screenshots/subtotal-1440.png) | [PNG](screenshots/subtotal-1024.png) | [PNG](screenshots/subtotal-768.png) |
+The nine handoff-only images were removed from tracking after preservation at
+`/tmp/opencode/ui-ux-artifact-cleanup-20261011/doc/ui-ux/u05/screenshots/`.
+Filenames are `{state}-{width}.png`: states `compact`, `precision`, `subtotal`; widths 1440,
+1024, 768. See [artifact policy and inventory](../artifact-policy.md); this archive is
+environment-local, not durable repository hosting.
 
 Reproduce after `npm run build` using `npx playwright test tests/browser/readable-values.spec.ts`.
 Copy its `compact-*.png`, `precision-*.png` and `subtotal-*.png` from `test-results/readable-values-*`
-before another Playwright suite clears outputs. Only inspected captures should replace U05 evidence.
+before another Playwright suite clears outputs. Preserve inspected captures externally,
+not as tracked repository images.
 
 ## Limits / next owners
 

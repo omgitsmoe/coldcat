@@ -109,9 +109,11 @@ Tests assert document width equals viewport width at all three sizes. Representa
 narrow edit/discard/recovery images were visually inspected; no horizontal clipping was seen.
 These are temporary handoff evidence, not pixel regression baselines. Reproduce with the focused
 browser command above after build; copy matching PNGs from ignored `frontend/test-results/`
-before another suite clears them. Parent follow-up: assign already tracked U01–U05 handoff
-image removal/migration separately. They remain untouched here. No actual regression image
-baseline was needed; Git LFS was neither configured nor claimed to work by U06.
+before another suite clears them. The subsequent bounded U01–U05 cleanup is recorded in the
+[artifact policy and inventory](../artifact-policy.md): handoff-only images were removed,
+and needed U01 before-references were preserved externally because Git LFS is unavailable.
+U06's existing external images remain unchanged. No actual regression image baseline was
+needed by U06; Git LFS was neither configured nor claimed to work.
 
 ## Constraints / next owners
 

@@ -25,14 +25,21 @@ positions for **18 captures: six scenarios at each of 1440, 1024, and 768 CSS pi
 No pixel-golden assertions are introduced: these are the _before_ reference, not the desired
 appearance. OS/font changes may change rasterization; do not bless regenerated images silently.
 
+**Artifact storage update (2026-10-11):** these 18 images remain needed before-references,
+but Git LFS is unavailable here. Original images are preserved externally at
+`/tmp/opencode/ui-ux-artifact-cleanup-20261011/doc/ui-ux/u01/baseline/`.
+The manifest's `file` values resolve under its external `imageRoot`, not this checkout.
+See [artifact policy and preservation inventory](../artifact-policy.md). No LFS migration
+or durable external hosting is claimed; original Git history remains unchanged.
+
 | Scenario        | 1440                                       | 1024                                       | 768                                       | Stress represented                                                                                        |
 | --------------- | ------------------------------------------ | ------------------------------------------ | ----------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Search          | [PNG](baseline/search-1440.png)            | [PNG](baseline/search-1024.png)            | [PNG](baseline/search-768.png)            | Long path/name, Unicode and literal punctuation, signed-64-bit maximum bytes, Unknown, 0 B, unknown mtime |
-| Disks           | [PNG](baseline/disks-1440.png)             | [PNG](baseline/disks-1024.png)             | [PNG](baseline/disks-768.png)             | Long literal label, maximum declared capacity, zero capacity, empty serial/notes, no complete inventory   |
-| Content detail  | [PNG](baseline/content-history-1440.png)   | [PNG](baseline/content-history-1024.png)   | [PNG](baseline/content-history-768.png)   | Unknown size, full digest, long path, current versus historical observation, precise capture timestamp    |
-| Directory       | [PNG](baseline/directory-history-1440.png) | [PNG](baseline/directory-history-1024.png) | [PNG](baseline/directory-history-768.png) | Deep breadcrumbs, historical source/current destinations, incomplete sizes and large known subtotal       |
-| Search empty    | [PNG](baseline/search-empty-1440.png)      | [PNG](baseline/search-empty-1024.png)      | [PNG](baseline/search-empty-768.png)      | Successful zero matches, explicit history suggestion, loaded count                                        |
-| Directory error | [PNG](baseline/directory-error-1440.png)   | [PNG](baseline/directory-error-1024.png)   | [PNG](baseline/directory-error-768.png)   | Summary-only HTTP 500; entries remain successful with independent recovery                                |
+| Search          | `search-1440.png` | `search-1024.png` | `search-768.png` | Long path/name, Unicode and literal punctuation, signed-64-bit maximum bytes, Unknown, 0 B, unknown mtime |
+| Disks           | `disks-1440.png` | `disks-1024.png` | `disks-768.png` | Long literal label, maximum declared capacity, zero capacity, empty serial/notes, no complete inventory |
+| Content detail  | `content-history-1440.png` | `content-history-1024.png` | `content-history-768.png` | Unknown size, full digest, long path, current versus historical observation, precise capture timestamp |
+| Directory       | `directory-history-1440.png` | `directory-history-1024.png` | `directory-history-768.png` | Deep breadcrumbs, historical source/current destinations, incomplete sizes and large known subtotal |
+| Search empty    | `search-empty-1440.png` | `search-empty-1024.png` | `search-empty-768.png` | Successful zero matches, explicit history suggestion, loaded count |
+| Directory error | `directory-error-1440.png` | `directory-error-1024.png` | `directory-error-768.png` | Summary-only HTTP 500; entries remain successful with independent recovery |
 
 Visual inspection covered representative search, disks, content, directory, empty and error
 captures, including narrow desktop examples; every capture has measured document dimensions.
@@ -336,10 +343,11 @@ static host, intercepts all API reads, fails on unexpected endpoints or page exc
 for representative content plus readiness, and asserts successful entries despite summary
 failure. No new browser installation or global executable override is needed.
 
-To intentionally replace the tracked evidence, inspect the fresh output first, then copy only
-its PNGs and manifest to `doc/ui-ux/u01/baseline/`. Never run this copy automatically in ordinary
-tests; future visual changes must not erase the pre-redesign record. There are only 18 images,
-no video, trace, duplicate viewport crop or catalog files.
+Inspect fresh output as temporary evidence; do not copy PNGs into the checkout as regular Git
+binaries. The current UI cannot regenerate the original pre-redesign record. Restoring those
+original images as tracked references requires working Git LFS and verified object storage;
+the baseline PNG path is ignored to prevent accidental regular-Git additions. Never replace
+the before-reference automatically in ordinary tests. See the artifact policy above.
 
 U01 validation results:
 
@@ -352,7 +360,7 @@ U01 validation results:
   the query instead of making an unsupported application auto-focus claim.
 - `npm run check`: passed, 0 errors/warnings; `npm run lint`: passed.
 - `npm run test:unit`: passed, 15 files / 143 tests.
-- Tracked artifact check: all 18 PNG header dimensions match the manifest; every measured
+- Original artifact check: all 18 PNG header dimensions match the manifest; every measured
   document width equals its viewport width.
 - `npx playwright test tests/browser/search.spec.ts tests/browser/inventories.spec.ts
   tests/browser/details.spec.ts tests/browser/directories.spec.ts`: passed, 39 tests, run after
@@ -365,7 +373,7 @@ On 2026-10-10 the owner explicitly approved this visual specification and said t
 U01's approved-specification/agreed-layout acceptance is complete; U02 is unblocked.
 The original review choices below are retained as decision context, not a new approval gate.
 
-Ask the owner to review this document and the linked images before starting U02:
+The original approval request asked the owner to review this document and the before-images:
 
 1. **Approve or revise this palette/type/density proposal?** Recommended: the token table,
    14px UI text and 32/28/36px minimum controls. Alternative: retain 16px body text while keeping

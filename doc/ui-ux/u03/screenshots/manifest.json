@@ -1,4 +1,6 @@
 {
+  "imageStorage": "external handoff-only evidence, not checkout-relative files",
+  "imageRoot": "/tmp/opencode/ui-ux-artifact-cleanup-20261011/doc/ui-ux/u03/screenshots",
   "browser": "156.0.8078.4",
   "measurements": [
     {

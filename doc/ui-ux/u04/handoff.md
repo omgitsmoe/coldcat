@@ -42,7 +42,8 @@ Zero and `9223372036854775807` B are valid. Invalid drafts display no stale byte
   conflict, maximum, optional-clear and catalog-revision assertions retained.
 - `frontend/tests/real/lifecycle.spec.ts`: committed POST response-loss case now uses `1.5` TB
   and verifies retained amount/unit plus stored canonical bytes, still exactly one creation.
-- Plan, this handoff and three screenshots are durable U04 evidence. Existing root instructions,
+- Plan and this handoff are durable U04 evidence; three screenshots are external inspection
+  artifacts under the policy below. Existing root instructions,
   frontend instruction edits, workspace catalogs and measurement directories are not staged.
 
 ### U05 integration
@@ -97,9 +98,11 @@ Form-region screenshots from the deterministic browser capacity test, Chromium d
 and exact preview remain visible. Captures were inspected and preserved before later suites;
 they are evidence, not pixel goldens, and do not replace U01's baseline.
 
-| 1440 | 1024 | 768 |
-| --- | --- | --- |
-| [Capacity form](screenshots/capacity-1440.png) | [Capacity form](screenshots/capacity-1024.png) | [Capacity form](screenshots/capacity-768.png) |
+The three handoff-only images were removed from tracking after preservation at
+`/tmp/opencode/ui-ux-artifact-cleanup-20261011/doc/ui-ux/u04/screenshots/`:
+`capacity-{1440,1024,768}.png`. See [artifact policy and inventory](../artifact-policy.md);
+this is an environment-local archive, not durable hosting. Reproduce after build with the
+focused disk-write browser command above; preserve ignored outputs externally, not in Git.
 
 ## Remaining issues and limits
 

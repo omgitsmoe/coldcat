@@ -1,5 +1,7 @@
 {
   "purpose": "U01 pre-redesign inspection; not golden assertions or real-backend acceptance",
+  "imageStorage": "external; Git LFS unavailable, not checkout-relative files",
+  "imageRoot": "/tmp/opencode/ui-ux-artifact-cleanup-20261011/doc/ui-ux/u01/baseline",
   "browser": "Chromium",
   "version": "156.0.8078.4",
   "locale": "en-US",
