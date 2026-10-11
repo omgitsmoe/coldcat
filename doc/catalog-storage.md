@@ -204,6 +204,42 @@ go test ./internal/database -run '^$' \
   -bench '^BenchmarkDirectoryEnrichment/50000$' -benchtime=20x -benchmem -v
 ```
 
+### Distinct-size enrichment regression
+
+The one-content enrichment fixture above does not detect a join-order regression
+introduced by normalized ancestor memberships (`aa6fe87`). After flattening the
+`directory_content` view, SQLite selected all staged sizes as the outer loop of
+each per-directory aggregate, probing memberships once per staged content. This
+repeats four times for every affected directory, including current snapshots on
+other disks; multiple snapshots per disk are not required.
+
+`BenchmarkDirectoryEnrichmentDistinct` isolates the enrichment transaction using
+two disks with one complete snapshot each, 20,000/100,000 shared distinct contents,
+50 contents per leaf directory, and one incoming snapshot staging all sizes.
+It seeds directory summaries and memberships directly; fixture creation and
+correctness checks are untimed. It does not measure full publication, ingestion,
+search indexing, or cold-cache latency.
+
+```sh
+go test ./internal/database -run '^$' \
+  -bench '^BenchmarkDirectoryEnrichmentDistinct/' \
+  -benchtime=1x -count=3 -benchmem -timeout=10m
+```
+
+On the same container and production Go SQLite driver, three 20,000-content
+samples before the fix took 15.974 / 15.937 / 15.826 seconds; after the fix they
+took 0.221 / 0.221 / 0.223 seconds (median improvement about 72x). Fixed
+100,000-content samples took 1.268 / 1.223 / 1.233 seconds; the unfixed larger
+case was not run. These are isolated warm measurements, not an estimate for a
+particular user's catalog.
+
+The aggregates now use `CROSS JOIN` to keep directory membership enumeration
+ahead of staged-size and content lookups. This preserves the existing atomic
+updates and legacy-layout compatibility without changing catalog storage.
+`TestDirectoryEnrichmentUsesMembershipSeeks` checks all four aggregates in the
+actual update's query plan; it failed before the fix. Distinct-content tests
+verify both layouts' totals and transactional rollback.
+
 Compact-copy was also measured end-to-end on the same full-index fixture seeded
 with the prior path-keyed membership layout:
 

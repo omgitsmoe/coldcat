@@ -316,6 +316,27 @@ func buildDirectoryFingerprint(ctx context.Context, tx *Tx, snapshotID int64, pa
 	return err
 }
 
+// CROSS JOIN keeps SQLite from scanning every staged size for each directory
+// after flattening the normalized membership view. Seek this directory first.
+const directoryEnrichmentUpdate = `UPDATE directory SET
+ known_bytes=known_bytes+(SELECT SUM(dc.occurrences*p.size)
+ FROM directory_content dc CROSS JOIN pending_size p ON p.content_id=dc.content_id
+ CROSS JOIN content c ON c.id=p.content_id AND c.size IS NULL
+ WHERE dc.snapshot_id=? AND dc.directory_path=? AND p.snapshot_id=?),
+ unknown_size_file_count=unknown_size_file_count-(SELECT SUM(dc.occurrences)
+ FROM directory_content dc CROSS JOIN pending_size p ON p.content_id=dc.content_id
+ CROSS JOIN content c ON c.id=p.content_id AND c.size IS NULL
+ WHERE dc.snapshot_id=? AND dc.directory_path=? AND p.snapshot_id=?),
+ unique_content_known_bytes=unique_content_known_bytes+(SELECT SUM(p.size)
+ FROM directory_content dc CROSS JOIN pending_size p ON p.content_id=dc.content_id
+ CROSS JOIN content c ON c.id=p.content_id AND c.size IS NULL
+ WHERE dc.snapshot_id=? AND dc.directory_path=? AND p.snapshot_id=?),
+ unknown_size_content_count=unknown_size_content_count-(SELECT COUNT(*)
+ FROM directory_content dc CROSS JOIN pending_size p ON p.content_id=dc.content_id
+ CROSS JOIN content c ON c.id=p.content_id AND c.size IS NULL
+ WHERE dc.snapshot_id=? AND dc.directory_path=? AND p.snapshot_id=?)
+ WHERE snapshot_id=? AND path=?`
+
 func enrichDirectories(ctx context.Context, tx *Tx, snapshotID int64) error {
 	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT dc.snapshot_id,dc.directory_path
  FROM pending_size p JOIN content c ON c.id=p.content_id AND c.size IS NULL
@@ -331,24 +352,7 @@ func enrichDirectories(ctx context.Context, tx *Tx, snapshotID int64) error {
 		if err := rows.Scan(&id, &path); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `UPDATE directory SET
- known_bytes=known_bytes+(SELECT SUM(dc.occurrences*p.size)
- FROM directory_content dc JOIN pending_size p ON p.content_id=dc.content_id
- JOIN content c ON c.id=p.content_id AND c.size IS NULL
- WHERE dc.snapshot_id=? AND dc.directory_path=? AND p.snapshot_id=?),
- unknown_size_file_count=unknown_size_file_count-(SELECT SUM(dc.occurrences)
- FROM directory_content dc JOIN pending_size p ON p.content_id=dc.content_id
- JOIN content c ON c.id=p.content_id AND c.size IS NULL
- WHERE dc.snapshot_id=? AND dc.directory_path=? AND p.snapshot_id=?),
- unique_content_known_bytes=unique_content_known_bytes+(SELECT SUM(p.size)
- FROM directory_content dc JOIN pending_size p ON p.content_id=dc.content_id
- JOIN content c ON c.id=p.content_id AND c.size IS NULL
- WHERE dc.snapshot_id=? AND dc.directory_path=? AND p.snapshot_id=?),
- unknown_size_content_count=unknown_size_content_count-(SELECT COUNT(*)
- FROM directory_content dc JOIN pending_size p ON p.content_id=dc.content_id
- JOIN content c ON c.id=p.content_id AND c.size IS NULL
- WHERE dc.snapshot_id=? AND dc.directory_path=? AND p.snapshot_id=?)
- WHERE snapshot_id=? AND path=?`,
+		_, err := tx.ExecContext(ctx, directoryEnrichmentUpdate,
 			id, path, snapshotID, id, path, snapshotID,
 			id, path, snapshotID, id, path, snapshotID, id, path)
 		if err != nil {
