@@ -44,8 +44,14 @@ export function advancedCount(route: SearchRoute): number {
 }
 
 export function searchSummary(route: SearchRoute): string {
+  const modes = {
+    substring: 'Contains',
+    exact: 'Exact',
+    wildcard: 'Wildcard',
+    expression: 'AND / OR',
+  };
   const parts = [
-    `${route.field === 'path' ? 'Path' : 'Name'} · ${route.match === 'exact' ? 'Exact' : 'Contains'}`,
+    `${route.field === 'path' ? 'Path' : 'Name'} · ${modes[route.match ?? 'substring']}`,
     route.scope === 'history' ? 'History' : 'Current',
     `Query: ${route.q}`,
   ];

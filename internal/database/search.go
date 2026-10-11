@@ -18,11 +18,22 @@ func ValidateSearchFilters(f base.SearchFilters) error {
 	}
 	if f.Query == "" || len(f.Query) > 1024 || !utf8.ValidString(f.Query) ||
 		strings.ContainsRune(f.Query, 0) || (f.Field != "name" && f.Field != "path") ||
-		(f.Match != "exact" && f.Match != "substring") || f.SnapshotID < 0 {
+		(f.Match != "exact" && f.Match != "substring" &&
+			f.Match != "wildcard" && f.Match != "expression") || f.SnapshotID < 0 {
 		return fmt.Errorf("%w: invalid search query, field, match, or snapshot", ErrValidation)
 	}
 	if f.Match == "substring" && utf8.RuneCountInString(f.Query) < 3 {
 		return fmt.Errorf("%w: substring search requires at least three characters", ErrValidation)
+	}
+	if f.Match == "wildcard" {
+		if _, err := searchGlob(f.Query); err != nil {
+			return fmt.Errorf("%w: %v", ErrValidation, err)
+		}
+	}
+	if f.Match == "expression" {
+		if _, err := parseSearchExpression(f.Query); err != nil {
+			return fmt.Errorf("%w: %v", ErrValidation, err)
+		}
 	}
 	if f.Directory != "" {
 		if (f.DiskID == 0 && f.SnapshotID == 0) || !validDirectory(f.Directory) ||
@@ -33,7 +44,7 @@ func ValidateSearchFilters(f base.SearchFilters) error {
 	return nil
 }
 
-func searchCandidates(f base.SearchFilters) (string, []any) {
+func searchCandidates(f base.SearchFilters) (string, []any, error) {
 	return searchWindow(f, 0, base.SearchAnchor{})
 }
 
@@ -64,9 +75,29 @@ func searchTrigramMatch(field, folded string) string {
 	return field + "_fold:" + terms[0]
 }
 
-func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (string, []any) {
+func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (string, []any, error) {
 	column := "p." + f.Field + "_fold"
 	folded := searchFold(f.Query)
+	var candidate, predicate string
+	var predicateArgs []any
+	if f.Match == "wildcard" {
+		pattern, fragments, err := searchWildcard(f.Query)
+		if err != nil {
+			return "", nil, fmt.Errorf("%w: %v", ErrValidation, err)
+		}
+		terms := make([]string, 0, len(fragments))
+		for _, fragment := range fragments {
+			terms = append(terms, "("+searchTrigramMatch(f.Field, fragment)+")")
+		}
+		candidate = strings.Join(terms, " AND ")
+		predicate, predicateArgs = searchWildcardPredicate(column, f.Query, pattern)
+	} else if f.Match == "expression" {
+		e, err := parseSearchExpression(f.Query)
+		if err != nil {
+			return "", nil, fmt.Errorf("%w: %v", ErrValidation, err)
+		}
+		candidate, predicate, predicateArgs = e.compile(f.Field)
+	}
 	var source string
 	var args []any
 	// Do not materialize virtual basenames for every FTS candidate. Fetch them
@@ -83,6 +114,10 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 	} else if f.Match == "exact" {
 		source = "SELECT p.id,p.path,p.name_fold,p.path_fold FROM search_path p WHERE " + column + "=?"
 		args = []any{folded}
+	} else if f.Match == "wildcard" || f.Match == "expression" {
+		source = `SELECT p.id,p.path,p.name_fold,p.path_fold FROM search_trigram t
+ CROSS JOIN search_path p ON p.id=t.rowid WHERE search_trigram MATCH ?`
+		args = []any{candidate}
 	} else {
 		source = `SELECT p.id,p.path,p.name_fold,p.path_fold FROM search_trigram t
  CROSS JOIN search_path p ON p.id=t.rowid WHERE search_trigram MATCH ?`
@@ -92,6 +127,10 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 	if f.Match == "exact" {
 		// Constant rank and inlining preserve the exact index's path order.
 		ranked = `ranked_paths AS NOT MATERIALIZED (SELECT p.*,0 AS rank FROM (` + source + `) p)`
+	} else if f.Match == "wildcard" || f.Match == "expression" {
+		ranked = `ranked_paths AS NOT MATERIALIZED (SELECT p.*,3 AS rank FROM (` +
+			source + `) p WHERE ` + predicate + `)`
+		args = append(args, predicateArgs...)
 	} else {
 		ranked = `retrieved_paths AS NOT MATERIALIZED (` + source + `),
  ranked_paths AS NOT MATERIALIZED (SELECT p.*,
@@ -174,7 +213,7 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 		f.DiskID, f.DiskID, f.SnapshotID, f.SnapshotID,
 		f.Directory, f.Directory, f.Directory)
 	if !searchHasReplicaBounds(f) {
-		return query + `, eligible AS (SELECT * FROM matches) `, args
+		return query + `, eligible AS (SELECT * FROM matches) `, args, nil
 	}
 	query += `, candidate_contents AS MATERIALIZED (SELECT DISTINCT content_id FROM matches),
  candidate_counts AS MATERIALIZED (SELECT c.content_id,` + searchReplicaCounts + `
@@ -188,7 +227,7 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 		f.OtherReplicas, f.ReplicaMetric, f.OtherReplicas,
 		f.MinOtherReplicas, f.ReplicaMetric, f.MinOtherReplicas,
 		f.MaxOtherReplicas, f.ReplicaMetric, f.MaxOtherReplicas)
-	return query, args
+	return query, args, nil
 }
 
 // Replica subqueries must reuse this set instead of reselecting current snapshots
@@ -237,6 +276,8 @@ func searchRank(value string) int {
 		return 1
 	case "substring":
 		return 2
+	case "match":
+		return 3
 	default:
 		return -1
 	}
@@ -319,7 +360,10 @@ func (db *DB) Search(
 
 	rank := searchRank(after.Relevance)
 	if after.ID > 0 {
-		query, args := searchWindow(f, 0, after)
+		query, args, err := searchWindow(f, 0, after)
+		if err != nil {
+			return result, err
+		}
 		var valid bool
 		anchorArgs := append(append([]any{}, args...), after.ID, rank, after.Path)
 		if err := db.db.QueryRowContext(ctx, query+
@@ -331,7 +375,10 @@ func (db *DB) Search(
 			return result, fmt.Errorf("%w: invalid search cursor anchor", ErrValidation)
 		}
 	}
-	query, args := searchWindow(f, limit, after)
+	query, args, err := searchWindow(f, limit, after)
+	if err != nil {
+		return result, err
+	}
 	query += `, page AS MATERIALIZED (
  SELECT * FROM eligible WHERE (rank,path,id)>(?,?,?) ORDER BY rank,path,id LIMIT ?
  ), page_contents AS MATERIALIZED (SELECT DISTINCT content_id FROM page),
@@ -380,7 +427,7 @@ func (db *DB) Search(
 		}
 		s.Id, d.Id, c.Content.Id, c.Scope = o.SnapshotId, s.DiskId, o.ContentId, f.Scope
 		d.Capacity = uint64(capacity)
-		item.Relevance = []string{"exact", "prefix", "substring"}[relevance]
+		item.Relevance = []string{"exact", "prefix", "substring", "match"}[relevance]
 		c.Content.HashType, err = base.FromIdentifier(algorithm)
 		if err != nil {
 			return result, err

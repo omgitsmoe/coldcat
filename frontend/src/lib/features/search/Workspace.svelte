@@ -35,7 +35,7 @@
   let mounted = $state(false);
   let q = $state('');
   let field = $state<'name' | 'path'>('name');
-  let match = $state<'substring' | 'exact'>('substring');
+  let match = $state<NonNullable<SearchRoute['match']>>('substring');
   let scope = $state<'current' | 'history'>('current');
   let metric = $state<'disks' | 'locations'>('disks');
   let disk = $state('');
@@ -292,7 +292,11 @@
       boundMode = boundsMode(exact, minimum, maximum);
       const raw = page.url.searchParams;
       field = raw.get('field') === 'path' ? 'path' : 'name';
-      match = raw.get('match') === 'exact' ? 'exact' : 'substring';
+      const rawMatch = raw.get('match');
+      match =
+        rawMatch === 'exact' || rawMatch === 'wildcard' || rawMatch === 'expression'
+          ? rawMatch
+          : 'substring';
       scope = raw.get('scope') === 'history' ? 'history' : 'current';
       metric = raw.get('replica_metric') === 'locations' ? 'locations' : 'disks';
       advancedOpen =
@@ -371,6 +375,7 @@
         changedQuery();
       }}
       autocomplete="off"
+      aria-describedby="search-syntax-hint"
     /></label
   >
   <button class="button-primary" type="submit">Search</button>
@@ -384,6 +389,19 @@
     }}>Clear</button
   >
 </form>
+<p id="search-syntax-hint" class="muted syntax-hint">
+  {#if match === 'wildcard'}
+    Wildcard matches the whole field. <code>personal*foo</code> matches
+    <code>personal/bar/foo</code> in Path; use <code>*personal*foo*</code> for fragments anywhere.
+  {:else if match === 'expression'}
+    Combine literal substrings: <code>personal AND foo</code> or
+    <code>(personal OR work) AND "tax return"</code>. AND binds before OR.
+  {:else if match === 'exact'}
+    Exact matches the whole field, ignoring case. Short queries and punctuation are literal.
+  {:else}
+    Literal substring, ignoring case (3+ Unicode characters). More options: Wildcard and AND / OR.
+  {/if}
+</p>
 <form
   class="filter-workspace"
   aria-label="Search filters"
@@ -402,7 +420,9 @@
     >
     <label class="field"
       >Match <select bind:value={match}
-        ><option value="substring">Contains</option><option value="exact">Exact</option></select
+        ><option value="substring">Contains</option><option value="exact">Exact</option>
+        <option value="wildcard">Wildcard</option><option value="expression">AND / OR</option
+        ></select
       ></label
     >
     <label class="field"
@@ -477,6 +497,33 @@
     {searchSummary(applied)}
   </p>{/if}
 <div class="result-toolbar">
+  <details class="syntax-help">
+    <summary>Search syntax help</summary>
+    <ul>
+      <li>
+        All modes ignore case. Name searches the final filename; Path searches the full relative
+        path.
+      </li>
+      <li>Contains and Exact treat spaces, quotes, operators and wildcard characters literally.</li>
+      <li>
+        Wildcard: <code>*</code> matches any characters (including <code>/</code>),
+        <code>?</code> matches one Unicode character. Escape literal characters with
+        <code>\*</code>, <code>\?</code> or <code>\\</code>. Brackets are literal. Include at least
+        one uninterrupted literal run of 3 characters; at most 32 indexed runs.
+      </li>
+      <li>
+        AND / OR: use explicit uppercase operators and parentheses. Quote literals containing spaces
+        or syntax, such as <code>"tax return"</code> or <code>"AND"</code>. Escape quotes and
+        backslashes with <code>\"</code> and <code>\\</code>. Each literal needs 3 characters; up to
+        32 literals and 16 nesting levels. Wildcards, NOT and regex are not supported in
+        expressions.
+      </li>
+      <li>
+        Wildcard and AND / OR results sort by path, then observation ID; Contains boosts exact and
+        prefix matches.
+      </li>
+    </ul>
+  </details>
   {#if selected}<div class="actions" aria-live="polite">
       <span>Selected observation {selected}.</span>
       <button class="button-compact" onclick={openSelected}>Open selected content</button>
@@ -521,7 +568,7 @@
   resource="Search"
   retained={view.pages.length > 0}
   emptyLabel={items.length === 0
-    ? 'No matching observations. Try another literal query or deliberately choose History scope.'
+    ? 'No matching observations. Try another query or deliberately choose History scope.'
     : undefined}
   loadingLabel={view.status === 'loading-more' ? 'Loading another page…' : 'Searching…'}
   retry={() => {
@@ -569,6 +616,12 @@
 {/if}
 
 <style>
+  .syntax-hint {
+    margin-block: 0;
+  }
+  .syntax-help[open] {
+    flex-basis: 100%;
+  }
   .query-toolbar,
   .result-toolbar {
     display: flex;
@@ -576,6 +629,9 @@
     align-items: end;
     gap: var(--space-2);
     margin-block: var(--space-3);
+  }
+  .query-toolbar {
+    margin-block-end: var(--space-1);
   }
   .query-field {
     flex: 1;

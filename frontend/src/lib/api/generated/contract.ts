@@ -1,5 +1,5 @@
 // Generated from doc/openapi.json; do not edit.
-// SHA-256: 75c07bcf5a2aac8d8f525d8a4bfd00e38ba3bfbf6418ebc54f98d33f42e556e1
+// SHA-256: 3f0c803c04d5e65adefd08f9e260e63d040ed05c80f19ecc868a784d0ab79126
 import type { Schema, Operation } from '../schema';
 import type { operations } from './wire';
 export const schemas: Record<
@@ -472,7 +472,7 @@ export const schemas: Record<
         properties: {
           q: { type: 'string', minLength: 1 },
           field: { type: 'string', enum: ['name', 'path'] },
-          match: { type: 'string', enum: ['exact', 'substring'] },
+          match: { type: 'string', enum: ['exact', 'substring', 'wildcard', 'expression'] },
           snapshot_id: { type: ['string', 'null'], pattern: '^[1-9][0-9]*$' },
           disk_id: { type: ['string', 'null'], pattern: '^[1-9][0-9]*$' },
           directory: { type: 'string' },
@@ -496,7 +496,7 @@ export const schemas: Record<
       snapshot: { ref: 'Snapshot' },
       basename: { type: 'string' },
       is_current: { type: 'boolean' },
-      relevance: { type: 'string', enum: ['exact', 'prefix', 'substring'] },
+      relevance: { type: 'string', enum: ['exact', 'prefix', 'substring', 'match'] },
     },
   },
   SnapshotPage: {
@@ -781,7 +781,10 @@ export const contract: Record<keyof operations, Operation> = {
     query: {
       q: { schema: { type: 'string', minLength: 1 }, required: true },
       field: { schema: { type: 'string', enum: ['name', 'path'] }, required: false },
-      match: { schema: { type: 'string', enum: ['exact', 'substring'] }, required: false },
+      match: {
+        schema: { type: 'string', enum: ['exact', 'substring', 'wildcard', 'expression'] },
+        required: false,
+      },
       scope: { schema: { type: 'string', enum: ['current', 'history'] }, required: false },
       disk_id: { schema: { ref: 'ID' }, required: false },
       snapshot_id: { schema: { ref: 'ID' }, required: false },

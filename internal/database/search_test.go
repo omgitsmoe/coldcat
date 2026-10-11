@@ -70,9 +70,12 @@ func TestSearchIndexesCleanupAndRecovery(t *testing.T) {
 	} {
 		f.Field, f.Match, f.Query = test.field, test.match, test.query
 		for _, after := range []int{0, 10000} {
-			query, args := searchWindow(f, 50, base.SearchAnchor{
+			query, args, err := searchWindow(f, 50, base.SearchAnchor{
 				Relevance: "exact", ID: base.FileObservationId(after),
 			})
+			if err != nil {
+				t.Fatal(err)
+			}
 			rows, err := db.db.Query("EXPLAIN QUERY PLAN "+query+
 				`SELECT * FROM eligible WHERE (rank,path,id)>(0,'',?) ORDER BY rank,path,id LIMIT 51`,
 				append(args, after)...)

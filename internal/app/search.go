@@ -46,6 +46,9 @@ func (a *App) Search(ctx context.Context, req SearchRequest) (base.SearchPage, e
 		req.Limit = 50
 	}
 	version, kind := 3, "search:fold-v1:rank:path:id"
+	if f.Match == "wildcard" || f.Match == "expression" {
+		version, kind = 4, "search:syntax-v1:fold-v1:path:id"
+	}
 	if err := database.ValidateSearchFilters(*f); err != nil {
 		return base.SearchPage{}, err
 	}

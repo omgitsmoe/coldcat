@@ -169,7 +169,7 @@
         "parameters": [
           {"name": "q", "in": "query", "required": true, "description": "Valid UTF-8 literal text, at most 1024 bytes, no NUL. Substring mode requires at least three Unicode code points; exact mode requires at least one. Whitespace is significant.", "schema": {"type": "string", "minLength": 1}, "example": "report"},
           {"name": "field", "in": "query", "schema": {"type": "string", "enum": ["name", "path"], "default": "name"}},
-          {"name": "match", "in": "query", "schema": {"type": "string", "enum": ["exact", "substring"], "default": "substring"}},
+          {"name": "match", "in": "query", "description": "exact and substring are literal. wildcard matches the entire selected field: * spans zero or more Unicode characters including /, ? spans one; backslash escapes *, ? or backslash. Brackets are literal, not character classes. A contiguous literal run of at least three Unicode code points is required. expression combines literal substrings with explicit uppercase AND/OR and parentheses; AND binds before OR. Double quotes enclose literals containing whitespace or syntax; backslash escapes double quote or backslash. Each literal requires at least three Unicode code points. At most 32 literals and 16 nesting levels are allowed. NOT, implicit operators, regex and wildcard expressions are unsupported. Wildcard and expression results have relevance=match and sort by original binary path then observation ID, without exact/prefix boosting. All modes use version-1 Unicode simple folding and exhaustive verification.", "schema": {"type": "string", "enum": ["exact", "substring", "wildcard", "expression"], "default": "substring"}},
           {"$ref": "#/components/parameters/Scope"},
           {"name": "disk_id", "in": "query", "schema": {"$ref": "#/components/schemas/ID"}},
           {"name": "snapshot_id", "in": "query", "description": "Complete snapshot. Must belong to disk_id when both are supplied.", "schema": {"$ref": "#/components/schemas/ID"}},
@@ -691,7 +691,7 @@
           "filters": {"type": "object", "required": ["q", "field", "match", "snapshot_id", "disk_id", "directory", "replica_metric", "other_replicas", "min_other_replicas", "max_other_replicas"], "properties": {
             "q": {"type": "string", "minLength": 1},
             "field": {"type": "string", "enum": ["name", "path"]},
-            "match": {"type": "string", "enum": ["exact", "substring"]},
+            "match": {"type": "string", "enum": ["exact", "substring", "wildcard", "expression"]},
             "snapshot_id": {"type": ["string", "null"], "pattern": "^[1-9][0-9]*$"},
             "disk_id": {"type": ["string", "null"], "pattern": "^[1-9][0-9]*$"},
             "directory": {"type": "string"},
@@ -712,7 +712,7 @@
           "disk": {"$ref": "#/components/schemas/Disk"},
           "snapshot": {"$ref": "#/components/schemas/Snapshot"},
           "basename": {"type": "string"}, "is_current": {"type": "boolean"},
-          "relevance": {"type": "string", "enum": ["exact", "prefix", "substring"]}
+          "relevance": {"type": "string", "enum": ["exact", "prefix", "substring", "match"]}
         }
       },
       "SnapshotPage": {

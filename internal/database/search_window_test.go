@@ -40,7 +40,7 @@ func TestSearchWindowExhaustivePagination(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, match := range []string{"exact", "substring"} {
+	for _, match := range []string{"exact", "substring", "wildcard", "expression"} {
 		for _, scope := range []base.Scope{base.ScopeCurrent, base.ScopeHistory} {
 			for _, query := range []string{"REPORT", "σσσ"} {
 				f := base.SearchFilters{Query: query, Field: "name", Match: match,
@@ -71,7 +71,10 @@ func TestSearchWindowExhaustivePagination(t *testing.T) {
 
 func verifySearchWindowPages(t *testing.T, db *DB, f base.SearchFilters) {
 	t.Helper()
-	query, args := searchCandidates(f)
+	query, args, err := searchCandidates(f)
+	if err != nil {
+		t.Fatal(err)
+	}
 	rows, err := db.db.QueryContext(t.Context(), query+`SELECT id FROM eligible ORDER BY rank,path,id`, args...)
 	if err != nil {
 		t.Fatal(err)
@@ -129,7 +132,10 @@ func TestSearchAnchorValidationIsPathBounded(t *testing.T) {
 	f := base.SearchFilters{Query: "report", Field: "name", Match: "substring",
 		ContentFilters: base.ContentFilters{Scope: base.ScopeCurrent, ReplicaMetric: base.ReplicaDisks}}
 	after := base.SearchAnchor{ID: 1, Path: "a/report", Relevance: "exact"}
-	query, args := searchWindow(f, 0, after)
+	query, args, err := searchWindow(f, 0, after)
+	if err != nil {
+		t.Fatal(err)
+	}
 	text := searchWindowPlan(t, db, query, args)
 	if strings.Contains(text, "VIRTUAL TABLE INDEX") ||
 		!strings.Contains(text, "sqlite_autoindex_search_path_1 (path=?)") {
@@ -175,7 +181,10 @@ func TestSearchExactWindowUsesOrderedIndex(t *testing.T) {
 	f := base.SearchFilters{Query: "REPORT", Field: "name", Match: "exact",
 		ContentFilters: base.ContentFilters{Scope: base.ScopeCurrent, ReplicaMetric: base.ReplicaDisks}}
 	for _, after := range []base.SearchAnchor{{}, {ID: 2, Path: "b/report", Relevance: "exact"}} {
-		query, args := searchWindow(f, 1, after)
+		query, args, err := searchWindow(f, 1, after)
+		if err != nil {
+			t.Fatal(err)
+		}
 		plan := searchWindowPlan(t, db, query, args)
 		if strings.Contains(plan, "USE TEMP B-TREE FOR ORDER BY") ||
 			!strings.Contains(plan, "search_name (name_fold=?") {

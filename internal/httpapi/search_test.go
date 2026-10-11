@@ -16,7 +16,7 @@ import (
 )
 
 func TestSearchHTTPWorkflow(t *testing.T) {
-	for _, match := range []string{"substring", "exact"} {
+	for _, match := range []string{"substring", "exact", "wildcard", "expression"} {
 		t.Run(match, func(t *testing.T) { testSearchHTTPWorkflow(t, match) })
 	}
 }
@@ -93,6 +93,11 @@ func testSearchHTTPWorkflow(t *testing.T, match string) {
 	searchURL, relevance := "/api/v1/search?q=REPORT&", "prefix"
 	if match == "exact" {
 		searchURL, relevance = "/api/v1/search?q=REPORT.txt&match=exact&", "exact"
+	} else if match == "wildcard" {
+		searchURL, relevance = "/api/v1/search?q=*REPORT*&match=wildcard&", "match"
+	} else if match == "expression" {
+		searchURL = "/api/v1/search?q=" + url.QueryEscape("REPORT AND txt") + "&match=expression&"
+		relevance = "match"
 	}
 	get(searchURL+"limit=1", 200, &page, "/api/v1/search")
 	if len(page.Items) != 1 || page.NextCursor == nil {
@@ -105,6 +110,12 @@ func testSearchHTTPWorkflow(t *testing.T, match string) {
 		t.Fatalf("search result: %+v", first)
 	}
 	cursor := *page.NextCursor
+	if match == "wildcard" || match == "expression" {
+		var failure errorDTO
+		get("/api/v1/search?q=REPORT&match=substring&limit=1&cursor="+
+			url.QueryEscape(cursor), 400, &failure, "")
+		get(searchURL+"limit=2&cursor="+url.QueryEscape(cursor), 400, &failure, "")
+	}
 	get(searchURL+"limit=1&cursor="+url.QueryEscape(cursor), 200,
 		&page, "/api/v1/search")
 	if page.Items[0].Observation.ID == first.Observation.ID {
@@ -164,6 +175,9 @@ func testSearchHTTPWorkflow(t *testing.T, match string) {
 		"q=a&min_other_replicas=2&max_other_replicas=1", "q=a&scope=history&other_replicas=0",
 		"q=%FF", "q=%00", "q=a&replica_metric=bad",
 		"q=a&disk_id=2&snapshot_id=" + firstSnapshot,
+		"q=*&match=wildcard", "q=a*b*c&match=wildcard",
+		"q=abc%5Cx&match=wildcard", "q=abc+AND&match=expression",
+		"q=abc+OR+ab&match=expression", "q=abc+NOT+def&match=expression",
 	} {
 		var failure errorDTO
 		get("/api/v1/search?"+query, 400, &failure, "")

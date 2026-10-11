@@ -21,7 +21,10 @@ func TestSearchReplicaQueryPlan(t *testing.T) {
 		f := base.SearchFilters{Query: "report", Field: "name", Match: "substring",
 			ContentFilters: base.ContentFilters{Scope: base.ScopeCurrent,
 				ReplicaMetric: metric, OtherReplicas: new(int64(1))}}
-		query, args := searchWindow(f, 50, base.SearchAnchor{})
+		query, args, err := searchWindow(f, 50, base.SearchAnchor{})
+		if err != nil {
+			t.Fatal(err)
+		}
 		plan := searchWindowPlan(t, db, query, args)
 		for _, required := range []string{
 			"MATERIALIZE search_current_snapshot", "CO-ROUTINE o",
@@ -119,7 +122,7 @@ func TestSearchReplicaHistorySemantics(t *testing.T) {
 		f := base.SearchFilters{Query: "KEEPsake-report.txt", Field: "name", Match: "exact",
 			ContentFilters: base.ContentFilters{Scope: base.ScopeCurrent,
 				ReplicaMetric: metric, OtherReplicas: &bound}}
-		for _, match := range []string{"exact", "substring"} {
+		for _, match := range []string{"exact", "substring", "wildcard", "expression"} {
 			f.Match = match
 			verifySearchWindowPages(t, db, f)
 			page, err := db.Search(t.Context(), f, 50, base.SearchAnchor{}, nil)

@@ -96,7 +96,7 @@ PRAGMA user_version=5;`); err != nil {
 	}
 	for _, scope := range []base.Scope{base.ScopeCurrent, base.ScopeHistory} {
 		for _, field := range []string{"name", "path"} {
-			for _, match := range []string{"exact", "substring"} {
+			for _, match := range []string{"exact", "substring", "wildcard", "expression"} {
 				for _, query := range []string{"DOCUMENT-猫.txt", "猫.txt", "é.txt", "é.txt", "txt", "absent"} {
 					f := base.SearchFilters{Query: query, Field: field, Match: match,
 						ContentFilters: base.ContentFilters{Scope: scope, ReplicaMetric: base.ReplicaDisks}}
@@ -218,10 +218,13 @@ func TestSearchBasenameCandidatePlan(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	for _, match := range []string{"exact", "substring"} {
+	for _, match := range []string{"exact", "substring", "wildcard", "expression"} {
 		f := base.SearchFilters{Query: "猫.txt", Field: "name", Match: match,
 			ContentFilters: base.ContentFilters{Scope: base.ScopeCurrent, ReplicaMetric: base.ReplicaDisks}}
-		query, args := searchWindow(f, 50, base.SearchAnchor{})
+		query, args, err := searchWindow(f, 50, base.SearchAnchor{})
+		if err != nil {
+			t.Fatal(err)
+		}
 		rows, err := db.db.Query("EXPLAIN "+query+"SELECT * FROM eligible", args...)
 		if err != nil {
 			t.Fatal(err)

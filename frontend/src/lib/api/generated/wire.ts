@@ -1,5 +1,5 @@
 // Generated from doc/openapi.json; do not edit.
-// SHA-256: 75c07bcf5a2aac8d8f525d8a4bfd00e38ba3bfbf6418ebc54f98d33f42e556e1
+// SHA-256: 3f0c803c04d5e65adefd08f9e260e63d040ed05c80f19ecc868a784d0ab79126
 export interface components {
   schemas: {
     CatalogSummary: {
@@ -192,7 +192,7 @@ export interface components {
       filters: {
         q: string;
         field: 'name' | 'path';
-        match: 'exact' | 'substring';
+        match: 'exact' | 'substring' | 'wildcard' | 'expression';
         snapshot_id: string | null;
         disk_id: string | null;
         directory: string;
@@ -211,7 +211,7 @@ export interface components {
       snapshot: components['schemas']['Snapshot'];
       basename: string;
       is_current: boolean;
-      relevance: 'exact' | 'prefix' | 'substring';
+      relevance: 'exact' | 'prefix' | 'substring' | 'match';
     };
     SnapshotPage: {
       disk_id: components['schemas']['ID'];
@@ -366,7 +366,7 @@ export interface operations {
     query: {
       q: string;
       field?: 'name' | 'path';
-      match?: 'exact' | 'substring';
+      match?: 'exact' | 'substring' | 'wildcard' | 'expression';
       scope?: 'current' | 'history';
       disk_id?: components['schemas']['ID'];
       snapshot_id?: components['schemas']['ID'];

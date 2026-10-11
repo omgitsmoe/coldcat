@@ -42,6 +42,15 @@ describe('explicit replica matching', () => {
 });
 
 describe('advanced exposure and applied summaries', () => {
+  it.each([
+    ['wildcard', 'personal*foo', 'Wildcard'],
+    ['expression', '(personal OR work) AND foo', 'AND / OR'],
+  ] as const)('retains %s syntax and identifies its mode', (match, q, label) => {
+    const route = parseSearch(new URLSearchParams({ match, q, field: 'path' }));
+    expect(route.q).toBe(q);
+    expect(route.match).toBe(match);
+    expect(searchSummary(route)).toBe(`Path · ${label} · Current · Query: ${q}`);
+  });
   it('counts root and zero bounds as active, not each range endpoint', () => {
     const route = parseSearch(
       new URLSearchParams(
