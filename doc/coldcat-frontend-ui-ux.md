@@ -383,6 +383,17 @@ U07 is next; compact disk/inventory rows remain U08 scope.
 
 ### U07 — Search workspace and result density
 
+**Progress (2026-10-11):** complete. Executed plan: preserve the search/keyboard owner,
+compose the primary query toolbar and common controls, disclose counted membership/redundancy
+filters, expose applied versus retired draft state, and introduce explicit Any/Exactly/Range
+matching without silently clearing history conflicts. Results use compact descriptive selection,
+aligned quantities and full literal path wrapping, with labeled path-first records below 900px.
+Check (0 errors/warnings), lint, build, API drift and 238 unit tests passed; 39 focused fixture-only
+browser tests passed. Table origins are 369/369/409px at 1440/1024/768, versus U01's 673/767/791px;
+all six result/invalid-history captures have no document overflow and remain external artifacts.
+Interfaces for U09/U10/U11, tests, evidence and constraints: [U07 handoff](ui-ux/u07/handoff.md).
+No backend/catalog changes, extended audits or other task packages. No U07 blockers remain.
+
 **Priority:** P1  
 **Dependencies:** U02, U03, U05  
 **Suggested context:** 60–100k tokens

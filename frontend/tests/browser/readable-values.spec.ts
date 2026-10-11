@@ -37,8 +37,8 @@ test('search sizes distinguish unknown, zero and rounded maximum with keyboard e
   await page.goto('/?q=report');
   const rows = page.locator('tbody tr');
   await expect(rows).toHaveCount(3);
-  await expect(rows.nth(0).locator('td').nth(2)).toHaveText('Unknown');
-  await expect(rows.nth(1).locator('td').nth(2)).toHaveText('0 B');
+  await expect(rows.nth(0).locator('td').nth(2).locator('.size-value')).toHaveText('Unknown');
+  await expect(rows.nth(1).locator('td').nth(2).locator('.size-value')).toHaveText('0 B');
   const size = rows.nth(2).locator('.size-value');
   await expect(size.locator('summary')).toHaveText('≈ 8 EiB');
   await expect(size.locator('summary')).toHaveAccessibleName('Approximately 8 EiB; exact bytes');

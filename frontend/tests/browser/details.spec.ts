@@ -285,7 +285,12 @@ test('search detail return keeps the in-app session, selection and scroll; reloa
     }),
   );
   await page.goto('/?q=report&field=path');
-  await page.getByRole('button', { name: 'Select report-40', exact: true }).click();
+  await page
+    .getByRole('button', {
+      name: `Select report-40 — ${searchFixture().items[0]!.observation.path} — observation 41`,
+      exact: true,
+    })
+    .click();
   await expect(page.locator('[data-selected-content="true"]')).toHaveText('report-40');
   await page.getByRole('link', { name: 'report-40', exact: true }).scrollIntoViewIfNeeded();
   const scroll = await page.evaluate(() => window.scrollY);

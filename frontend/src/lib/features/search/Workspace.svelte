@@ -7,7 +7,21 @@
   import { useConnection } from '../../state/context';
   import { parseSearch, searchURL, type SearchRoute } from '../../state/routes';
   import { searchKeyAction } from '../../state/keyboard';
-  import { acquireSearch, retainSearch, SearchWorkspace, type SearchPage } from './workspace';
+  import {
+    acquireSearch,
+    retainSearch,
+    searchIssue,
+    SearchWorkspace,
+    type SearchPage,
+  } from './workspace';
+  import {
+    advancedCount,
+    boundsMode,
+    boundsQuery,
+    searchSummary,
+    type BoundsMode,
+  } from './filters';
+  import ReplicaBounds from '../../components/ReplicaBounds.svelte';
   import type { TraversalState } from '../../state/traversal';
   import RequestFeedback from '../../components/RequestFeedback.svelte';
   import PageControls from '../../components/PageControls.svelte';
@@ -30,6 +44,26 @@
   let exact = $state('');
   let minimum = $state('');
   let maximum = $state('');
+  let boundMode = $state<BoundsMode>('any');
+  let advancedOpen = $state(false);
+  let applied = $state<SearchRoute>();
+  const activeAdvanced = $derived(
+    [
+      disk !== '',
+      snapshot !== '',
+      directoryEnabled,
+      metric === 'locations',
+      boundMode !== 'any',
+    ].filter(Boolean).length,
+  );
+  const draftError = $derived.by(() => {
+    try {
+      const result = searchIssue(routeFromDraft());
+      return result?.kind === 'invalid' ? result.message : '';
+    } catch (error) {
+      return error instanceof Error ? error.message : 'Invalid inputs';
+    }
+  });
   let dirty = $state(false);
   let composing = $state(false);
   let typeToSearch = $state(true);
@@ -59,6 +93,8 @@
     issue = workspace.issue?.message ?? '';
     debouncing = workspace.debouncing;
     traversal = workspace.owner;
+    if (workspace.route && searchIssue(workspace.route)?.kind !== 'invalid')
+      applied = workspace.route;
   }
   function drafts(route: SearchRoute) {
     q = route.q;
@@ -73,6 +109,8 @@
     exact = route.other_replicas ?? '';
     minimum = route.min_other_replicas ?? '';
     maximum = route.max_other_replicas ?? '';
+    boundMode = boundsMode(exact, minimum, maximum);
+    advancedOpen = advancedCount(route) > 0;
     dirty = false;
   }
   function routeFromDraft(): SearchRoute {
@@ -87,12 +125,18 @@
     for (const [key, value] of [
       ['disk_id', disk],
       ['snapshot_id', snapshot],
-      ['other_replicas', exact],
-      ['min_other_replicas', minimum],
-      ['max_other_replicas', maximum],
     ]) {
       if (value !== '') params.set(key!, value!);
     }
+    for (const [key, value] of Object.entries(
+      boundsQuery({
+        mode: boundMode,
+        exact,
+        minimum,
+        maximum,
+      }),
+    ))
+      params.set(key, value);
     if (directoryEnabled) params.set('directory', directory);
     // Invalid literal input remains visible and bookmarkable, but is never dispatched.
     const validation = new SvelteURLSearchParams(params);
@@ -131,6 +175,7 @@
   }
   function apply() {
     try {
+      if (draftError) throw new Error(draftError);
       const route = routeFromDraft();
       dirty = false;
       parseError = '';
@@ -243,6 +288,18 @@
       exact = page.url.searchParams.get('other_replicas') ?? '';
       minimum = page.url.searchParams.get('min_other_replicas') ?? '';
       maximum = page.url.searchParams.get('max_other_replicas') ?? '';
+      boundMode = boundsMode(exact, minimum, maximum);
+      const raw = page.url.searchParams;
+      field = raw.get('field') === 'path' ? 'path' : 'name';
+      match = raw.get('match') === 'exact' ? 'exact' : 'substring';
+      scope = raw.get('scope') === 'history' ? 'history' : 'current';
+      metric = raw.get('replica_metric') === 'locations' ? 'locations' : 'disks';
+      advancedOpen =
+        disk !== '' ||
+        snapshot !== '' ||
+        directoryEnabled ||
+        metric === 'locations' ||
+        boundMode !== 'any';
       parseError = error instanceof Error ? error.message : 'Invalid search URL';
     }
   }
@@ -293,27 +350,31 @@
 
 <svelte:window onkeydown={globalKey} />
 <h1>Search</h1>
-<form role="search" onsubmit={submit}>
-  <label for="query">Filename or disk-relative path</label>
-  <input
-    id="query"
-    type="search"
-    bind:this={input}
-    bind:value={q}
-    oninput={changedQuery}
-    onkeydown={inputKey}
-    oncompositionstart={() => {
-      composing = true;
-      workspace?.retire();
-    }}
-    oncompositionend={() => {
-      composing = false;
-      changedQuery();
-    }}
-    autocomplete="off"
-  />
-  <button type="submit">Search</button>
+<form class="query-toolbar" role="search" onsubmit={submit}>
+  <label class="field query-field" for="query"
+    >Filename or disk-relative path
+    <input
+      id="query"
+      class="input-search"
+      type="search"
+      bind:this={input}
+      bind:value={q}
+      oninput={changedQuery}
+      onkeydown={inputKey}
+      oncompositionstart={() => {
+        composing = true;
+        workspace?.retire();
+      }}
+      oncompositionend={() => {
+        composing = false;
+        changedQuery();
+      }}
+      autocomplete="off"
+    /></label
+  >
+  <button class="button-primary" type="submit">Search</button>
   <button
+    class="button-quiet"
     type="button"
     onclick={() => {
       q = '';
@@ -323,6 +384,7 @@
   >
 </form>
 <form
+  class="filter-workspace"
   aria-label="Search filters"
   onsubmit={(event) => {
     event.preventDefault();
@@ -331,90 +393,123 @@
   oninput={editedFilter}
   onchange={editedFilter}
 >
-  <div class="filters">
-    <label
+  <div class="control-group common-filters">
+    <label class="field"
       >Field <select bind:value={field}
         ><option value="name">Name</option><option value="path">Path</option></select
       ></label
     >
-    <label
+    <label class="field"
       >Match <select bind:value={match}
-        ><option value="substring">Substring</option><option value="exact">Exact</option></select
+        ><option value="substring">Contains</option><option value="exact">Exact</option></select
       ></label
     >
-    <label
+    <label class="field"
       >Scope <select bind:value={scope}
         ><option value="current">Current</option><option value="history">History</option></select
       ></label
     >
-    <label
-      >Other-copy metric <select bind:value={metric}
-        ><option value="disks">Disks</option><option value="locations">Locations</option></select
-      ></label
-    >
-    <label>Disk ID <input bind:value={disk} inputmode="numeric" /></label>
-    <label>Snapshot ID <input bind:value={snapshot} inputmode="numeric" /></label>
-    <label
-      ><input type="checkbox" bind:checked={directoryEnabled} /> Filter directory membership</label
-    >
-    <label
-      >Directory (empty is root) <input
-        bind:value={directory}
-        disabled={!directoryEnabled}
-      /></label
-    >
-    <label>Exact other copies <input bind:value={exact} inputmode="numeric" /></label>
-    <label>Minimum other copies <input bind:value={minimum} inputmode="numeric" /></label>
-    <label>Maximum other copies <input bind:value={maximum} inputmode="numeric" /></label>
+    <button class={dirty ? 'button-primary' : 'button-secondary'}>Apply filters</button>
   </div>
-  <p>
-    Other-copy bounds require Current scope. Exact and range bounds are mutually exclusive. Snapshot
-    must belong to Disk when both are supplied (validated by the server).
-  </p>
-  <button>Apply filters</button>
-  <button
-    type="button"
-    onclick={() => {
-      scope = 'history';
-      editedFilter();
-      apply();
-    }}>Search history</button
-  >
-  {#if snapshot}<button
-      type="button"
-      onclick={() => {
-        scope = 'history';
-        editedFilter();
-        apply();
-      }}>Search this older snapshot in history</button
-    >{/if}
+  <details class="advanced-filters" bind:open={advancedOpen}>
+    <summary>Advanced filters ({activeAdvanced} active)</summary>
+    <div class="advanced-groups">
+      <fieldset>
+        <legend>Membership</legend>
+        <div class="control-group">
+          <label class="field">Disk ID <input bind:value={disk} inputmode="numeric" /></label>
+          <label class="field"
+            >Snapshot ID <input bind:value={snapshot} inputmode="numeric" /></label
+          >
+          <label class="check-field"
+            ><input type="checkbox" bind:checked={directoryEnabled} /> Filter directory membership</label
+          >
+          <label class="field directory-field"
+            >Directory (empty is root)
+            <input class="literal" bind:value={directory} disabled={!directoryEnabled} />
+          </label>
+        </div>
+        <p class="muted">
+          Snapshot must belong to Disk when both are supplied (validated by the server).
+        </p>
+        {#if snapshot}<button
+            type="button"
+            class="button-quiet"
+            onclick={() => {
+              scope = 'history';
+              editedFilter();
+              apply();
+            }}>Search this older snapshot in history</button
+          >{/if}
+      </fieldset>
+      <fieldset>
+        <legend>Redundancy</legend>
+        <label class="field"
+          >Other-copy metric <select bind:value={metric}>
+            <option value="disks">Disks</option><option value="locations">Locations</option>
+          </select></label
+        >
+        <ReplicaBounds
+          bind:mode={boundMode}
+          bind:exact
+          bind:minimum
+          bind:maximum
+          invalid={!!draftError}
+        />
+        <p class="muted">
+          Other-copy bounds require Current scope. Counts remain catalog-wide despite membership
+          filters.
+        </p>
+      </fieldset>
+    </div>
+  </details>
+  {#if dirty}<p class="status-warning" role="status">
+      Unapplied changes — previous results retired. Apply filters to search.
+    </p>{/if}
+  {#if draftError}<p class="status-error" role="alert">{draftError}</p>{/if}
 </form>
-<details>
-  <summary>Keyboard help</summary>
-  <p>
-    / or Ctrl/Cmd+K focuses search outside editable controls. On desktop, typing outside controls
-    inserts the character into search. Arrows select results; Enter opens selected content or
-    searches immediately. Escape cancels selection without erasing the query. All actions also have
-    visible controls.
-  </p>
-  <label
-    ><input
-      type="checkbox"
-      bind:checked={typeToSearch}
-      onchange={() =>
-        globalThis.localStorage.setItem('coldcat.typeToSearch', typeToSearch ? 'on' : 'off')}
-    /> Type to search on desktop</label
-  >
-</details>
+{#if applied}<p class="applied-summary">
+    <strong>{dirty ? 'Last applied' : 'Applied'}:</strong>
+    {searchSummary(applied)}
+  </p>{/if}
+<div class="result-toolbar">
+  {#if selected}<div class="actions" aria-live="polite">
+      <span>Selected observation {selected}.</span>
+      <button class="button-compact" onclick={openSelected}>Open selected content</button>
+      <button class="button-compact button-quiet" onclick={() => workspace?.select()}
+        >Cancel selection</button
+      >
+    </div>{/if}
+  <details class="keyboard-help">
+    <summary>Keyboard help</summary>
+    <p>
+      / or Ctrl/Cmd+K focuses search outside editable controls. On desktop, typing outside controls
+      inserts the character into search. Arrows select results; Enter opens selected content or
+      searches immediately. Escape cancels selection without erasing the query. All actions also
+      have visible controls.
+    </p>
+    <label class="check-field"
+      ><input
+        type="checkbox"
+        bind:checked={typeToSearch}
+        onchange={() =>
+          globalThis.localStorage.setItem('coldcat.typeToSearch', typeToSearch ? 'on' : 'off')}
+      /> Type to search on desktop</label
+    >
+  </details>
+</div>
 {#if scope === 'history'}<p>
     <strong>History scope — repeated and older inventory observations are included.</strong>
   </p>{/if}
-{#if parseError}<p role="alert">{parseError}</p>
+{#if parseError && parseError !== draftError}<p role="alert">{parseError}</p>
   <details>
     <summary>Submitted URL</summary>
     <pre>{page.url.search}</pre>
   </details>
-{:else if issue}<p aria-live="polite">{issue}</p>
+{:else if issue && !dirty && issue !== draftError}<p aria-live="polite">{issue}</p>
+  {#if match === 'substring' && Array.from(q).length < 3}<p class="muted">
+      Contains requires three Unicode code points; Exact can match a shorter literal query.
+    </p>{/if}
 {:else if debouncing}<p role="status">Waiting for typing…</p>{/if}
 <RequestFeedback
   status={view.status}
@@ -436,17 +531,11 @@
 {/if}
 {#if !dirty && !parseError && view.status === 'success' && items.length === 0}
   <p role="status">
-    No matching observations. Try another literal query or deliberately choose Search history.
+    No matching observations. Try another literal query or deliberately choose History scope.
   </p>
 {/if}
 {#if items.length}
   {#if view.paged}<p>{items.length} observations displayed on this page.</p>{/if}
-  {#if selected}<p aria-live="polite">
-      Selected observation {selected}.
-      <button onclick={openSelected}>Open selected content</button><button
-        onclick={() => workspace?.select()}>Cancel selection</button
-      >
-    </p>{/if}
   <Results {items} {selected} {returnTo} select={(id) => workspace?.select(id)} />
 {/if}
 {#if view.pages.length && traversal}
@@ -477,25 +566,69 @@
 {/if}
 
 <style>
-  form {
-    margin-block: 1rem;
-  }
-  #query {
-    width: min(100%, 42rem);
-    display: block;
-    margin-block: 0.5rem;
-  }
-  .filters {
+  .query-toolbar,
+  .result-toolbar {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.75rem;
+    align-items: end;
+    gap: var(--space-2);
+    margin-block: var(--space-3);
   }
-  .filters label {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
+  .query-field {
+    flex: 1;
+    min-inline-size: 16rem;
   }
-  button {
-    margin: 0.25rem;
+  .query-field input {
+    inline-size: 100%;
+  }
+  .filter-workspace {
+    margin-block: var(--space-3);
+  }
+  .common-filters {
+    align-items: end;
+  }
+  .advanced-filters {
+    margin-block-start: var(--space-2);
+  }
+  .advanced-groups {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+    margin-block-start: var(--space-3);
+  }
+  fieldset {
+    min-inline-size: 0;
+  }
+  fieldset input:not([type='checkbox']) {
+    inline-size: 10rem;
+  }
+  .directory-field {
+    flex: 1 1 100%;
+  }
+  .directory-field input:not([type='checkbox']) {
+    inline-size: 100%;
+  }
+  .applied-summary {
+    color: var(--color-muted);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    margin-block: var(--space-2);
+  }
+  .result-toolbar {
+    align-items: center;
+  }
+  .keyboard-help {
+    margin-inline-start: auto;
+  }
+  .keyboard-help[open] {
+    flex-basis: 100%;
+  }
+  @media (max-width: 900px) {
+    .advanced-groups {
+      grid-template-columns: 1fr;
+    }
+    .query-field {
+      flex-basis: 100%;
+    }
   }
 </style>

@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { searchFixture } from '../fixtures/api';
 import { contentFixture, locationsFixture } from '../fixtures/details';
+import { mkdir, writeFile } from 'node:fs/promises';
 
 async function ready(page: Page) {
   await page.route('**/api/v1/contents/1**', (r) =>
@@ -105,6 +106,7 @@ test('desktop type-to-search respects preference, forms, selection, dialogs and 
   await page.keyboard.type('b');
   await expect(input).toHaveValue('a');
   await page.getByLabel('Type to search on desktop').check();
+  await page.getByText('Advanced filters (0 active)', { exact: true }).click();
   await page.getByLabel('Disk ID', { exact: true }).fill('1');
   await page.keyboard.type('2');
   await expect(input).toHaveValue('a');
@@ -159,13 +161,19 @@ test('short exact, explicit invalid filters, empty/history results and ordinary 
   await page.goto('/');
   await page.getByRole('searchbox').fill('a');
   await page.getByRole('combobox', { name: 'Match', exact: true }).selectOption('exact');
+  await page.getByText('Advanced filters (0 active)', { exact: true }).click();
+  await page
+    .getByRole('combobox', { name: 'Other-copy matching', exact: true })
+    .selectOption('exact');
   await page.getByLabel('Exact other copies', { exact: true }).fill('0');
   await page.getByRole('combobox', { name: 'Scope', exact: true }).selectOption('history');
   await page.getByRole('button', { name: 'Apply filters' }).click();
   await expect(page.getByText(/Other-copy bounds require current scope;/)).toBeVisible();
   expect(calls).toHaveLength(0);
   await expect(page.getByLabel('Exact other copies', { exact: true })).toHaveValue('0');
-  await page.getByLabel('Exact other copies', { exact: true }).fill('');
+  await page
+    .getByRole('combobox', { name: 'Other-copy matching', exact: true })
+    .selectOption('any');
   await page.getByRole('button', { name: 'Apply filters' }).click();
   await expect(page.locator('tbody tr')).toHaveCount(2);
   expect(calls[0]!.searchParams.get('q')).toBe('a');
@@ -380,4 +388,187 @@ test('empty success, unavailable and malformed responses never masquerade as eac
   await page.getByRole('button', { name: 'Retry', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText(/unexpected|invalid/i);
   await expect(page.getByText(/No matching observations/)).toHaveCount(0);
+});
+
+test('bookmarked membership and bounds are exposed; drafts retire rows and preserve last applied summary', async ({
+  page,
+}) => {
+  await ready(page);
+  const calls: URL[] = [];
+  await page.route('**/api/v1/search?**', (r) => {
+    calls.push(new URL(r.request().url()));
+    return r.fulfill({ json: result('bookmarked') });
+  });
+  await page.goto(
+    '/?q=abc&disk_id=1&snapshot_id=1&directory=&replica_metric=locations&min_other_replicas=0&max_other_replicas=2',
+  );
+  await expect(page.getByRole('link', { name: 'bookmarked', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Disk ID', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Other-copy matching')).toHaveValue('range');
+  await expect(page.getByLabel('Minimum other copies')).toHaveValue('0');
+  await expect(page.locator('.applied-summary')).toContainText(
+    'Directory: root · Other locations: ≥ 0 · Other locations: ≤ 2',
+  );
+  await page.getByText('Advanced filters (5 active)', { exact: true }).click();
+  await expect(page.getByLabel('Disk ID', { exact: true })).not.toBeVisible();
+  await expect(page.locator('.applied-summary')).toContainText('Disk 1 · Snapshot 1');
+  expect(calls).toHaveLength(1);
+  await page.getByText('Advanced filters (5 active)', { exact: true }).click();
+  await page.getByLabel('Disk ID', { exact: true }).fill('2');
+  await expect(page.locator('tbody tr')).toHaveCount(0);
+  await expect(page.getByText(/Unapplied changes — previous results retired/)).toBeVisible();
+  await expect(page.locator('.applied-summary')).toContainText('Last applied:');
+  await expect(page.locator('.applied-summary')).toContainText('Disk 1');
+  expect(calls).toHaveLength(1);
+  await page.getByRole('button', { name: 'Apply filters' }).click();
+  await expect(page.getByRole('link', { name: 'bookmarked', exact: true })).toBeVisible();
+  await expect(page.locator('.applied-summary')).toContainText('Disk 2');
+  expect(calls).toHaveLength(2);
+  expect(calls[1]!.searchParams.get('disk_id')).toBe('2');
+});
+
+test('history incompatibility is immediately invalid, retains bounds and dispatches only deliberate mode choices', async ({
+  page,
+}) => {
+  await ready(page);
+  const calls: URL[] = [];
+  await page.route('**/api/v1/search?**', (r) => {
+    calls.push(new URL(r.request().url()));
+    return r.fulfill({ json: result('valid') });
+  });
+  await page.goto('/?q=abc&other_replicas=0');
+  await expect(page.getByRole('link', { name: 'valid', exact: true })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Scope', exact: true }).selectOption('history');
+  await expect(page.getByRole('alert')).toContainText('Other-copy bounds require current scope');
+  await expect(page.getByLabel('Exact other copies')).toHaveValue('0');
+  await expect(page.getByLabel('Exact other copies')).toHaveAttribute('aria-invalid', 'true');
+  await page.getByRole('button', { name: 'Apply filters' }).click();
+  await expect(page.locator('tbody tr')).toHaveCount(0);
+  expect(calls).toHaveLength(1);
+  await page.getByLabel('Other-copy matching').selectOption('any');
+  await page.getByRole('button', { name: 'Apply filters' }).click();
+  await expect(page.getByRole('link', { name: 'valid', exact: true })).toBeVisible();
+  expect(calls).toHaveLength(2);
+  expect(calls[1]!.searchParams.get('scope')).toBe('history');
+  expect(calls[1]!.searchParams.has('other_replicas')).toBe(false);
+  await page.getByLabel('Other-copy matching').selectOption('exact');
+  await expect(page.getByLabel('Exact other copies')).toHaveValue('0');
+  await expect(page.getByRole('alert')).toContainText('Other-copy bounds require current scope');
+  await page.getByRole('combobox', { name: 'Scope', exact: true }).selectOption('current');
+  await page.getByLabel('Other-copy matching').selectOption('range');
+  await expect(page.getByRole('alert')).toContainText('Enter at least one range bound');
+  await page.getByLabel('Minimum other copies').fill('2');
+  await page.getByLabel('Maximum other copies').fill('1');
+  await expect(page.getByRole('alert')).toContainText(
+    'Maximum other-copy count must be at least the minimum',
+  );
+  await page.getByRole('button', { name: 'Apply filters' }).click();
+  expect(calls).toHaveLength(2);
+  await page.getByLabel('Maximum other copies').fill('3');
+  await page.getByRole('button', { name: 'Apply filters' }).click();
+  await expect(page.getByRole('link', { name: 'valid', exact: true })).toBeVisible();
+  expect(calls).toHaveLength(3);
+  expect(calls[2]!.searchParams.get('min_other_replicas')).toBe('2');
+  expect(calls[2]!.searchParams.get('max_other_replicas')).toBe('3');
+  expect(calls[2]!.searchParams.has('other_replicas')).toBe(false);
+});
+
+test('conflicting and invalid bookmarks expose literal controls without silently dispatching repaired bounds', async ({
+  page,
+}) => {
+  await ready(page);
+  let calls = 0;
+  await page.route('**/api/v1/search?**', (r) => {
+    calls++;
+    return r.fulfill({ json: result('repaired') });
+  });
+  await page.goto('/?q=abc&scope=history&other_replicas=0&min_other_replicas=1');
+  await expect(page.getByLabel('Other-copy matching')).toHaveValue('conflict');
+  await expect(page.getByLabel('Exact other copies')).toHaveValue('0');
+  await expect(page.getByLabel('Minimum other copies')).toHaveValue('1');
+  await page.getByRole('button', { name: 'Apply filters' }).click();
+  expect(calls).toBe(0);
+  await page.getByRole('combobox', { name: 'Scope', exact: true }).selectOption('current');
+  await page.getByLabel('Other-copy matching').selectOption('range');
+  await page.getByRole('button', { name: 'Apply filters' }).click();
+  await expect(page.getByRole('link', { name: 'repaired', exact: true })).toBeVisible();
+  expect(calls).toBe(1);
+  await expect(page).toHaveURL(/min_other_replicas=1/);
+  expect(new URL(page.url()).searchParams.has('other_replicas')).toBe(false);
+  await page.goto('/?q=abc&scope=history&disk_id=bad&other_replicas=0');
+  await expect(page.getByLabel('Disk ID', { exact: true })).toHaveValue('bad');
+  await expect(page.getByRole('combobox', { name: 'Scope', exact: true })).toHaveValue('history');
+  await expect(page.getByLabel('Exact other copies')).toHaveValue('0');
+  expect(calls).toBe(1);
+});
+
+test('compact path-first results retain literal identities, numeric alignment and accessible selection at approved widths', async ({
+  page,
+}) => {
+  await ready(page);
+  const literal =
+    'archive/雪 e\u0301/literal ?#% <report>/long-directory-without-shortening/'.repeat(3) +
+    'very-long-descriptive-basename.txt';
+  const basename = 'very-long-descriptive-basename.txt';
+  const fixture = result(basename);
+  fixture.items[0]!.observation.path = literal;
+  fixture.items[0]!.content.size = '9223372036854775807';
+  await page.route('**/api/v1/search?**', (r) => r.fulfill({ json: fixture }));
+  const output = '/tmp/opencode/u07-screenshots';
+  await mkdir(output, { recursive: true });
+  const measurements = [];
+  for (const width of [1440, 1024, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/?q=report');
+    await expect(page.getByRole('link', { name: basename, exact: true })).toBeVisible();
+    const selection = page.getByRole('button', {
+      name: `Select ${basename} — ${literal} — observation 9007199254740993`,
+      exact: true,
+    });
+    await expect(selection).toHaveText('Select');
+    await expect(page.locator('.literal-path')).toHaveText(literal);
+    await expect(page.locator('.literal-path')).toHaveCSS('white-space', 'pre-wrap');
+    await expect(page.locator('.literal-path')).toHaveCSS('overflow-wrap', 'anywhere');
+    await expect(page.locator('.size-cell')).toHaveCSS(
+      'text-align',
+      width > 900 ? 'right' : 'left',
+    );
+    await expect(page.locator('.copies-cell')).toHaveCSS('font-variant-numeric', 'tabular-nums');
+    await expect(page.getByRole('link', { name: 'Observation', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Containing directory' })).toBeVisible();
+    if (width < 900) {
+      const caption = await page.locator('.search-results caption').boundingBox();
+      expect(caption!.width).toBe(width - 32);
+      await expect(page.locator('.size-cell .record-label')).toBeVisible();
+      await expect(page.locator('.inventory-cell .record-label')).toBeVisible();
+      await expect(page.locator('.copies-cell .record-label')).toBeVisible();
+    }
+    const dimensions = await page.evaluate(() => ({
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth,
+      tableY:
+        document.querySelector('.search-results')!.getBoundingClientRect().top + window.scrollY,
+      firstRowY: document.querySelector('tbody tr')!.getBoundingClientRect().top + window.scrollY,
+    }));
+    expect(dimensions.documentWidth).toBe(width);
+    expect(dimensions.tableY).toBeLessThan(width < 900 ? 460 : 400);
+    expect(dimensions.firstRowY).toBeLessThan(width < 900 ? 500 : 480);
+    await page.screenshot({ path: `${output}/results-${width}.png`, fullPage: true });
+    await selection.click();
+    await expect(selection).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-selected-content="true"]')).toHaveText(basename);
+    await page.getByRole('button', { name: 'Cancel selection' }).click();
+    await expect(selection).toHaveAttribute('aria-pressed', 'false');
+    await page.getByText('Advanced filters (0 active)', { exact: true }).click();
+    await page.getByLabel('Other-copy matching').selectOption('exact');
+    await page.getByLabel('Exact other copies').fill('0');
+    const membershipCheckbox = await page.getByLabel('Filter directory membership').boundingBox();
+    expect(membershipCheckbox!.width).toBeLessThan(24);
+    await page.getByRole('combobox', { name: 'Scope', exact: true }).selectOption('history');
+    await expect(page.getByRole('alert')).toContainText('Other-copy bounds require current scope');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    await page.screenshot({ path: `${output}/invalid-history-${width}.png`, fullPage: true });
+    measurements.push({ width, ...dimensions });
+  }
+  await writeFile(`${output}/measurements.json`, JSON.stringify(measurements, null, 2));
 });
