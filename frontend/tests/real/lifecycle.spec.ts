@@ -90,7 +90,7 @@ async function open(page: Page, catalog: Catalog, kind: Kind) {
     await page.getByRole('button', { name: 'Apply and compare' }).click();
   }
   await expect(page.getByRole('button', { name: 'Load more', exact: true })).toBeVisible();
-  await expect(page.locator('header')).toContainText('Backend ready');
+  await expect(page.getByRole('banner')).toContainText('Backend ready');
   return endpoint;
 }
 
@@ -140,7 +140,7 @@ for (const kind of kinds) {
     const before = await (await page.request.get(`${catalog.origin}/api/v1/catalog`)).json();
     await catalog.stopBackend();
     await page.getByRole('button', { name: 'Load more', exact: true }).click();
-    await expect(page.locator('header')).toContainText('Backend unavailable');
+    await expect(page.getByRole('banner')).toContainText('Backend unavailable');
     await catalog.restartBackend();
     const after = await (await page.request.get(`${catalog.origin}/api/v1/catalog`)).json();
     expect(after.revision).toBe(before.revision);
@@ -150,7 +150,7 @@ for (const kind of kinds) {
     });
     const retry = page.getByRole('button', { name: 'Retry connection', exact: true });
     if (await retry.isVisible()) await retry.click();
-    await expect(page.locator('header')).toContainText('Backend ready');
+    await expect(page.getByRole('banner')).toContainText('Backend ready');
     await cleared(page, kind);
     expect(calls).toEqual([]);
     const restarted = page.waitForResponse(
@@ -212,7 +212,7 @@ test('committed PATCH response loss, real outage, reconciliation and search labe
   await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
   await catalog.restartBackend();
   await page.getByRole('button', { name: 'Retry connection', exact: true }).click();
-  await expect(page.locator('header')).toContainText('Backend ready');
+  await expect(page.getByRole('banner')).toContainText('Backend ready');
   await page.getByRole('button', { name: 'Check whether saved', exact: true }).click();
   await expect(
     page.getByRole('status').filter({ hasText: 'Review refreshed metadata' }),
@@ -259,7 +259,7 @@ test('successful metadata-only write invalidates the retained same-query search 
   expect((await (await page.request.get(`${catalog.origin}/api/v1/catalog`)).json()).revision).toBe(
     revision,
   );
-  await expect(page.locator('header')).toContainText('Backend ready');
+  await expect(page.getByRole('banner')).toContainText('Backend ready');
 });
 
 test('committed POST response loss reconciles the existing disk without another creation', async ({
@@ -305,7 +305,7 @@ test('committed POST response loss reconciles the existing disk without another 
   await expect(page.getByRole('button', { name: 'Create disk', exact: true })).toBeDisabled();
   await catalog.restartBackend();
   await page.getByRole('button', { name: 'Retry connection', exact: true }).click();
-  await expect(page.locator('header')).toContainText('Backend ready');
+  await expect(page.getByRole('banner')).toContainText('Backend ready');
   await page.getByRole('button', { name: 'Check whether saved', exact: true }).click();
   await expect(
     page.getByText('Existing disk found. Review its metadata; no creation was retried.'),
@@ -333,7 +333,7 @@ test('changed-revision reconnection clears search restoration and refreshes cata
   const before = await (await page.request.get(`${catalog.origin}/api/v1/catalog`)).json();
   await catalog.stopBackend();
   await page.getByRole('button', { name: 'Load more', exact: true }).click();
-  await expect(page.locator('header')).toContainText('Backend unavailable');
+  await expect(page.getByRole('banner')).toContainText('Backend unavailable');
   await catalog.importInventory({
     ...inventories[0]!,
     name: 'changed',
@@ -346,7 +346,7 @@ test('changed-revision reconnection clears search restoration and refreshes cata
   );
   await page.getByRole('button', { name: 'Retry connection', exact: true }).click();
   expect((await (await checked).json()).revision).not.toBe(before.revision);
-  await expect(page.locator('header')).toContainText('Backend ready');
+  await expect(page.getByRole('banner')).toContainText('Backend ready');
   await expect(page.locator('tbody tr')).toHaveCount(0);
   await expect(page.locator('[data-selected-content="true"]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Reload results', exact: true }).click();

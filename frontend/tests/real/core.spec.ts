@@ -152,9 +152,7 @@ test('keyboard search → linked locations → observation → disk → inventor
   await expect(value(page, 'Source input format')).toHaveText('cshd');
   await expect(value(page, 'Files')).toHaveText('8');
   await keyboardOpen(page, page.getByRole('link', { name: 'Browse root', exact: true }));
-  await expect(page.getByRole('region', { name: 'Directory summary' })).toContainText(
-    'Current source inventory',
-  );
+  await expect(page.locator('.source-context')).toContainText('Current source inventory');
   await keyboardOpen(page, page.getByRole('link', { name: 'foo', exact: true }));
   await keyboardOpen(page, page.getByRole('link', { name: fixture.directory, exact: true }));
   await expect(page.getByRole('table', { name: 'Directory entries' })).toContainText(reportPath);
@@ -227,7 +225,7 @@ test('same names, aliases, repeated history, historical-only identities, zero an
   ]) {
     await page.goto(`/?q=${q}`);
     await expect(page.locator('tbody tr')).toHaveCount(1);
-    await expect(page.locator('tbody tr').locator('td').nth(2)).toHaveText(size!);
+    await expect(page.locator('tbody tr .size-cell .size-value')).toHaveText(size!);
     await page.getByRole('link', { name: `${q}.txt`, exact: true }).click();
     await expect(value(page, 'Size')).toHaveText(size!);
   }

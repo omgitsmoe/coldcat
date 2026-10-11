@@ -1,15 +1,17 @@
 # Coldcat frontend UI/UX improvement plan
 
 Status: overall plan and U01 visual specification explicitly owner-approved on 2026-10-10.
-The owner directed implementation to continue sequentially; U02 is complete. No further
-approval is needed for these approved defaults. Optional user-feedback tests are deferred.
+The owner directed implementation to continue sequentially; **U01–U14 are complete** as of
+2026-10-11 within the approved frontend scope. All required U14 release gates passed, including
+the full deployed 18-operation matrix. No further approval is needed for these approved defaults.
+Optional user-feedback tests are deferred; separate backend acceptance remains outside this plan.
 
 **Direction: a compact, polished technical workspace—not a dashboard makeover.** Keep
 information density and keyboard efficiency, but introduce clearer hierarchy, consistent
 controls, readable quantities, and task-focused layouts.
 
-This plan is based on the frontend source and existing test documentation, not a live visual
-audit. The first task includes browser inspection to validate the proposed dimensions and layouts.
+The original plan was based on frontend source and test documentation. U01 supplied the approved
+browser baseline; U02–U14 subsequently validated the redesigned layouts with disposable fixtures.
 
 ## 1. Problems identified
 
@@ -661,6 +663,21 @@ other agents or extended audits. No U13 blockers; real/deployed release gates re
 - Reconnect/revision handling and explicit reload rules remain unchanged.
 
 ### U14 — Integration and visual regression checks
+
+**Progress (2026-10-11):** complete. Executed plan: add 36 deterministic route/state/width geometry
+regressions, inspect external screenshots and existing comparison captures, run required frontend
+checks and browser gates sequentially, and update conventions/interaction documentation. All eight
+route families plus create/provenance/empty/independent-summary-failure states pass at 1440/1024/768px:
+no document overflow, cell overlap/content spill or undersized/clipped controls. Existing feature
+tests cover comparison/picker/paging/recovery layouts. Real integration required only intentional
+source-context/size-value/banner locator updates; no application/backend changes or protections
+removed. Check (0 errors/warnings), lint, 262 unit tests, API drift, build, 156 mocked browser tests,
+27 real-proxy tests and 27 deployed tests passed; deployed matrix **18/18**. Real committed POST/PATCH
+response-loss and all lifecycle cursor/reconnect tests pass. Geometry assertions are durable;
+screenshots are temporary external inspection evidence, **not pixel goldens** (LFS unavailable).
+Evidence, exact commands/results, semantics and limits: [U14 handoff](ui-ux/u14/handoff.md).
+All U01–U14 packages are complete; optional feedback remains deferred. No backend race/benchmarks,
+extended accessibility/mobile expansion, new performance claims or workspace-catalog operations.
 
 **Priority:** P0 release gate  
 **Dependencies:** All approved implementation packages  

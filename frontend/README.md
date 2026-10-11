@@ -8,6 +8,49 @@ the approved scope; see the [final check results](../doc/coldcat-fronted.md#f12-
 Backend acceptance remains open.
 Architecture: [ADR 0002](../doc/adr/0002-static-browser-frontend.md).
 
+## Approved compact UI conventions (U01–U14)
+
+The [owner-approved redesign](../doc/coldcat-frontend-ui-ux.md) is complete within its
+frontend scope. [U14 release evidence](../doc/ui-ux/u14/handoff.md) records the final gates;
+this does not close separate backend acceptance or establish new performance guarantees.
+
+- Shared dark tokens/native controls live in `src/app.css`: standard controls are at least
+  32px, compact row actions 28px, main search 36px. Heights may grow for wrapped text.
+  Workspace gutters are 24px, or 16px below 900px; opt-in form bodies are capped at 720px.
+- Keep native tables, captions and links. Narrow desktop records below 900px retain named
+  values/actions, full literal paths and auto-height cells. Do not clamp/normalize identities
+  or infer mobile support from the approved 768px desktop viewport.
+- File/catalog sizes use binary units; declared capacity uses decimal units. `SizeValue`
+  labels approximations and exposes exact bytes with a native disclosure. Unknown, zero and
+  incomplete known subtotals remain distinct and visible. `DateValue` shows meaning/time/UTC
+  in one summary and retains original fractional precision inside.
+- Disks are list-first. **Create disk** opens a panel; **Edit disk** is explicit. Cancel on a
+  dirty draft requires **Discard changes** or **Keep editing**. Pending/uncertain writes cannot
+  be closed to bypass recovery. **Check whether saved** reads persisted metadata without retrying
+  writes; successful creation exposes its verified disk link.
+- Capacity uses **Capacity amount / Capacity unit** (B, KB–TB, KiB–TiB), exact string/BigInt
+  conversion and canonical byte payloads. Changing the unit reinterprets the amount, not converts
+  it. Reject signs/exponents/separators, fractional bytes and int64 overflow without rounding.
+- Search/Contents advanced filters are native disclosures with counts; bookmarks expose relevant
+  state. Shared **Any / Exactly / Range** matching preserves zero and visibly invalid conflicts.
+  Draft edits retire rows immediately; only Apply changes membership/bounds. Lazy label/capture
+  pickers keep direct ID entry and bounded explicit paging; opening/selecting does not apply.
+- Disk notes, import/capture provenance, directory statistics and comparison syntax/applied rules
+  are secondary disclosures. Essential source/current/history, unknown counts and incomplete
+  totals stay visible. Comparisons execute only on **Apply and compare**, never on opening/editing.
+- Feedback is owner-scoped. A continuation Retry differs from **Reload from first page**;
+  retained failure rows remain visibly unverified. Paging names displayed loaded counts and the
+  retained window, never fabricated catalog totals or last-page counts. Pending paging labels and
+  dimensions stay stable. Reconnect/revision invalidation still requires explicit feature reload.
+
+After build, `npx playwright test tests/browser/layout-regression.spec.ts` runs 36 deterministic
+route/state/width geometry checks (also part of `test:e2e`). It checks document overflow, cell
+overlap/content fit, control minima, shell/gutters and bounded representative table origins at
+1440/1024/768px. Existing feature tests cover comparisons, pickers, paging and write recovery.
+Screenshots/measurements go directly to `/tmp/opencode/u14-screenshots/`, outside the checkout.
+These are temporary inspection evidence, **not pixel goldens**. No tracked handoff images or
+working LFS setup are claimed; follow the [artifact policy](../doc/ui-ux/artifact-policy.md).
+
 ## Toolchain and commands
 
 Use Node **24.21.0** and npm **11.19.0** (enforced by `.npmrc`/engines). From `frontend/`:
@@ -290,7 +333,9 @@ errors. It never offers blind retry for uncertain writes. `PageControls.svelte` 
 traversal flags, `paged`, active `page`, `firstRetained`, displayed `loaded` count,
 `complete` (last retained `next_cursor === null`), and
 more/next/previous callbacks. Render it only for a traversal with successful retained pages;
-empty-success messaging belongs to the feature, not the shell.
+empty-success messaging belongs to the feature, not the shell. Optional owner-scoped reload
+callbacks and shared validation/empty/invalidated/retained feedback remain presentation-only;
+they neither infer totals nor own requests.
 
 ### Route and keyboard boundaries
 
@@ -457,7 +502,7 @@ is still unresolved.
 
 - `/disks` composes `features/disks/DiskForm.svelte` with the F5 disk list; `/disks/[id]`
   opens the same form from freshly verified metadata. Label, capacity, serial and notes remain
-  literal text inputs. Capacity uses F1's exact decimal validation/canonicalization and BigInt
+  literal text inputs. Capacity uses `format/capacity.ts` amount/unit conversion and BigInt
   preview, including zero and the signed-64-bit maximum; no numeric HTML input or Number conversion.
 - Edit submission uses `buildDiskPatch` and skips unchanged drafts. Only changed fields are sent;
   cleared optional text is explicit null, unchanged text is omitted. Conflicts retain all inputs
@@ -475,7 +520,8 @@ is still unresolved.
   review, not attributed conclusively to the lost response. If no label matches after the final
   page, the UI warns about possible renaming and requires explicit disk-list review/approval before
   enabling another POST. The API has no idempotency key; absence alone cannot prove a failed write.
-- `DiskForm` takes optional `initial: DiskDetail` and `refreshed(disk)`; its callback receives a
+- `DiskForm` takes optional `initial: DiskDetail`, `refreshed(disk)` and required `closed()`;
+  hosts unmount only through the guarded close callback. Its refresh callback receives a
   successful read, not merely a write response. No new route, shared state interface, generated
   contract, dependency, backend feature or catalog mutation outside HTTP disk metadata is added.
 - Mocked browser coverage owns precision/range, changed-only/null/omission, conflict retention,
