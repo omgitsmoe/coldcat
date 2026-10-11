@@ -19,7 +19,8 @@ func ValidateSearchFilters(f base.SearchFilters) error {
 	if f.Query == "" || len(f.Query) > 1024 || !utf8.ValidString(f.Query) ||
 		strings.ContainsRune(f.Query, 0) || (f.Field != "name" && f.Field != "path") ||
 		(f.Match != "exact" && f.Match != "substring" &&
-			f.Match != "wildcard" && f.Match != "expression") || f.SnapshotID < 0 {
+			f.Match != "wildcard" && f.Match != "expression" &&
+			f.Match != "syntax" && f.Match != "whole") || f.SnapshotID < 0 {
 		return fmt.Errorf("%w: invalid search query, field, match, or snapshot", ErrValidation)
 	}
 	if f.Match == "substring" && utf8.RuneCountInString(f.Query) < 3 {
@@ -32,6 +33,11 @@ func ValidateSearchFilters(f base.SearchFilters) error {
 	}
 	if f.Match == "expression" {
 		if _, err := parseSearchExpression(f.Query); err != nil {
+			return fmt.Errorf("%w: %v", ErrValidation, err)
+		}
+	}
+	if f.Match == "syntax" || f.Match == "whole" {
+		if _, err := parseSearchSyntax(f.Query, f.Match == "whole"); err != nil {
 			return fmt.Errorf("%w: %v", ErrValidation, err)
 		}
 	}
@@ -91,8 +97,14 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 		}
 		candidate = strings.Join(terms, " AND ")
 		predicate, predicateArgs = searchWildcardPredicate(column, f.Query, pattern)
-	} else if f.Match == "expression" {
-		e, err := parseSearchExpression(f.Query)
+	} else if f.Match == "expression" || f.Match == "syntax" || f.Match == "whole" {
+		var e *searchExpression
+		var err error
+		if f.Match == "expression" {
+			e, err = parseSearchExpression(f.Query)
+		} else {
+			e, err = parseSearchSyntax(f.Query, f.Match == "whole")
+		}
 		if err != nil {
 			return "", nil, fmt.Errorf("%w: %v", ErrValidation, err)
 		}
@@ -114,7 +126,7 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 	} else if f.Match == "exact" {
 		source = "SELECT p.id,p.path,p.name_fold,p.path_fold FROM search_path p WHERE " + column + "=?"
 		args = []any{folded}
-	} else if f.Match == "wildcard" || f.Match == "expression" {
+	} else if searchSyntaxMode(f.Match) {
 		source = `SELECT p.id,p.path,p.name_fold,p.path_fold FROM search_trigram t
  CROSS JOIN search_path p ON p.id=t.rowid WHERE search_trigram MATCH ?`
 		args = []any{candidate}
@@ -127,7 +139,7 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 	if f.Match == "exact" {
 		// Constant rank and inlining preserve the exact index's path order.
 		ranked = `ranked_paths AS NOT MATERIALIZED (SELECT p.*,0 AS rank FROM (` + source + `) p)`
-	} else if f.Match == "wildcard" || f.Match == "expression" {
+	} else if searchSyntaxMode(f.Match) {
 		ranked = `ranked_paths AS NOT MATERIALIZED (SELECT p.*,3 AS rank FROM (` +
 			source + `) p WHERE ` + predicate + `)`
 		args = append(args, predicateArgs...)
@@ -228,6 +240,10 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 		f.MinOtherReplicas, f.ReplicaMetric, f.MinOtherReplicas,
 		f.MaxOtherReplicas, f.ReplicaMetric, f.MaxOtherReplicas)
 	return query, args, nil
+}
+
+func searchSyntaxMode(match string) bool {
+	return match == "wildcard" || match == "expression" || match == "syntax" || match == "whole"
 }
 
 // Replica subqueries must reuse this set instead of reselecting current snapshots

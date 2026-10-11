@@ -63,7 +63,7 @@ describe('literal route state', () => {
       new URLSearchParams('q=+%E9%9B%AA%26%3F+&disk_id=9007199254740993&directory='),
     );
     expect(input.q).toBe(' 雪&? ');
-    expect(input.match).toBe('substring');
+    expect(input.match).toBe('syntax');
     expect(parseSearch(new URL(searchURL(input), 'http://local').searchParams)).toEqual(input);
     expect(
       parseDirectory(

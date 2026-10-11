@@ -74,7 +74,17 @@ func TestSearchMatchingScopesAndReplicas(t *testing.T) {
 		}
 		return page
 	}
-	current := search(base.SearchFilters{Query: "report"})
+	current := search(base.SearchFilters{Query: "report", Match: "substring"})
+
+	defaultSyntax := search(base.SearchFilters{Query: "rep*ort OR missing"})
+	if defaultSyntax.Filters.Match != "syntax" || len(defaultSyntax.Items) != 6 {
+		t.Fatalf("default syntax: %+v", defaultSyntax)
+	}
+	for _, item := range defaultSyntax.Items {
+		if item.Relevance != "match" {
+			t.Fatalf("default syntax relevance: %q", item.Relevance)
+		}
+	}
 	var paths, relevance []string
 	for _, item := range current.Items {
 		paths = append(paths, item.Observation.Path)
@@ -157,10 +167,10 @@ func TestSearchMatchingScopesAndReplicas(t *testing.T) {
 		{base.SearchFilters{Query: "é猫%"}, 1},
 		{base.SearchFilters{Query: "e\u0301", Match: "exact"}, 1},
 		{base.SearchFilters{Query: "É", Match: "exact"}, 1},
-		{base.SearchFilters{Query: "%_\\"}, 1},
-		{base.SearchFilters{Query: "\\\"["}, 1},
-		{base.SearchFilters{Query: "[*]?"}, 1},
-		{base.SearchFilters{Query: " foo"}, 0},
+		{base.SearchFilters{Query: "%_\\", Match: "substring"}, 1},
+		{base.SearchFilters{Query: "\\\"[", Match: "substring"}, 1},
+		{base.SearchFilters{Query: "[*]?", Match: "substring"}, 1},
+		{base.SearchFilters{Query: " foo", Match: "substring"}, 0},
 		{base.SearchFilters{Query: "no-such-path"}, 0},
 		{base.SearchFilters{Query: "report", ContentFilters: base.ContentFilters{
 			DiskID: disks[0], Directory: "foo"}}, 3},
@@ -206,7 +216,7 @@ func TestSearchMatchingScopesAndReplicas(t *testing.T) {
 }
 
 func TestSearchCursorDoesNotEmbedLongImportedPaths(t *testing.T) {
-	for _, match := range []string{"substring", "exact"} {
+	for _, match := range []string{"substring", "exact", "syntax", "whole"} {
 		t.Run(match, func(t *testing.T) { testSearchLongPaths(t, match) })
 	}
 }
@@ -248,7 +258,7 @@ func testSearchLongPaths(t *testing.T, match string) {
 }
 
 func TestSearchPaginationRecoveryAndValidation(t *testing.T) {
-	for _, match := range []string{"substring"} {
+	for _, match := range []string{"substring", "syntax"} {
 		t.Run(match, func(t *testing.T) { testSearchRecovery(t, match) })
 	}
 }

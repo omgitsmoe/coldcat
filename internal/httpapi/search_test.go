@@ -16,7 +16,7 @@ import (
 )
 
 func TestSearchHTTPWorkflow(t *testing.T) {
-	for _, match := range []string{"substring", "exact", "wildcard", "expression"} {
+	for _, match := range []string{"", "syntax", "whole", "substring", "exact", "wildcard", "expression"} {
 		t.Run(match, func(t *testing.T) { testSearchHTTPWorkflow(t, match) })
 	}
 }
@@ -90,13 +90,20 @@ func testSearchHTTPWorkflow(t *testing.T, match string) {
 		}
 	}
 	var page searchPageDTO
-	searchURL, relevance := "/api/v1/search?q=REPORT&", "prefix"
+	searchURL, relevance := "/api/v1/search?q=REPORT&match=substring&", "prefix"
 	if match == "exact" {
 		searchURL, relevance = "/api/v1/search?q=REPORT.txt&match=exact&", "exact"
 	} else if match == "wildcard" {
 		searchURL, relevance = "/api/v1/search?q=*REPORT*&match=wildcard&", "match"
 	} else if match == "expression" {
 		searchURL = "/api/v1/search?q=" + url.QueryEscape("REPORT AND txt") + "&match=expression&"
+		relevance = "match"
+	} else if match == "syntax" || match == "whole" {
+		searchURL = "/api/v1/search?q=" + url.QueryEscape("report*txt OR absent*.pdf") +
+			"&match=" + match + "&"
+		relevance = "match"
+	} else if match == "" {
+		searchURL = "/api/v1/search?q=" + url.QueryEscape("REPORT*txt OR absent") + "&"
 		relevance = "match"
 	}
 	get(searchURL+"limit=1", 200, &page, "/api/v1/search")
@@ -110,7 +117,7 @@ func testSearchHTTPWorkflow(t *testing.T, match string) {
 		t.Fatalf("search result: %+v", first)
 	}
 	cursor := *page.NextCursor
-	if match == "wildcard" || match == "expression" {
+	if match != "substring" && match != "exact" {
 		var failure errorDTO
 		get("/api/v1/search?q=REPORT&match=substring&limit=1&cursor="+
 			url.QueryEscape(cursor), 400, &failure, "")

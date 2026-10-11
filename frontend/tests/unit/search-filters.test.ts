@@ -43,8 +43,8 @@ describe('explicit replica matching', () => {
 
 describe('advanced exposure and applied summaries', () => {
   it.each([
-    ['wildcard', 'personal*foo', 'Wildcard'],
-    ['expression', '(personal OR work) AND foo', 'AND / OR'],
+    ['syntax', 'personal*foo OR work*report', 'Search syntax'],
+    ['whole', '(personal*foo OR work*) AND *report', 'Whole-field syntax'],
   ] as const)('retains %s syntax and identifies its mode', (match, q, label) => {
     const route = parseSearch(new URLSearchParams({ match, q, field: 'path' }));
     expect(route.q).toBe(q);
@@ -59,7 +59,7 @@ describe('advanced exposure and applied summaries', () => {
     );
     expect(advancedCount(route)).toBe(5);
     expect(searchSummary(route)).toBe(
-      'Name · Contains · Current · Query: abc · Disk 1 · Snapshot 2 · Directory: root · Other locations: ≥ 0 · Other locations: ≤ 2',
+      'Name · Search syntax · Current · Query: abc · Disk 1 · Snapshot 2 · Directory: root · Other locations: ≥ 0 · Other locations: ≤ 2',
     );
   });
   it('retains full literal query/path and identifies exact/history restrictions', () => {

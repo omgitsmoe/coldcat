@@ -6,7 +6,9 @@ import { encodeQuery } from '../api/query';
 import { literalText, validatePath } from '../format/path';
 import { decimal } from '../format/decimal';
 
-export type SearchRoute = Omit<Query<'GET /api/v1/search'>, 'cursor'>;
+export type SearchRoute = Omit<Query<'GET /api/v1/search'>, 'cursor' | 'match'> & {
+  match?: 'syntax' | 'whole' | 'substring' | 'exact';
+};
 export type DirectoryRoute = Omit<Query<'GET /api/v1/snapshots/{id}/directory/entries'>, 'cursor'>;
 export type LocationRoute = Omit<Query<'GET /api/v1/contents/{id}/observations'>, 'cursor'>;
 export type ContentsRoute = Omit<Query<'GET /api/v1/contents'>, 'cursor'>;
@@ -93,15 +95,17 @@ function parseQuery<K extends keyof operations>(key: K, params: URLSearchParams)
 
 export function parseSearch(params: URLSearchParams): SearchRoute {
   const query = parseQuery('GET /api/v1/search', params);
+  if (query.match === 'wildcard' || query.match === 'expression')
+    throw new Error('Choose Search syntax, Whole-field syntax, Contains or Exact.');
   literalText(query.q ?? '');
   if (query.directory !== undefined) validatePath(query.directory);
   return {
     field: 'name',
-    match: 'substring',
     scope: 'current',
     replica_metric: 'disks',
     limit: 50,
     ...query,
+    match: query.match ?? 'syntax',
     q: query.q ?? '',
   };
 }

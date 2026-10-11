@@ -95,14 +95,25 @@ const (
 )
 
 type searchExpression struct {
-	literal string
-	op      string
-	left    *searchExpression
-	right   *searchExpression
+	literal   string
+	wildcard  string
+	glob      string
+	fragments []string
+	op        string
+	left      *searchExpression
+	right     *searchExpression
 }
 
 func (e *searchExpression) compile(field string) (string, string, []any) {
 	if e.op == "" {
+		if e.wildcard != "" {
+			terms := make([]string, 0, len(e.fragments))
+			for _, fragment := range e.fragments {
+				terms = append(terms, "("+searchTrigramMatch(field, fragment)+")")
+			}
+			predicate, args := searchWildcardPredicate("p."+field+"_fold", e.wildcard, e.glob)
+			return "(" + strings.Join(terms, " AND ") + ")", predicate, args
+		}
 		return searchTrigramMatch(field, e.literal),
 			"instr(p." + field + "_fold,?)>0", []any{e.literal}
 	}
@@ -113,13 +124,25 @@ func (e *searchExpression) compile(field string) (string, string, []any) {
 }
 
 type searchParser struct {
-	input []rune
-	pos   int
-	terms int
+	input       []rune
+	pos         int
+	terms       int
+	indexedRuns int
+	unified     bool
+	wholeField  bool
+}
+
+func parseSearchSyntax(query string, wholeField bool) (*searchExpression, error) {
+	p := searchParser{input: []rune(query), unified: true, wholeField: wholeField}
+	return p.parse()
 }
 
 func parseSearchExpression(query string) (*searchExpression, error) {
 	p := searchParser{input: []rune(query)}
+	return p.parse()
+}
+
+func (p *searchParser) parse() (*searchExpression, error) {
 	e, err := p.expression(0, 0)
 	if err != nil {
 		return nil, err
@@ -196,6 +219,9 @@ func (p *searchParser) atom(depth int) (*searchExpression, error) {
 		p.pos++
 		return e, nil
 	}
+	if p.unified {
+		return p.pattern()
+	}
 	var literal strings.Builder
 	quoted := p.input[p.pos] == '"'
 	if quoted {
@@ -241,6 +267,84 @@ func (p *searchParser) atom(depth int) (*searchExpression, error) {
 		return nil, fmt.Errorf("expression exceeds %d literals", searchMaxTerms)
 	}
 	return &searchExpression{literal: searchFold(text)}, nil
+}
+
+func (p *searchParser) pattern() (*searchExpression, error) {
+	var pattern, pendingSpace strings.Builder
+	quoted := false
+	started := false
+	writeLiteral := func(r rune) {
+		if strings.ContainsRune(`*?\`, r) {
+			pattern.WriteRune('\\')
+		}
+		pattern.WriteRune(r)
+	}
+	for p.pos < len(p.input) {
+		r := p.input[p.pos]
+		if !quoted {
+			if r == '(' || r == ')' {
+				break
+			}
+			if unicode.IsSpace(r) {
+				pendingSpace.WriteRune(r)
+				p.pos++
+				continue
+			}
+			if !started || pendingSpace.Len() > 0 {
+				op, _ := p.operator()
+				if op != "" {
+					break
+				}
+				end := p.pos
+				for end < len(p.input) && !unicode.IsSpace(p.input[end]) &&
+					p.input[end] != '(' && p.input[end] != ')' {
+					end++
+				}
+				if string(p.input[p.pos:end]) == "NOT" {
+					return nil, fmt.Errorf("NOT is unsupported; quote operator names to search for them")
+				}
+			}
+		}
+		pattern.WriteString(pendingSpace.String())
+		pendingSpace.Reset()
+		started = true
+		p.pos++
+		if r == '"' {
+			quoted = !quoted
+			continue
+		}
+		if r == '\\' {
+			if p.pos == len(p.input) || !strings.ContainsRune(`*?\"()`, p.input[p.pos]) {
+				return nil, fmt.Errorf(`syntax escapes must be \*, \?, \\, \", \( or \)`)
+			}
+			writeLiteral(p.input[p.pos])
+			p.pos++
+		} else if quoted {
+			writeLiteral(r)
+		} else {
+			pattern.WriteRune(r)
+		}
+	}
+	if quoted {
+		return nil, fmt.Errorf("unterminated quoted literal")
+	}
+	if pattern.Len() == 0 {
+		return nil, fmt.Errorf("expected a literal or wildcard pattern; quote operator names")
+	}
+	query := pattern.String()
+	if !p.wholeField {
+		query = "*" + query + "*"
+	}
+	glob, fragments, err := searchWildcard(query)
+	if err != nil {
+		return nil, err
+	}
+	p.terms++
+	p.indexedRuns += len(fragments)
+	if p.terms > searchMaxTerms || p.indexedRuns > searchMaxTerms {
+		return nil, fmt.Errorf("syntax exceeds %d terms or indexed literal runs", searchMaxTerms)
+	}
+	return &searchExpression{wildcard: query, glob: glob, fragments: fragments}, nil
 }
 
 // SQLite GLOB has no escape clause. Encode escaped metacharacters as singleton

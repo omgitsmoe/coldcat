@@ -34,7 +34,7 @@ func (a *App) Search(ctx context.Context, req SearchRequest) (base.SearchPage, e
 		f.Field = "name"
 	}
 	if f.Match == "" {
-		f.Match = "substring"
+		f.Match = "syntax"
 	}
 	if f.Scope == "" {
 		f.Scope = base.ScopeCurrent
@@ -48,6 +48,9 @@ func (a *App) Search(ctx context.Context, req SearchRequest) (base.SearchPage, e
 	version, kind := 3, "search:fold-v1:rank:path:id"
 	if f.Match == "wildcard" || f.Match == "expression" {
 		version, kind = 4, "search:syntax-v1:fold-v1:path:id"
+	}
+	if f.Match == "syntax" || f.Match == "whole" {
+		version, kind = 5, "search:syntax-v2:fold-v1:path:id"
 	}
 	if err := database.ValidateSearchFilters(*f); err != nil {
 		return base.SearchPage{}, err

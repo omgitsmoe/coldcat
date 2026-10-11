@@ -35,7 +35,7 @@
   let mounted = $state(false);
   let q = $state('');
   let field = $state<'name' | 'path'>('name');
-  let match = $state<NonNullable<SearchRoute['match']>>('substring');
+  let match = $state<NonNullable<SearchRoute['match']>>('syntax');
   let scope = $state<'current' | 'history'>('current');
   let metric = $state<'disks' | 'locations'>('disks');
   let disk = $state('');
@@ -100,7 +100,7 @@
   function drafts(route: SearchRoute) {
     q = route.q;
     field = route.field ?? 'name';
-    match = route.match ?? 'substring';
+    match = route.match ?? 'syntax';
     scope = route.scope ?? 'current';
     metric = route.replica_metric ?? 'disks';
     disk = route.disk_id ?? '';
@@ -294,9 +294,9 @@
       field = raw.get('field') === 'path' ? 'path' : 'name';
       const rawMatch = raw.get('match');
       match =
-        rawMatch === 'exact' || rawMatch === 'wildcard' || rawMatch === 'expression'
+        rawMatch === 'exact' || rawMatch === 'substring' || rawMatch === 'whole'
           ? rawMatch
-          : 'substring';
+          : 'syntax';
       scope = raw.get('scope') === 'history' ? 'history' : 'current';
       metric = raw.get('replica_metric') === 'locations' ? 'locations' : 'disks';
       advancedOpen =
@@ -390,16 +390,14 @@
   >
 </form>
 <p id="search-syntax-hint" class="muted syntax-hint">
-  {#if match === 'wildcard'}
-    Wildcard matches the whole field. <code>personal*foo</code> matches
-    <code>personal/bar/foo</code> in Path; use <code>*personal*foo*</code> for fragments anywhere.
-  {:else if match === 'expression'}
-    Combine literal substrings: <code>personal AND foo</code> or
-    <code>(personal OR work) AND "tax return"</code>. AND binds before OR.
+  {#if match === 'syntax' || match === 'whole'}
+    Wildcards + AND / OR: <code>gwa*cshd OR report*.pdf</code>.
+    {match === 'whole' ? 'Whole-field terms.' : 'Matches anywhere.'}
+    AND binds before OR.
   {:else if match === 'exact'}
     Exact matches the whole field, ignoring case. Short queries and punctuation are literal.
   {:else}
-    Literal substring, ignoring case (3+ Unicode characters). More options: Wildcard and AND / OR.
+    Literal substring, ignoring case (3+ Unicode characters). Wildcards and operators are literal.
   {/if}
 </p>
 <form
@@ -420,8 +418,10 @@
     >
     <label class="field"
       >Match <select bind:value={match}
-        ><option value="substring">Contains</option><option value="exact">Exact</option>
-        <option value="wildcard">Wildcard</option><option value="expression">AND / OR</option
+        ><option value="syntax">Search syntax</option>
+        <option value="whole">Whole-field syntax</option>
+        <option value="substring">Contains (literal)</option><option value="exact"
+          >Exact (literal)</option
         ></select
       ></label
     >
@@ -506,21 +506,22 @@
       </li>
       <li>Contains and Exact treat spaces, quotes, operators and wildcard characters literally.</li>
       <li>
-        Wildcard: <code>*</code> matches any characters (including <code>/</code>),
+        Search syntax combines wildcards, uppercase AND / OR and parentheses.
+        <code>*</code> matches any characters (including <code>/</code>),
         <code>?</code> matches one Unicode character. Escape literal characters with
-        <code>\*</code>, <code>\?</code> or <code>\\</code>. Brackets are literal. Include at least
-        one uninterrupted literal run of 3 characters; at most 32 indexed runs.
+        <code>\*</code>, <code>\?</code>, <code>\\</code>, <code>\"</code>, <code>\(</code> or
+        <code>\)</code>. Brackets are literal. Each term needs an uninterrupted literal run of 3
+        characters; at most 32 terms, 32 indexed runs and 16 nesting levels.
       </li>
       <li>
-        AND / OR: use explicit uppercase operators and parentheses. Quote literals containing spaces
-        or syntax, such as <code>"tax return"</code> or <code>"AND"</code>. Escape quotes and
-        backslashes with <code>\"</code> and <code>\\</code>. Each literal needs 3 characters; up to
-        32 literals and 16 nesting levels. Wildcards, NOT and regex are not supported in
-        expressions.
+        AND binds before OR. Plain <code>tax return</code> is one substring, not implicit AND.
+        Quotes make syntax literal: <code>"report*.pdf"</code> searches for an actual asterisk. NOT and
+        regex are not supported.
       </li>
       <li>
-        Wildcard and AND / OR results sort by path, then observation ID; Contains boosts exact and
-        prefix matches.
+        Search syntax matches each term anywhere; Whole-field syntax anchors each term to the entire
+        selected field. Both sort by path, then observation ID. Contains boosts exact and prefix
+        matches; Exact is literal whole-field equality.
       </li>
     </ul>
   </details>

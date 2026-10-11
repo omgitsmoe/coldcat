@@ -39,6 +39,9 @@ func BenchmarkSearchSyntax(b *testing.B) {
 				{"and_selective", "expression", "path", "archive AND 0000005"},
 				{"or_selective", "expression", "name", "0000005 OR 0000006"},
 				{"or_broad", "expression", "path", "archive OR personal"},
+				{"syntax_selective", "syntax", "path", "archive*0000005 OR personal*0000010"},
+				{"syntax_broad", "syntax", "path", "archive*txt OR personal*foo"},
+				{"whole_combined", "whole", "path", "(archive* OR personal*) AND *report*txt"},
 			} {
 				f := base.SearchFilters{Query: test.query, Field: test.field, Match: test.mode,
 					ContentFilters: base.ContentFilters{Scope: base.ScopeCurrent,

@@ -189,3 +189,126 @@ func TestSearchSyntaxValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestSearchUnifiedSyntax(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "catalog.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	seedSearchPaths(t, db, []string{
+		"backups/gwa-2024-09-27_2024-09-27.cshd", "gwa-2024.cshd",
+		"prefix/gwa-2024.cshd.suffix", "work/report-2024.pdf", "work/report*.pdf",
+		"work/tax return", "work/tax other return", "work/AND", "work/a(b)c",
+		"work/a\"b", "work/a\\b", "work/é猫Σ.txt", "work/abc\ufffe", "work/abc\ufffd",
+	})
+	for _, test := range []struct {
+		mode, field, query string
+		want               []string
+	}{
+		{"syntax", "name", "gwa*cshd", []string{
+			"backups/gwa-2024-09-27_2024-09-27.cshd", "gwa-2024.cshd", "prefix/gwa-2024.cshd.suffix",
+		}},
+		{"syntax", "path", "GWA*CSHD", []string{
+			"backups/gwa-2024-09-27_2024-09-27.cshd", "gwa-2024.cshd", "prefix/gwa-2024.cshd.suffix",
+		}},
+		{"whole", "path", "gwa*cshd", []string{"gwa-2024.cshd"}},
+		{"whole", "name", "gwa*cshd", []string{
+			"backups/gwa-2024-09-27_2024-09-27.cshd", "gwa-2024.cshd",
+		}},
+		{"syntax", "path", "(gwa*cshd OR report*.pdf) AND 2024", []string{
+			"backups/gwa-2024-09-27_2024-09-27.cshd", "gwa-2024.cshd",
+			"prefix/gwa-2024.cshd.suffix", "work/report-2024.pdf",
+		}},
+		{"whole", "path", "(backups/* OR work/*) AND *2024*", []string{
+			"backups/gwa-2024-09-27_2024-09-27.cshd", "work/report-2024.pdf",
+		}},
+		{"syntax", "name", "missing OR tax AND return", []string{
+			"work/tax other return", "work/tax return",
+		}},
+		{"syntax", "name", "tax return", []string{"work/tax return"}},
+		{"syntax", "name", `"tax return"`, []string{"work/tax return"}},
+		{"whole", "path", "tax return", nil},
+		{"whole", "name", "tax return", []string{"work/tax return"}},
+		{"syntax", "name", `"report*.pdf"`, []string{"work/report*.pdf"}},
+		{"syntax", "name", `report\*.pdf`, []string{"work/report*.pdf"}},
+		{"syntax", "name", `report*".pdf"`, []string{"work/report*.pdf", "work/report-2024.pdf"}},
+		{"syntax", "path", `"AND"`, []string{"work/AND"}},
+		{"syntax", "name", `a\(b\)c`, []string{"work/a(b)c"}},
+		{"syntax", "name", `"a(b)c"`, []string{"work/a(b)c"}},
+		{"syntax", "name", `"a\"b"`, []string{"work/a\"b"}},
+		{"syntax", "name", `a\\b`, []string{"work/a\\b"}},
+		{"syntax", "name", `é猫σ?txt`, []string{"work/é猫Σ.txt"}},
+		{"syntax", "path", "abc\ufffe OR absent", []string{"work/abc\ufffe"}},
+		{"syntax", "path", "abc\ufffd", []string{"work/abc\ufffd"}},
+		{"syntax", "path", "  tax return  ", []string{"work/tax return"}},
+		{"syntax", "path", "missing OR(tax AND return)", []string{
+			"work/tax other return", "work/tax return",
+		}},
+	} {
+		t.Run(test.mode+"/"+test.field+"/"+test.query, func(t *testing.T) {
+			f := base.SearchFilters{Query: test.query, Field: test.field, Match: test.mode,
+				ContentFilters: base.ContentFilters{
+					Scope: base.ScopeCurrent, ReplicaMetric: base.ReplicaDisks,
+				}}
+			page, err := db.Search(t.Context(), f, 50, base.SearchAnchor{}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, item := range page.Items {
+				got = append(got, item.Observation.Path)
+				if item.Relevance != "match" {
+					t.Fatalf("unexpected relevance %q", item.Relevance)
+				}
+			}
+			if !slices.Equal(got, test.want) {
+				t.Fatalf("got %q want %q", got, test.want)
+			}
+			verifySearchWindowPages(t, db, f)
+			query, args, err := searchWindow(f, 50, base.SearchAnchor{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if plan := searchWindowPlan(t, db, query, args); !strings.Contains(plan, "VIRTUAL TABLE INDEX 0:M") {
+				t.Fatalf("missing indexed MATCH constraint:\n%s", plan)
+			}
+			if len(page.Items) > 0 {
+				first := page.Items[0]
+				after := base.SearchAnchor{ID: first.Observation.Id,
+					Path: first.Observation.Path, Relevance: "exact"}
+				if _, err := db.Search(t.Context(), f, 1, after, nil); !errors.Is(err, ErrValidation) {
+					t.Fatalf("accepted wrong anchor rank: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestSearchUnifiedSyntaxValidation(t *testing.T) {
+	for _, mode := range []string{"syntax", "whole"} {
+		for _, query := range []string{
+			"*", "abc OR a*b", "abc AND ??", "abc AND", "OR abc", "abc NOT def",
+			"abc OR", "(abc", "abc)", "()", `"abc`, `""`, `abc\`, `abc\x`,
+			strings.Repeat("(", 17) + "abc" + strings.Repeat(")", 17),
+			strings.Repeat("abc OR ", 32) + "def",
+			strings.Repeat("abc*", 17) + " OR " + strings.Repeat("def*", 16),
+		} {
+			f := base.SearchFilters{Query: query, Field: "path", Match: mode,
+				ContentFilters: base.ContentFilters{
+					Scope: base.ScopeCurrent, ReplicaMetric: base.ReplicaDisks,
+				}}
+			if err := ValidateSearchFilters(f); !errors.Is(err, ErrValidation) {
+				t.Errorf("accepted %s %q: %v", mode, query, err)
+			}
+		}
+		for _, query := range []string{
+			strings.Repeat("(", 16) + "abc" + strings.Repeat(")", 16),
+			strings.Repeat("abc OR ", 31) + "def", `"NOT"`, `abc?`,
+		} {
+			if _, err := parseSearchSyntax(query, mode == "whole"); err != nil {
+				t.Errorf("rejected %s %q: %v", mode, query, err)
+			}
+		}
+	}
+}

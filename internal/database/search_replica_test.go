@@ -122,7 +122,7 @@ func TestSearchReplicaHistorySemantics(t *testing.T) {
 		f := base.SearchFilters{Query: "KEEPsake-report.txt", Field: "name", Match: "exact",
 			ContentFilters: base.ContentFilters{Scope: base.ScopeCurrent,
 				ReplicaMetric: metric, OtherReplicas: &bound}}
-		for _, match := range []string{"exact", "substring", "wildcard", "expression"} {
+		for _, match := range []string{"exact", "substring", "wildcard", "expression", "syntax", "whole"} {
 			f.Match = match
 			verifySearchWindowPages(t, db, f)
 			page, err := db.Search(t.Context(), f, 50, base.SearchAnchor{}, nil)

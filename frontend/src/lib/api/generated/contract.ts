@@ -1,5 +1,5 @@
 // Generated from doc/openapi.json; do not edit.
-// SHA-256: 3f0c803c04d5e65adefd08f9e260e63d040ed05c80f19ecc868a784d0ab79126
+// SHA-256: 5fcd91b95676643d5ede52601b6a5ce18c9667a6d5e9b2f371c41da4f5803949
 import type { Schema, Operation } from '../schema';
 import type { operations } from './wire';
 export const schemas: Record<
@@ -472,7 +472,10 @@ export const schemas: Record<
         properties: {
           q: { type: 'string', minLength: 1 },
           field: { type: 'string', enum: ['name', 'path'] },
-          match: { type: 'string', enum: ['exact', 'substring', 'wildcard', 'expression'] },
+          match: {
+            type: 'string',
+            enum: ['syntax', 'whole', 'exact', 'substring', 'wildcard', 'expression'],
+          },
           snapshot_id: { type: ['string', 'null'], pattern: '^[1-9][0-9]*$' },
           disk_id: { type: ['string', 'null'], pattern: '^[1-9][0-9]*$' },
           directory: { type: 'string' },
@@ -782,7 +785,10 @@ export const contract: Record<keyof operations, Operation> = {
       q: { schema: { type: 'string', minLength: 1 }, required: true },
       field: { schema: { type: 'string', enum: ['name', 'path'] }, required: false },
       match: {
-        schema: { type: 'string', enum: ['exact', 'substring', 'wildcard', 'expression'] },
+        schema: {
+          type: 'string',
+          enum: ['syntax', 'whole', 'exact', 'substring', 'wildcard', 'expression'],
+        },
         required: false,
       },
       scope: { schema: { type: 'string', enum: ['current', 'history'] }, required: false },

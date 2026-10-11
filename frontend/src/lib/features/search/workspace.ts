@@ -44,7 +44,7 @@ export function searchIssue(input: SearchRoute): SearchIssue | undefined {
   }
   if (input.q === '')
     return { kind: 'idle', message: 'Search for a remembered filename or disk-relative path.' };
-  if ((input.match === undefined || input.match === 'substring') && Array.from(input.q).length < 3)
+  if (input.match !== 'exact' && Array.from(input.q).length < 3)
     return { kind: 'short', message: 'Type at least 3 characters, or choose Exact.' };
 }
 

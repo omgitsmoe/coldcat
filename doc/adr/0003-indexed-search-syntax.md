@@ -1,6 +1,7 @@
 # ADR 0003: Indexed wildcard and Boolean substring search
 
-- Status: Accepted
+- Status: Superseded for browser options and default syntax by ADR 0004;
+  explicit legacy API modes remain supported.
 - Date: 2026-10-11
 
 ## Context

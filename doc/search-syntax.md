@@ -1,42 +1,93 @@
 # Search syntax
 
-Choose a match mode explicitly. All modes ignore case using the catalog's existing
+Search syntax is the default. All modes ignore case using the catalog's existing
 Unicode simple folding; punctuation, original spelling, and Unicode normalization
 behavior remain unchanged. **Name** searches the last `/`-separated segment;
 **Path** searches the entire disk-relative path.
 
 | Mode | Query | Meaning |
 | --- | --- | --- |
+| Search syntax | `gwa*cshd` | Ordered fragments anywhere in Name or Path |
+| Search syntax | `gwa*cshd OR report*.pdf` | Either wildcard pattern, anywhere in the field |
+| Search syntax | `(personal OR work) AND "tax return"` | Alternatives with a shared literal substring |
+| Search syntax | `tax return` | One literal substring, including the space |
+| Search syntax | `"report*.pdf"` | Literal substring containing an actual asterisk |
+| Whole-field syntax | `gwa*cshd` | Entire field begins with `gwa` and ends with `cshd` |
+| Whole-field syntax | `(personal/* OR work/*) AND *report*` | Whole-field patterns combined logically |
 | Contains | `tax return` | Literal substring, including the space |
 | Exact | `foo` | Entire selected field equals the literal |
-| Wildcard | `personal*foo` | Whole field begins with `personal` and ends with `foo` |
-| Wildcard | `*personal*foo*` | Ordered fragments anywhere in the field |
-| AND / OR | `personal AND foo` | Both literal substrings, in either order |
-| AND / OR | `(personal OR work) AND "tax return"` | Alternatives with a shared condition |
 
 Wildcard `*` matches zero or more characters, including `/`; `?` matches one Unicode
-code point. Escape literal `*`, `?`, and backslash with `\*`, `\?`, and `\\`.
-Brackets are literal, not character classes. Include an uninterrupted literal run of
-at least three Unicode code points; at most 32 runs of that length are allowed.
+code point. Escape literal syntax with `\*`, `\?`, `\\`, `\"`, `\(`, and `\)`.
+Brackets are literal, not character classes. Each term must include an uninterrupted
+literal run of at least three Unicode code points. At most 32 terms and 32 indexed
+literal runs across the entire query are allowed; every OR branch must be indexable.
 
-Expressions use explicit uppercase `AND` and `OR`; `AND` binds more tightly.
-Double quotes enclose literals containing spaces, parentheses, operator names, or
-wildcard characters. Within literals, backslash escapes double quote or backslash.
-Every literal needs at least three Unicode code points. Expressions allow at most
-32 literals and 16 parenthesis levels. NOT, implicit operators, mixed wildcard
-expressions, and regex are not supported.
+Both syntax options use explicit uppercase `AND` and `OR`; `AND` binds more tightly.
+Plain multiword text is one term, not implicit AND. Leading/trailing unquoted
+whitespace is ignored around terms; quoted whitespace is preserved. Double quotes
+make their contents literal, including operators, parentheses and wildcards.
+Quoted and unquoted segments can be concatenated: `report*".pdf"` retains the wildcard.
+Operators must be separated by whitespace or parentheses. At most 16 parenthesis
+levels are allowed. NOT and regex are not supported. Invalid syntax returns an error,
+not a literal-search fallback; choose Contains or Exact for uninterpreted input.
+
+Default syntax matches each term anywhere, equivalent to adding `*` at both ends of
+each pattern. Whole-field syntax anchors **each term**, not the expression as a whole.
+For Path, `gwa*cshd` therefore matches `backups/gwa-2024.cshd` by default but not in
+Whole-field syntax; use `*gwa*cshd` there to allow parent directories.
 
 Contains requires three code points; Exact permits shorter queries. All queries are
 limited to 1024 UTF-8 bytes. Invalid or unindexable queries return HTTP 400; there is
 no hidden full-catalog scan fallback or candidate cap.
 
-Wildcard and expression results have relevance `match` and sort by original binary
+Syntax results have relevance `match` and sort by original binary
 path, then observation ID. Contains still ranks exact matches before prefixes before
 other substrings. Current/history scope, membership filters, catalog-wide replica
 counts, and revision-bound pagination apply to every mode. Keep query, filters, and
 page size unchanged when following cursors.
 
+## API modes
+
+Omitted `match` defaults to `syntax`; `whole` selects whole-field syntax.
+`substring` and `exact` remain literal. Explicit legacy `wildcard` (anchored patterns,
+no Boolean operators) and `expression` (Boolean literal substrings, no wildcard
+patterns) remain available through the API, but are no longer browser options.
+There is no legacy bookmark migration. New syntax cursors are separate from legacy
+mode cursors. No schema migration, additional index or catalog rebuild is required.
+
 ## Performance measurements
+
+### Unified syntax
+
+Measured with the same distinct-path fixture and environment described below,
+three iterations per first/next-page case, 50 items per page:
+
+```sh
+go test ./internal/database -run '^$' \
+  -bench '^BenchmarkSearchSyntax$/50000/^(syntax_selective|syntax_broad|whole_combined)$/' \
+  -benchtime=3x -benchmem -v -timeout=30m
+```
+
+Replace `/50000/` with `/1000000/` for the large fixture. Fixture construction is
+untimed. These are warm serial means, not cold-cache latency or p95. Other checks,
+including race tests, ran concurrently; do not infer precise speedups over the
+historical measurements below.
+
+| Query / mode | 50,000 paths: first / next | 1,000,000 paths: first / next |
+| --- | ---: | ---: |
+| `archive*0000005 OR personal*0000010` / syntax | 3.64 ms / no next page | 30.8 ms / no next page |
+| `archive*txt OR personal*foo` / syntax | 62.3 / 63.5 ms | 1,249 / 1,297 ms |
+| `(archive* OR personal*) AND *report*txt` / whole | 69.2 / 76.7 ms | 1,428 / 1,516 ms |
+
+At one million paths, first-page allocations were about 29 KB for the selective
+query and 127–129 KB for the broad queries. No storage or import-index changes were
+needed. Broad queries remain potentially expensive despite indexed retrieval.
+
+### Original separate modes
+
+The following tables record the original separate wildcard/expression modes,
+not measurements of unified syntax.
 
 Measured on Linux/amd64, AMD Ryzen 5 9600X, Go's modernc SQLite driver.
 
