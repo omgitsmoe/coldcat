@@ -140,6 +140,10 @@ func TestDirectoryQueryIndexes(t *testing.T) {
  ORDER BY path LIMIT 50`, "directory_file_parent"},
 		{`SELECT path FROM directory_file WHERE snapshot_id=1 AND directory_path='foo'
  AND path>'foo/a' ORDER BY path LIMIT 50`, "directory_file_parent"},
+		{`SELECT o.id,o.content_id,o.path FROM directory_file df
+ JOIN observation o ON o.id=df.observation_id
+ WHERE df.snapshot_id=1 AND df.directory_path='foo' AND df.path>='foo/a'
+ ORDER BY df.path LIMIT 52`, "directory_file_parent"},
 		{`SELECT id FROM observation WHERE snapshot_id=1 AND path>='foo/' AND path<'foo0'
  ORDER BY path LIMIT 50`, "sqlite_autoindex_observation_1"},
 		{`SELECT directory_path FROM directory_content WHERE content_id=1`,
@@ -159,6 +163,9 @@ func TestDirectoryQueryIndexes(t *testing.T) {
 				t.Fatal(err)
 			}
 			plan = append(plan, detail)
+			if strings.Contains(detail, "USE TEMP B-TREE") {
+				t.Fatalf("query requires sorting instead of indexed seek: %s: %s", test.query, detail)
+			}
 		}
 		err = rows.Err()
 		rows.Close()

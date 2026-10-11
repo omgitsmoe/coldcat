@@ -15,6 +15,21 @@ import (
 	"github.com/omgitsmoe/coldcat/internal/base"
 )
 
+const legacyDirectoryFileSchema = `CREATE TABLE directory_file (
+ observation_id INTEGER PRIMARY KEY REFERENCES observation(id) ON DELETE CASCADE,
+ snapshot_id INTEGER NOT NULL, directory_path TEXT NOT NULL, path TEXT NOT NULL,
+ FOREIGN KEY(snapshot_id,directory_path) REFERENCES directory(snapshot_id,path) ON DELETE CASCADE
+);
+CREATE INDEX directory_file_parent
+ ON directory_file(snapshot_id,directory_path,path,observation_id);
+`
+
+func useLegacyDirectoryFiles(db *DB) error {
+	_, err := db.db.Exec(`DROP VIEW directory_file;
+DROP TABLE directory_entry;` + legacyDirectoryFileSchema)
+	return err
+}
+
 func TestCleanOpenDefersFullForeignKeyCheck(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "catalog.sqlite")
 	db, err := Open(path)
@@ -45,17 +60,35 @@ VALUES(999,999,'dangling')`); err == nil {
 	}
 }
 
-func TestLegacyMembershipOpenDoesNotRewrite(t *testing.T) {
-	for _, version := range []int{1, 2} {
+func TestLegacyDirectoryOpenDoesNotRewrite(t *testing.T) {
+	for _, version := range []int{1, 2, 3} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "legacy.sqlite")
 			db, err := Open(path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = db.db.Exec(`DROP VIEW directory_content;
-DROP TABLE directory_membership;` + directoryContentSchema +
-				fmt.Sprintf("PRAGMA user_version=%d;", version))
+			if err := useLegacyDirectoryFiles(db); err != nil {
+				t.Fatal(err)
+			}
+			if version < 3 {
+				schema := directoryContentSchema
+				if version == 1 {
+					schema = strings.Replace(schema, ") WITHOUT ROWID;", ");", 1)
+				}
+				_, err = db.db.Exec(`DROP VIEW directory_content;
+DROP TABLE directory_membership;` + schema)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if version == 1 {
+				legacyFTS := strings.Replace(searchTrigramSchema, ", detail=column, columnsize=0", "", 1)
+				if _, err := db.db.Exec("DROP TABLE search_trigram;" + legacyFTS); err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, err = db.db.Exec(fmt.Sprintf("PRAGMA user_version=%d;", version))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -68,17 +101,56 @@ DROP TABLE directory_membership;` + directoryContentSchema +
 			}
 			defer db.Close()
 			var kind string
-			if err := db.db.QueryRow("SELECT type FROM sqlite_schema WHERE name='directory_content'").
+			if err := db.db.QueryRow("SELECT type FROM sqlite_schema WHERE name='directory_file'").
 				Scan(&kind); err != nil || kind != "table" {
-				t.Fatalf("legacy layout rewritten: %s, %v", kind, err)
+				t.Fatalf("legacy file layout rewritten: %s, %v", kind, err)
+			}
+			wantKind := "table"
+			if version == 3 {
+				wantKind = "view"
+			}
+			if err := db.db.QueryRow("SELECT type FROM sqlite_schema WHERE name='directory_content'").
+				Scan(&kind); err != nil || kind != wantKind {
+				t.Fatalf("legacy membership layout rewritten: %s, %v", kind, err)
 			}
 			var got int
-			if err := db.db.QueryRow("PRAGMA user_version").Scan(&got); err != nil || got != 3 {
+			if err := db.db.QueryRow("PRAGMA user_version").Scan(&got); err != nil || got != 4 {
 				t.Fatalf("reader version: %d, %v", got, err)
 			}
-			if err := db.applyMigrations(t.Context(), migrations[:2]); err == nil ||
-				!strings.Contains(err.Error(), "unsupported schema version 3") {
-				t.Fatalf("old reader accepted version 3: %v", err)
+			if err := db.applyMigrations(t.Context(), migrations[:3]); err == nil ||
+				!strings.Contains(err.Error(), "unsupported schema version 4") {
+				t.Fatalf("old reader accepted version 4: %v", err)
+			}
+			if _, err := db.db.Exec(`INSERT INTO disk(id,label,capacity) VALUES(1,'disk',0);
+INSERT INTO content(id,hash_type,hash,size) VALUES(1,'sha256',zeroblob(32),7);`); err != nil {
+				t.Fatal(err)
+			}
+			seedDirectorySnapshot(t, db, 1, []string{"a/猫", "a/file", "root"})
+			if err := db.BuildDirectories(t.Context(), 1); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.PublishImport(t.Context(), PublishImportRequest{SnapshotID: 1}); err != nil {
+				t.Fatal(err)
+			}
+			output := filepath.Join(t.TempDir(), "compact.sqlite")
+			if err := db.CompactInto(t.Context(), output); err != nil {
+				t.Fatal(err)
+			}
+			target, err := Open(output)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer target.Close()
+			filters := base.DirectoryFilters{
+				SnapshotID: 1, Path: "a", ReplicaMetric: base.ReplicaDisks,
+			}
+			want, err := db.ListDirectoryEntries(t.Context(), filters, 50, base.DirectoryAnchor{}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			page, err := target.ListDirectoryEntries(t.Context(), filters, 50, base.DirectoryAnchor{}, nil)
+			if err != nil || !reflect.DeepEqual(want, page) {
+				t.Fatalf("legacy entries changed: %+v, %v", page, err)
 			}
 		})
 	}
@@ -107,6 +179,30 @@ PRAGMA foreign_keys=ON;`)
 	}
 }
 
+func TestCompactFileMappingFailsWithoutDirectory(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "corrupt.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := useLegacyDirectoryFiles(db); err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.db.Exec(`PRAGMA foreign_keys=OFF;
+INSERT INTO directory_file VALUES(999,999,'missing','missing/file');
+PRAGMA foreign_keys=ON;`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(t.TempDir(), "output.sqlite")
+	if err := db.CompactInto(t.Context(), output); err == nil {
+		t.Fatal("silently discarded unmappable file")
+	}
+	if _, err := os.Stat(output); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("left invalid compact output: %v", err)
+	}
+}
+
 func TestCompactIntoPreservesCatalog(t *testing.T) {
 	source := filepath.Join(t.TempDir(), "source.sqlite")
 	db, err := Open(source)
@@ -114,6 +210,9 @@ func TestCompactIntoPreservesCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	if err := useLegacyDirectoryFiles(db); err != nil {
+		t.Fatal(err)
+	}
 	legacySchema := strings.Replace(directoryContentSchema, ") WITHOUT ROWID;", ");", 1)
 	legacyFTS := strings.Replace(searchTrigramSchema, ", detail=column, columnsize=0", "", 1)
 	if _, err := db.db.Exec(`DROP VIEW directory_content;
@@ -232,6 +331,9 @@ INSERT INTO content(id,hash_type,hash,size) VALUES(1,'sha256',zeroblob(32),7);`)
 		`UPDATE directory_membership SET occurrences=2`,
 		`DELETE FROM directory_membership`,
 		`INSERT INTO directory_content VALUES(1,'a',1,2)`,
+		`UPDATE directory_entry SET path='changed'`,
+		`DELETE FROM directory_entry`,
+		`INSERT INTO directory_file VALUES(999,1,'a','a/new')`,
 	} {
 		if _, err := target.db.Exec(sql); err == nil ||
 			!strings.Contains(err.Error(), "immutable") {
@@ -320,6 +422,9 @@ func TestStorageAccountsForPages(t *testing.T) {
 
 func BenchmarkCatalogCompactUpgrade(b *testing.B) {
 	db := buildCatalogStorageFixture(b, func(db *DB) error {
+		if err := useLegacyDirectoryFiles(db); err != nil {
+			return err
+		}
 		_, err := db.db.Exec(`DROP VIEW directory_content;
 DROP TABLE directory_membership;` + directoryContentSchema)
 		return err

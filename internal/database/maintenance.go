@@ -148,11 +148,28 @@ DROP TABLE directory_content_old;`+directoryMembershipGuards)
 		default:
 			return fmt.Errorf("unsupported directory membership object %q", kind)
 		}
-		_, err := tx.ExecContext(ctx, "PRAGMA user_version=3")
+		if err := tx.QueryRowContext(ctx,
+			"SELECT type FROM sqlite_schema WHERE name='directory_file'").Scan(&kind); err != nil {
+			return err
+		}
+		switch kind {
+		case "table":
+			_, err := tx.ExecContext(ctx, `DROP INDEX directory_file_parent;
+ALTER TABLE directory_file RENAME TO directory_file_old;`+directoryEntrySchema+`
+INSERT INTO directory_file SELECT * FROM directory_file_old;
+DROP TABLE directory_file_old;`+directoryEntryGuards)
+			if err != nil {
+				return err
+			}
+		case "view":
+		default:
+			return fmt.Errorf("unsupported directory file object %q", kind)
+		}
+		_, err := tx.ExecContext(ctx, "PRAGMA user_version=4")
 		return err
 	})
 	if err != nil {
-		return fmt.Errorf("compact directory memberships: %w", err)
+		return fmt.Errorf("compact directory indexes: %w", err)
 	}
 	err = target.TransactionContext(ctx, func(tx *Tx) error {
 		_, err := tx.ExecContext(ctx, `DROP TABLE search_trigram;`+searchTrigramSchema+`
