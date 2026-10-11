@@ -11,7 +11,8 @@
   import DiskMetadata from './DiskMetadata.svelte';
   import DiskForm from './DiskForm.svelte';
   import InventoryPages from './InventoryPages.svelte';
-  import InventorySummary from '../snapshots/InventorySummary.svelte';
+  import DateValue from '../../components/DateValue.svelte';
+  import { routes, directoryBrowseURL } from '../../state/routes';
   let { id, search }: { id: string; search: string } = $props();
   const connection = useConnection();
   type Disk = Result<'GET /api/v1/disks/{id}'>;
@@ -99,21 +100,33 @@
         measured disk usage or free space.
       </p>
       {#if item.cataloged}
-        <dl>
-          <dt>Known cataloged byte subtotal</dt>
-          <dd><SizeValue value={item.cataloged.known_bytes} /></dd>
-          <dt>Cataloged total</dt>
-          <dd>
-            <SizeValue value={item.cataloged.size_complete ? item.cataloged.known_bytes : null} />
-          </dd>
-          <dt>Size completeness</dt>
-          <dd>{item.cataloged.size_complete ? 'Complete' : 'Incomplete'}</dd>
-          <dt>Files with unknown size</dt>
-          <dd>{formatCount(item.cataloged.unknown_size_file_count)}</dd>
-          <dt>Files</dt>
-          <dd>{formatCount(item.cataloged.file_count)}</dd>
-          <dt>Distinct contents</dt>
-          <dd>{formatCount(item.cataloged.content_count)}</dd>
+        <dl class="metrics">
+          <div class="metric">
+            <dt>Known cataloged byte subtotal</dt>
+            <dd><SizeValue value={item.cataloged.known_bytes} /></dd>
+          </div>
+          <div class="metric">
+            <dt>Cataloged total</dt>
+            <dd>
+              <SizeValue value={item.cataloged.size_complete ? item.cataloged.known_bytes : null} />
+            </dd>
+          </div>
+          <div class="metric">
+            <dt>Size completeness</dt>
+            <dd>{item.cataloged.size_complete ? 'Complete' : 'Incomplete'}</dd>
+          </div>
+          <div class="metric">
+            <dt>Files with unknown size</dt>
+            <dd>{formatCount(item.cataloged.unknown_size_file_count)}</dd>
+          </div>
+          <div class="metric">
+            <dt>Files</dt>
+            <dd>{formatCount(item.cataloged.file_count)}</dd>
+          </div>
+          <div class="metric">
+            <dt>Distinct contents</dt>
+            <dd>{formatCount(item.cataloged.content_count)}</dd>
+          </div>
         </dl>
       {:else}<p>Cataloged total: Unknown — no complete inventory.</p>{/if}
     </section>
@@ -123,10 +136,22 @@
         Latest is selected by capture time, then inventory ID, not import time. Capture age is not
         proof an offline disk was recently checked.
       </p>
-      {#if item.latest_snapshot}<InventorySummary
-          item={item.latest_snapshot}
-          context={route.context}
-        />
+      {#if item.latest_snapshot}
+        {#if view.status !== 'success'}<p>Latest selection not freshly verified.</p>{/if}
+        <DateValue value={item.latest_snapshot.captured_at} meaning="captured_at" />
+        <div class="actions">
+          <a
+            class="button button-primary"
+            href="{resolve('/')}{directoryBrowseURL(item.latest_snapshot.id, { path: '' }).slice(
+              1,
+            )}">Browse root</a
+          >
+          <a
+            class="button button-quiet"
+            href="{resolve('/')}{routes.snapshot(item.latest_snapshot.id, route.context).slice(1)}"
+            >Open latest inventory {item.latest_snapshot.id}</a
+          >
+        </div>
       {:else}<p>No complete inventory</p>
         <p>
           Imports are CLI-only. Stop the server before CLI catalog operations, then restart it.

@@ -425,6 +425,16 @@ No backend/catalog changes, extended audits or other task packages. No U07 block
 
 ### U08 — Disk and inventory browsing
 
+**Progress (2026-10-11):** complete. Executed plan: replace repeated metadata/inventory articles
+with compact disk and capture-ordered history tables, group disk statistics/latest actions, and
+disclose notes and import/capture provenance. Narrow desktop rows retain named values and full
+literal text. Latest badges require successful independent metadata/history reads; request,
+paging and U06 form ownership remain unchanged. Check (0 errors/warnings), lint, build, API drift
+and 238 unit tests passed; 51 focused fixture-only browser tests passed. Nine external captures
+at 1440/1024/768px have no document overflow or overlapping table cells. Interfaces, tests,
+evidence and constraints: [U08 handoff](ui-ux/u08/handoff.md). No backend/catalog changes,
+extended audits or other packages. No U08 blockers remain.
+
 **Priority:** P1  
 **Dependencies:** U02, U03, U05, U06  
 **Suggested context:** 40–70k tokens

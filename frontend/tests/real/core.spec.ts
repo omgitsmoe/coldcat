@@ -132,17 +132,19 @@ test('keyboard search → linked locations → observation → disk → inventor
     '9,007,199,254,740,993 B',
   );
   await expect(value(page, 'Serial')).toHaveText(fixture.serial);
+  await page.getByText('Disk notes', { exact: true }).click();
   await expect(value(page, 'Notes')).toHaveText(fixture.notes);
   await expect(page.getByRole('region', { name: 'Latest complete inventory' })).toContainText(
-    `Inventory ${latest.id}`,
+    `Open latest inventory ${latest.id}`,
   );
   await expect(page.getByRole('region', { name: 'Cataloged inventory size' })).toContainText(
     'Unknown',
   );
   const latestLink = page
     .getByRole('region', { name: 'Latest complete inventory' })
-    .getByRole('link', { name: `Inventory ${latest.id}`, exact: true });
+    .getByRole('link', { name: `Open latest inventory ${latest.id}`, exact: true });
   await keyboardOpen(page, latestLink);
+  await page.getByText('Import and capture provenance', { exact: true }).click();
   await expect(value(page, 'Capture provenance')).toHaveText('Explicit capture time');
   await expect(value(page, 'Source input path \\(backend provenance\\)')).toHaveText(
     latest.input_path,
@@ -252,18 +254,18 @@ test('real read pagination, capture order, directory boundaries, literal paths a
   catalog,
 }) => {
   await page.goto('/disks?limit=1');
-  await expect(page.locator('main article')).toHaveCount(1);
+  await expect(page.locator('main tbody tr')).toHaveCount(1);
   await page.getByRole('button', { name: 'Load more', exact: true }).click();
-  await expect(page.locator('main article')).toHaveCount(2);
+  await expect(page.locator('main tbody tr')).toHaveCount(2);
   await page.getByRole('button', { name: 'Load more', exact: true }).click();
-  await expect(page.locator('main article')).toHaveCount(3);
+  await expect(page.locator('main tbody tr')).toHaveCount(3);
   await page.getByRole('link', { name: fixture.label, exact: true }).click();
   await page.goto(`/disks/${catalog.diskID}?limit=1`);
   const history = page.getByRole('region', { name: 'Inventory history' });
-  await expect(history.locator('article')).toHaveCount(1);
+  await expect(history.locator('tbody tr')).toHaveCount(1);
   for (let n = 2; n <= 3; n++) {
     await history.getByRole('button', { name: 'Load more', exact: true }).click();
-    await expect(history.locator('article')).toHaveCount(n);
+    await expect(history.locator('tbody tr')).toHaveCount(n);
   }
   for (const [i, capture] of [
     fixture.currentCapture,
@@ -271,7 +273,7 @@ test('real read pagination, capture order, directory boundaries, literal paths a
     fixture.oldCapture,
   ].entries()) {
     await expect(
-      history.locator('article').nth(i).locator(`time[datetime="${capture}"]`),
+      history.locator('tbody tr').nth(i).locator(`time[datetime="${capture}"]`),
     ).toBeVisible();
   }
   const latest = catalog.snapshots[0]!;

@@ -8,8 +8,10 @@
   import type { TraversalState } from '../../state/traversal';
   import RequestFeedback from '../../components/RequestFeedback.svelte';
   import PageControls from '../../components/PageControls.svelte';
-  import DiskMetadata from './DiskMetadata.svelte';
-  import InventorySummary from '../snapshots/InventorySummary.svelte';
+  import DateValue from '../../components/DateValue.svelte';
+  import SizeValue from '../../components/SizeValue.svelte';
+  import { formatCount } from '../../format/decimal';
+  import { directoryBrowseURL } from '../../state/routes';
   let {
     diskID,
     limit = 50,
@@ -79,26 +81,90 @@
   <p>{diskID ? 'No complete inventories' : 'No disks cataloged'}</p>
   <p>Imports are CLI-only. Stop the server before CLI catalog operations, then restart it.</p>
 {/if}
-{#each items as item (item.id)}
-  <article>
-    {#if 'label' in item}
-      <h2><a href="{resolve('/')}{routes.disk(item.id, context).slice(1)}">{item.label}</a></h2>
-      <DiskMetadata {item} />
-      {#if item.latest_snapshot}
-        <p>Latest complete inventory (by capture time)</p>
-        <InventorySummary item={item.latest_snapshot} {context} />
-      {:else}
-        <p>No complete inventory</p>
-        <p>Imports are CLI-only. Stop the server before CLI catalog operations, then restart it.</p>
-      {/if}
-    {:else}
-      {#if verifiedLatest && !view.error}
-        <p>{item.id === latestID ? 'Latest complete inventory' : 'Historical inventory'}</p>
-      {/if}
-      <InventorySummary {item} {context} />
-    {/if}
-  </article>
-{/each}
+{#if items.length}
+  <table class="data-table inventory-table">
+    <caption>{diskID ? 'Complete inventories · newest capture first' : 'Cataloged disks'}</caption>
+    <thead
+      ><tr>
+        {#if diskID}
+          <th scope="col">Inventory</th><th scope="col">Capture</th>
+          <th scope="col">Files / contents</th><th scope="col">Actions</th>
+        {:else}
+          <th scope="col">Disk</th><th scope="col">Declared capacity</th>
+          <th scope="col">Latest capture</th><th scope="col">Inventory availability</th>
+        {/if}
+      </tr></thead
+    >
+    <tbody>
+      {#each items as item (item.id)}
+        <tr>
+          {#if 'label' in item}
+            <td data-label="Disk"
+              ><a class="literal" href="{resolve('/')}{routes.disk(item.id, context).slice(1)}"
+                >{item.label}</a
+              >
+              <div class="muted">Disk <span class="literal">{item.id}</span></div></td
+            >
+            <td data-label="Declared capacity"
+              ><SizeValue value={item.capacity} units="decimal" /></td
+            >
+            <td data-label="Latest capture"
+              >{#if item.latest_snapshot}<DateValue
+                  value={item.latest_snapshot.captured_at}
+                  meaning="captured_at"
+                />{:else}—{/if}</td
+            >
+            <td data-label="Inventory availability">
+              {#if item.latest_snapshot}
+                <a href="{resolve('/')}{routes.snapshot(item.latest_snapshot.id, context).slice(1)}"
+                  >Inventory {item.latest_snapshot.id}</a
+                >
+                <div class="muted">
+                  Latest complete{view.status !== 'success' ? ' · not freshly verified' : ''}
+                </div>
+                <a
+                  class="button button-quiet button-compact"
+                  href="{resolve('/')}{directoryBrowseURL(item.latest_snapshot.id, {
+                    path: '',
+                  }).slice(1)}">Browse root</a
+                >
+              {:else}No complete inventory{/if}
+            </td>
+          {:else}
+            <td data-label="Inventory"
+              ><a href="{resolve('/')}{routes.snapshot(item.id, context).slice(1)}"
+                >Inventory {item.id}</a
+              >
+              {#if verifiedLatest && view.status === 'success'}<div class="badge">
+                  {item.id === latestID ? 'Latest complete inventory' : 'Historical inventory'}
+                </div>{/if}
+            </td>
+            <td data-label="Capture"
+              ><DateValue value={item.captured_at} meaning="captured_at" /></td
+            >
+            <td data-label="Files / contents"
+              ><span class="numeric"
+                >{formatCount(item.file_count)} files · {formatCount(item.content_count)} contents</span
+              ></td
+            >
+            <td data-label="Actions"
+              ><a
+                class="button button-quiet button-compact"
+                href="{resolve('/')}{directoryBrowseURL(item.id, { path: '' }).slice(1)}"
+                >Browse root</a
+              ></td
+            >
+          {/if}
+        </tr>
+      {/each}
+    </tbody>
+  </table>
+{/if}
+{#if !(view.status === 'success' && items.length === 0)}
+  <p class="muted">
+    Imports are CLI-only. Stop the server before CLI catalog operations, then restart it.
+  </p>
+{/if}
 {#if view.pages.length}
   <PageControls
     {...paging}
@@ -114,9 +180,40 @@
 {/if}
 
 <style>
-  article {
-    border: 1px solid #777;
-    padding: 1rem;
-    margin-block: 1rem;
+  .inventory-table {
+    margin-block: var(--space-3);
+  }
+  @media (max-width: 900px) {
+    .inventory-table thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+    .inventory-table tbody {
+      display: block;
+    }
+    .inventory-table tr {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .inventory-table td {
+      display: block;
+      min-width: 0;
+      height: auto;
+      min-height: 40px;
+      border: 0;
+    }
+    .inventory-table td:first-child {
+      grid-column: 1 / -1;
+    }
+    .inventory-table td::before {
+      content: attr(data-label);
+      display: block;
+      color: var(--color-muted);
+      font-size: var(--text-small);
+    }
   }
 </style>

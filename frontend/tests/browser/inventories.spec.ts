@@ -75,19 +75,19 @@ test('bounded disk traversal still reaches later pages without catalog-sized pre
     });
   });
   await page.goto('/disks?limit=1');
-  await expect(page.getByRole('article')).toHaveCount(1);
+  await expect(page.locator('tbody tr')).toHaveCount(1);
   expect(calls).toBe(1);
   for (let n = 2; n <= 10; n++) {
     await page.getByRole('button', { name: 'Load more', exact: true }).click();
-    await expect(page.getByRole('article')).toHaveCount(n);
+    await expect(page.locator('tbody tr')).toHaveCount(n);
   }
   await page.getByRole('button', { name: 'Next page', exact: true }).click();
-  await expect(page.getByRole('article')).toHaveCount(1);
-  await expect(page.getByRole('article')).toContainText('Disk row 11');
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await expect(page.locator('tbody tr')).toContainText('Disk row 11');
   await page.getByRole('button', { name: 'Next page', exact: true }).click();
-  await expect(page.getByRole('article')).toContainText('Disk row 12');
+  await expect(page.locator('tbody tr')).toContainText('Disk row 12');
   await page.getByRole('button', { name: 'Previous page', exact: true }).click();
-  await expect(page.getByRole('article')).toContainText('Disk row 11');
+  await expect(page.locator('tbody tr')).toContainText('Disk row 11');
   expect(calls).toBe(12);
 });
 
@@ -142,6 +142,7 @@ test('disk detail separates known subtotal from unknown total and pages capture-
     });
   });
   await page.goto('/disks/1?limit=1&return_to=%2F%3Fq%3Dreport&observation=1');
+  await page.getByText('Disk notes', { exact: true }).click();
   await expect(page.getByText('<script>literal notes</script>', { exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Cataloged inventory size' })).toContainText(
     '9,007,199,254,740,993 B',
@@ -158,11 +159,14 @@ test('disk detail separates known subtotal from unknown total and pages capture-
   );
   await page.getByRole('button', { name: 'Load more', exact: true }).click();
   const history = page.getByRole('region', { name: 'Inventory history' });
-  await expect(history.getByRole('article')).toHaveCount(2);
-  await expect(history.getByRole('article').nth(0)).toContainText('Latest complete inventory');
-  await expect(history.getByRole('article').nth(1)).toContainText('Historical inventory');
-  await expect(history.getByRole('article').nth(1)).toContainText('1969-01-01T00:00:00Z');
-  await expect(history.getByRole('article').nth(1)).toContainText('2026-10-11T00:00:00Z');
+  await expect(history.locator('tbody tr')).toHaveCount(2);
+  await expect(history.locator('tbody tr').nth(0)).toContainText('Latest complete inventory');
+  await expect(history.locator('tbody tr').nth(1)).toContainText('Historical inventory');
+  await expect(history.locator('tbody tr').nth(1)).toContainText('1969-01-01T00:00:00Z');
+  await expect(history).not.toContainText('Imported at');
+  await expect(page.getByRole('region', { name: 'Latest complete inventory' })).not.toContainText(
+    'Distinct contents',
+  );
   await expect(page.locator('main')).not.toContainText(/free capacity|disk full/i);
 });
 
@@ -217,6 +221,8 @@ test('snapshot dates, source-mtime provenance, counts and literal backend source
   item.file_count = '9007199254740993';
   await page.route('**/api/v1/snapshots/1', (r) => r.fulfill({ json: item }));
   await page.goto('/snapshots/1?return_to=%2F%3Fq%3Dreport&observation=1');
+  await expect(page.getByText('/<img src=x>&?.cshd', { exact: true })).not.toBeVisible();
+  await page.getByText('Import and capture provenance', { exact: true }).click();
   await expect(page.getByText('/<img src=x>&?.cshd', { exact: true })).toBeVisible();
   await expect(page.locator('main img')).toHaveCount(0);
   await expect(page.locator('main')).toContainText('Source inventory file modification time');
@@ -262,7 +268,7 @@ test('history failure preserves detail and stale traversal restarts explicitly',
   await expect(page.getByRole('region', { name: 'Disk metadata' })).toContainText('archive');
   await page.getByRole('button', { name: 'Reload results' }).click();
   await expect(
-    page.getByRole('region', { name: 'Inventory history' }).getByRole('article'),
+    page.getByRole('region', { name: 'Inventory history' }).locator('tbody tr'),
   ).toHaveCount(1);
   expect(starts).toBe(2);
 });
@@ -302,6 +308,111 @@ test('history disconnect marks retained metadata unverified and reconnect clears
   await page.getByRole('button', { name: 'Retry connection', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Disk metadata' })).not.toContainText('archive');
   await expect(
-    page.getByRole('region', { name: 'Inventory history' }).getByRole('article'),
+    page.getByRole('region', { name: 'Inventory history' }).locator('tbody tr'),
   ).toHaveCount(0);
+});
+
+test('history loads independently when disk metadata fails, without inferred latest badges', async ({
+  page,
+}) => {
+  await ready(page);
+  let reads = 0;
+  await page.route('**/api/v1/disks/1', (r) =>
+    r.fulfill({ status: 500, json: { error: { code: 'internal', message: 'metadata failed' } } }),
+  );
+  await page.route('**/api/v1/disks/1/snapshots?**', (r) => {
+    reads++;
+    return r.fulfill({
+      json: { disk_id: '1', revision: '9007199254740993', items: [snapshot()], next_cursor: null },
+    });
+  });
+  await page.goto('/disks/1');
+  const history = page.getByRole('region', { name: 'Inventory history' });
+  await expect(history.locator('tbody tr')).toHaveCount(1);
+  await expect(history.locator('.badge')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Reload disk', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Unexpected backend response: 500');
+  expect(reads).toBe(1);
+});
+
+test('compact browsing wraps long literals at approved widths with secondary notes and provenance', async ({
+  page,
+}) => {
+  await ready(page);
+  const disk = diskFixture();
+  disk.id = '1';
+  disk.label = 'Archive / literal <>& Unicode 短 '.repeat(8);
+  disk.notes = 'Long literal notes / <>& 短 '.repeat(30);
+  disk.latest_snapshot = snapshot();
+  disk.cataloged = {
+    file_count: '3',
+    content_count: '2',
+    known_bytes: '0',
+    unknown_size_file_count: '1',
+    size_complete: false,
+  };
+  const empty = { ...diskFixture(), id: '2', label: 'Uncataloged', capacity: '0' };
+  const old = {
+    ...snapshot(),
+    id: '2',
+    captured_at: '1969-01-01T00:00:00Z',
+    imported_at: '2026-10-11T00:00:00Z',
+  };
+  await page.route('**/api/v1/disks?**', (r) =>
+    r.fulfill({ json: { revision: '9007199254740993', items: [disk, empty], next_cursor: null } }),
+  );
+  await page.route('**/api/v1/disks/1', (r) => r.fulfill({ json: disk }));
+  await page.route('**/api/v1/disks/1/snapshots?**', (r) =>
+    r.fulfill({
+      json: {
+        disk_id: '1',
+        revision: '9007199254740993',
+        items: [snapshot(), old],
+        next_cursor: null,
+      },
+    }),
+  );
+  const provenance = { ...snapshot(), input_path: '/literal/<>&短/'.repeat(30) };
+  await page.route('**/api/v1/snapshots/1', (r) => r.fulfill({ json: provenance }));
+  for (const width of [1440, 1024, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const [state, path] of [
+      ['list', '/disks'],
+      ['detail', '/disks/1'],
+      ['provenance', '/snapshots/1'],
+    ]) {
+      await page.goto(path!);
+      if (state === 'list') {
+        await expect(page.locator('tbody tr')).toHaveCount(2);
+        await expect(page.getByRole('link', { name: 'Browse root' })).toHaveCount(1);
+        await expect(page.getByText(/Imports are CLI-only/)).toBeVisible();
+      } else if (state === 'detail') {
+        await expect(page.locator('tbody tr')).toHaveCount(2);
+        await expect(page.getByText(disk.notes, { exact: true })).not.toBeVisible();
+        await page.getByText('Disk notes', { exact: true }).click();
+        await expect(page.getByText(disk.notes, { exact: true })).toBeVisible();
+      } else {
+        await page.getByText('Import and capture provenance', { exact: true }).click();
+        await expect(page.getByText(provenance.input_path, { exact: true })).toBeVisible();
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+      const overlapping = await page.locator('tbody tr').evaluateAll((rows) =>
+        rows.some((row) => {
+          const cells = [...row.children].map((cell) => cell.getBoundingClientRect());
+          return cells.some((a, i) =>
+            cells
+              .slice(i + 1)
+              .some(
+                (b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom,
+              ),
+          );
+        }),
+      );
+      expect(overlapping).toBe(false);
+      await page.screenshot({
+        path: `/tmp/opencode/u08-screenshots/${state}-${width}.png`,
+        fullPage: true,
+      });
+    }
+  }
 });

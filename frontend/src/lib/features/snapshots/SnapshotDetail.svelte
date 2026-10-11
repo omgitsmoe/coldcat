@@ -66,10 +66,8 @@
       <a href="{resolve('/')}{routes.disk(item.disk_id, context).slice(1)}">Disk {item.disk_id}</a>
     </p>
     <InventorySummary {item} {context} provenance />
-    <p>
-      Captured at describes the source inventory's capture time; Imported at is when the catalog
-      received it. Capture age is not proof an offline disk was recently checked.
+    <p class="muted">
+      Open the disk to verify latest/current status and see capture-ordered history.
     </p>
-    <p>Open the disk to see its latest complete inventory and capture-ordered history.</p>
   {/if}
 {/if}
