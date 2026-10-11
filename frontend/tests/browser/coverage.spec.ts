@@ -99,7 +99,9 @@ test('explicit coverage, literal rules, safe large counts, partial status and em
   await expect(coverage).toContainText(
     'Covered distinct contents: 1; missing distinct contents: 1',
   );
-  await expect(coverage).toContainText('Known covered source bytes: 9,007,199,254,740,993 B');
+  const coveredBytes = coverage.locator('p').filter({ hasText: 'Known covered source bytes:' });
+  await coveredBytes.locator('.size-value summary').first().click();
+  await expect(coveredBytes.getByText('9,007,199,254,740,993 B', { exact: true })).toBeVisible();
   await expect(coverage).toContainText(
     'Covered unknown-size files: 0; missing unknown-size files: 1',
   );

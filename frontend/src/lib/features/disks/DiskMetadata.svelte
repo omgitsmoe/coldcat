@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Result } from '../../api/client';
-  import { formatBytes } from '../../format/decimal';
+  import SizeValue from '../../components/SizeValue.svelte';
   let { item }: { item: Result<'GET /api/v1/disks'>['items'][number] } = $props();
 </script>
 
@@ -8,7 +8,7 @@
   <dt>Label</dt>
   <dd class="literal">{item.label}</dd>
   <dt>Declared capacity</dt>
-  <dd>{formatBytes(item.capacity)}</dd>
+  <dd><SizeValue value={item.capacity} units="decimal" /></dd>
   <dt>Serial</dt>
   <dd class="literal">{item.serial ?? 'Unknown'}</dd>
   <dt>Notes</dt>

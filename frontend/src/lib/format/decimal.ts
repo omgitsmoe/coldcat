@@ -24,6 +24,45 @@ export function formatBytes(value: string | null, locale?: string): string {
   return value === null ? 'Unknown' : `${formatCount(value, locale)} B`;
 }
 
+export type ByteUnits = 'binary' | 'decimal';
+
+export function readableBytes(
+  value: string | null,
+  units: ByteUnits = 'binary',
+  locale?: string,
+): { text: string; approximate: boolean; exactBytes: string | null; scaled: boolean } {
+  if (value === null)
+    return { text: 'Unknown', approximate: false, exactBytes: null, scaled: false };
+
+  const bytes = decimal(value);
+  const base = units === 'binary' ? 1024n : 1000n;
+  const labels =
+    units === 'binary'
+      ? ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB']
+      : ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB'];
+  let power = 1n;
+  let index = 0;
+  while (index < labels.length - 1 && bytes >= power * base) {
+    power *= base;
+    index++;
+  }
+  let hundredths = (bytes * 100n + power / 2n) / power;
+  if (hundredths >= base * 100n && index < labels.length - 1) {
+    power *= base;
+    index++;
+    hundredths = (bytes * 100n + power / 2n) / power;
+  }
+  const fraction = (hundredths % 100n).toString().padStart(2, '0').replace(/0+$/, '');
+  const amount = `${hundredths / 100n}${fraction ? `.${fraction}` : ''}`;
+  const approximate = hundredths * power !== bytes * 100n;
+  return {
+    text: index === 0 ? formatBytes(value, locale) : `${amount} ${labels[index]}`,
+    approximate,
+    exactBytes: formatBytes(value, locale),
+    scaled: index !== 0,
+  };
+}
+
 export function otherCount(currentCount: string): string {
   const count = decimal(currentCount);
   return (count === 0n ? 0n : count - 1n).toString();

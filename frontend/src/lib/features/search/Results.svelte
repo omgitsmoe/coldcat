@@ -3,8 +3,9 @@
   import { resolve } from '$app/paths';
   import { contentURL, directoryBrowseURL, routes } from '../../state/routes';
   import { containingDirectory } from '../../format/path';
-  import { formatBytes, formatCount } from '../../format/decimal';
-  import { presentDate } from '../../format/date';
+  import { formatCount } from '../../format/decimal';
+  import SizeValue from '../../components/SizeValue.svelte';
+  import DateValue from '../../components/DateValue.svelte';
   let {
     items,
     selected,
@@ -32,7 +33,6 @@
   <tbody>
     {#each items as item (item.observation.id)}
       {@const context = { returnTo, observation: item.observation.id }}
-      {@const captured = presentDate(item.snapshot.captured_at, 'captured_at')}
       <tr class:active={selected === item.observation.id}>
         <td>
           <a
@@ -48,12 +48,10 @@
         </td>
         <td
           >{item.disk.label}<br />
-          <time datetime={captured.exactUTC!} title={captured.exactUTC!}
-            >Captured at {captured.text}</time
-          >
+          <DateValue value={item.snapshot.captured_at} meaning="captured_at" />
           <div>{item.is_current ? 'Current' : 'Historical'} · Inventory {item.snapshot.id}</div>
         </td>
-        <td>{formatBytes(item.content.size)}</td>
+        <td><SizeValue value={item.content.size} /></td>
         <td
           >{formatCount(item.content.current_disk_count)} current disks<br />
           {formatCount(item.content.current_location_count)} current locations

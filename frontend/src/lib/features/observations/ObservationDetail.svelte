@@ -6,7 +6,8 @@
   import type { RequestState } from '../../state/request';
   import type { Result } from '../../api/client';
   import { containingDirectory } from '../../format/path';
-  import { formatBytes, formatCount } from '../../format/decimal';
+  import { formatCount } from '../../format/decimal';
+  import SizeValue from '../../components/SizeValue.svelte';
   import DateValue from '../../components/DateValue.svelte';
   import CopyButton from '../../components/CopyButton.svelte';
   import RequestFeedback from '../../components/RequestFeedback.svelte';
@@ -91,7 +92,7 @@
         />
       </dd>
       <dt>Size</dt>
-      <dd>{formatBytes(item.content.size)}</dd>
+      <dd><SizeValue value={item.content.size} /></dd>
       <dt>Disk</dt>
       <dd>
         <a href="{resolve('/')}{routes.disk(item.disk.id, context).slice(1)}"

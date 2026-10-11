@@ -127,7 +127,10 @@ test('keyboard search → linked locations → observation → disk → inventor
   await page.reload();
   await expect(page.getByText(reportPath, { exact: true })).toBeVisible();
   await keyboardOpen(page, page.getByRole('link', { name: `Disk ${fixture.label}`, exact: true }));
-  await expect(value(page, 'Declared capacity')).toHaveText('9,007,199,254,740,993 B');
+  await value(page, 'Declared capacity').locator('summary').click();
+  await expect(value(page, 'Declared capacity').locator('code')).toHaveText(
+    '9,007,199,254,740,993 B',
+  );
   await expect(value(page, 'Serial')).toHaveText(fixture.serial);
   await expect(value(page, 'Notes')).toHaveText(fixture.notes);
   await expect(page.getByRole('region', { name: 'Latest complete inventory' })).toContainText(

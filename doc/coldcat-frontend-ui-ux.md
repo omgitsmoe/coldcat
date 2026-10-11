@@ -300,6 +300,16 @@ preferable to shipping two competing entry mechanisms initially.
 
 ### U05 — Shared readable size and date presentation
 
+**Progress (2026-10-11):** complete. Executed plan: add a separate BigInt-only readable-size
+formatter/shared disclosure, integrate binary file/catalog and decimal declared-capacity values,
+and make each date's meaning/time/zone the single disclosure summary with full UTC precision
+inside. Unknown, zero and incomplete known subtotals remain distinct; U04 input arithmetic and
+exact previews are untouched. Check (0 errors/warnings), lint, build, API drift check and 224
+unit tests passed; 72 focused fixture-only browser tests passed, including all 17 U04 write
+tests. Nine compact/expanded/subtotal captures at 1440/1024/768px have no document overflow.
+Interfaces, screenshots, tests and future-feature constraints: [U05 handoff](ui-ux/u05/handoff.md).
+No backend/catalog changes or extended audits. U06 is next, sequentially.
+
 **Priority:** P1  
 **Dependencies:** U02; coordinate with U04  
 **Suggested context:** 30–55k tokens

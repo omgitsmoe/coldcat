@@ -7,7 +7,8 @@
   import type { TraversalState } from '../../state/traversal';
   import type { Result } from '../../api/client';
   import { ApiError } from '../../api/errors';
-  import { formatBytes, formatCount } from '../../format/decimal';
+  import { formatCount } from '../../format/decimal';
+  import SizeValue from '../../components/SizeValue.svelte';
   import RequestFeedback from '../../components/RequestFeedback.svelte';
   import PageControls from '../../components/PageControls.svelte';
   import CopyButton from '../../components/CopyButton.svelte';
@@ -125,7 +126,7 @@
           />
         </dd>
         <dt>Size</dt>
-        <dd>{formatBytes(content.size)}</dd>
+        <dd><SizeValue value={content.size} /></dd>
         <dt>Current disks</dt>
         <dd>{formatCount(content.current_disk_count)}</dd>
         <dt>Current locations</dt>

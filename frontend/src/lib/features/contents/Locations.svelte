@@ -3,7 +3,7 @@
   import type { Result } from '../../api/client';
   import { routes, directoryBrowseURL, type DetailContext } from '../../state/routes';
   import { containingDirectory } from '../../format/path';
-  import { formatBytes } from '../../format/decimal';
+  import SizeValue from '../../components/SizeValue.svelte';
   import DateValue from '../../components/DateValue.svelte';
   let {
     items,
@@ -35,7 +35,7 @@
           ></td
         >
         <td
-          >{formatBytes(item.size)}
+          ><SizeValue value={item.size} />
           <DateValue value={item.snapshot.captured_at} meaning="captured_at" />
           <DateValue value={item.observation.mtime} meaning="mtime" /></td
         >

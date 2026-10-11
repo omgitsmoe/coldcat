@@ -5,7 +5,8 @@
   import { parseInventoryRoute } from '../../state/routes';
   import type { RequestState } from '../../state/request';
   import type { Result } from '../../api/client';
-  import { formatBytes, formatCount } from '../../format/decimal';
+  import { formatCount } from '../../format/decimal';
+  import SizeValue from '../../components/SizeValue.svelte';
   import RequestFeedback from '../../components/RequestFeedback.svelte';
   import DiskMetadata from './DiskMetadata.svelte';
   import DiskForm from './DiskForm.svelte';
@@ -98,11 +99,11 @@
       </p>
       {#if item.cataloged}
         <dl>
-          <dt>Known cataloged bytes</dt>
-          <dd>{formatBytes(item.cataloged.known_bytes)}</dd>
+          <dt>Known cataloged byte subtotal</dt>
+          <dd><SizeValue value={item.cataloged.known_bytes} /></dd>
           <dt>Cataloged total</dt>
           <dd>
-            {item.cataloged.size_complete ? formatBytes(item.cataloged.known_bytes) : 'Unknown'}
+            <SizeValue value={item.cataloged.size_complete ? item.cataloged.known_bytes : null} />
           </dd>
           <dt>Size completeness</dt>
           <dd>{item.cataloged.size_complete ? 'Complete' : 'Incomplete'}</dd>

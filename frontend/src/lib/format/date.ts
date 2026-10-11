@@ -28,9 +28,15 @@ export function presentDate(
       value === null
         ? 'Unknown'
         : new Intl.DateTimeFormat(locale, {
-            dateStyle: 'medium',
-            timeStyle: 'long',
-            timeZone,
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hourCycle: 'h23',
+            timeZoneName: 'short',
+            timeZone: timeZone ?? 'UTC',
           }).format(utcDate(value)),
     exactUTC: value,
   };

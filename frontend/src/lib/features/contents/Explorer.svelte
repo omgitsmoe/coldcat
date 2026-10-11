@@ -6,7 +6,8 @@
   import { contentsPages } from '../../state/feature-requests';
   import { parseContents, routes, type ContentsRoute } from '../../state/routes';
   import type { TraversalState } from '../../state/traversal';
-  import { formatBytes, formatCount, otherCount } from '../../format/decimal';
+  import { formatCount, otherCount } from '../../format/decimal';
+  import SizeValue from '../../components/SizeValue.svelte';
   import RequestFeedback from '../../components/RequestFeedback.svelte';
   import PageControls from '../../components/PageControls.svelte';
   import Filters from './Filters.svelte';
@@ -109,7 +110,7 @@
             ><a href="{resolve('/')}{routes.content(item.id).slice(1)}">Content {item.id}</a>
             <div class="literal">{item.hash.algorithm}: {item.hash.hex}</div></td
           >
-          <td>{formatBytes(item.size)}</td>
+          <td><SizeValue value={item.size} /></td>
           <td
             ><div>{formatCount(item.current_disk_count)} current disks</div>
             <div>{formatCount(item.current_location_count)} current locations</div>

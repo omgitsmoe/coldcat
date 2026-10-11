@@ -188,8 +188,7 @@ test('observation detail uses supplied other counts, exact date meanings and lit
     'datetime',
     fixture.snapshot.captured_at,
   );
-  for (const summary of await page.getByText('Exact UTC', { exact: true }).all())
-    await summary.click();
+  for (const summary of await page.locator('.date-value summary').all()) await summary.click();
   await expect(page.getByText('1970-01-01T00:00:10.000000123Z', { exact: true })).toBeVisible();
   await expect(page.getByText('2026-10-10T12:00:00Z', { exact: true })).toBeVisible();
   await expect(page.locator('main')).toContainText(

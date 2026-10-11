@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { components } from '../../api/generated/wire';
-  import { formatBytes, formatCount } from '../../format/decimal';
+  import { formatCount } from '../../format/decimal';
+  import SizeValue from '../../components/SizeValue.svelte';
   import DateValue from '../../components/DateValue.svelte';
   let { item }: { item: components['schemas']['DirectorySummary'] } = $props();
 </script>
@@ -12,21 +13,21 @@
     <dd>{formatCount(item.file_count)} / {formatCount(item.content_count)}</dd>
     <dt>Recursive file bytes (each path counts)</dt>
     <dd>
-      {formatBytes(item.size_complete ? item.known_bytes : null)} — {item.size_complete
+      <SizeValue value={item.size_complete ? item.known_bytes : null} /> — {item.size_complete
         ? 'Complete'
         : 'Incomplete'}
     </dd>
     <dt>Known file-byte subtotal / unknown-size files</dt>
-    <dd>{formatBytes(item.known_bytes)} / {formatCount(item.unknown_size_file_count)}</dd>
+    <dd><SizeValue value={item.known_bytes} /> / {formatCount(item.unknown_size_file_count)}</dd>
     <dt>Unique-content bytes (each identity counts once)</dt>
     <dd>
-      {formatBytes(item.unique_content_size_complete ? item.unique_content_known_bytes : null)} — {item.unique_content_size_complete
-        ? 'Complete'
-        : 'Incomplete'}
+      <SizeValue
+        value={item.unique_content_size_complete ? item.unique_content_known_bytes : null}
+      /> — {item.unique_content_size_complete ? 'Complete' : 'Incomplete'}
     </dd>
     <dt>Known unique-content subtotal / unknown-size contents</dt>
     <dd>
-      {formatBytes(item.unique_content_known_bytes)} / {formatCount(
+      <SizeValue value={item.unique_content_known_bytes} /> / {formatCount(
         item.unknown_size_content_count,
       )}
     </dd>

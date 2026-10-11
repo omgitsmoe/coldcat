@@ -2,7 +2,8 @@
   import { resolve } from '$app/paths';
   import type { components } from '../../api/generated/wire';
   import { contentURL, directoryBrowseURL, routes, type DirectoryRoute } from '../../state/routes';
-  import { formatBytes, formatCount } from '../../format/decimal';
+  import { formatCount } from '../../format/decimal';
+  import SizeValue from '../../components/SizeValue.svelte';
   import DateValue from '../../components/DateValue.svelte';
   let {
     items,
@@ -39,16 +40,16 @@
         </td>
         <td>
           {#if item.directory}
-            Recursive file bytes: {formatBytes(
-              item.directory.size_complete ? item.directory.known_bytes : null,
-            )}
+            Recursive file bytes: <SizeValue
+              value={item.directory.size_complete ? item.directory.known_bytes : null}
+            />
             <div>
-              Known subtotal: {formatBytes(item.directory.known_bytes)}; unknown files: {formatCount(
+              Known subtotal: <SizeValue value={item.directory.known_bytes} />; unknown files: {formatCount(
                 item.directory.unknown_size_file_count,
               )}
             </div>
           {:else if item.file}
-            {formatBytes(item.file.size)}
+            <SizeValue value={item.file.size} />
             <DateValue value={item.file.observation.mtime} meaning="mtime" />
           {/if}
         </td>

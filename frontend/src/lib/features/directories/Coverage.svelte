@@ -7,7 +7,8 @@
   import { coveragePages } from '../../state/feature-requests';
   import type { TraversalState } from '../../state/traversal';
   import { routes } from '../../state/routes';
-  import { formatCount, formatBytes, percentage } from '../../format/decimal';
+  import { formatCount, percentage } from '../../format/decimal';
+  import SizeValue from '../../components/SizeValue.svelte';
   import PageControls from '../../components/PageControls.svelte';
   import RequestFeedback from '../../components/RequestFeedback.svelte';
   import DateValue from '../../components/DateValue.svelte';
@@ -137,13 +138,11 @@
       </p>
       <p>Selected distinct contents: {formatCount(first.selection.content_count)}.</p>
       <p>
-        Source byte total: {formatBytes(
-          first.selection.size_complete ? first.selection.known_bytes : null,
-        )}; known source bytes: {formatBytes(first.selection.known_bytes)}; unknown-size source
-        files: {formatCount(first.selection.unknown_size_file_count)}. Byte sizes {first.selection
-          .size_complete
-          ? 'complete'
-          : 'incomplete'}.
+        Source byte total: <SizeValue
+          value={first.selection.size_complete ? first.selection.known_bytes : null}
+        />; known source byte subtotal: <SizeValue value={first.selection.known_bytes} />;
+        unknown-size source files: {formatCount(first.selection.unknown_size_file_count)}. Byte
+        sizes {first.selection.size_complete ? 'complete' : 'incomplete'}.
       </p>
       {#if first.selection.empty_comparison}<p>No files selected</p>
       {:else}
@@ -173,8 +172,8 @@
                 contents (rounded).
               </p>
               <p>
-                Known covered source bytes: {formatBytes(item.covered_known_bytes)}; known missing
-                source bytes: {formatBytes(item.missing_known_bytes)}.
+                Known covered source bytes: <SizeValue value={item.covered_known_bytes} />; known
+                missing source bytes: <SizeValue value={item.missing_known_bytes} />.
               </p>
               <p>
                 Covered unknown-size files: {formatCount(item.covered_unknown_size_file_count)};
