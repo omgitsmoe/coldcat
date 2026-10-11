@@ -7,6 +7,7 @@ test('real disk create, conflict, metadata-only rename, precise capacity and nul
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/disks');
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   const catalogBefore = await page.request.get(new URL('/api/v1/catalog', catalog.origin).href);
   const revision = (await catalogBefore.json()).revision;
   await page.getByLabel('Label', { exact: true }).fill('F7 browser-created disk');

@@ -65,6 +65,7 @@ for (const [amount, unit, bytes] of [
       return r.fulfill({ status: 201, json: ctx.disk });
     });
     await page.goto('/disks');
+    await page.getByRole('button', { name: 'Create disk', exact: true }).click();
     await page.getByLabel('Label', { exact: true }).fill('unit-aware disk');
     await page.getByLabel('Capacity amount').fill(amount);
     await page.getByLabel('Capacity unit').selectOption(unit);
@@ -92,6 +93,7 @@ test('unit selector immediately reinterprets amount and validation describes the
     });
   });
   await page.goto('/disks');
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   const amount = page.getByLabel('Capacity amount');
   const unit = page.getByLabel('Capacity unit');
   await page.getByLabel('Label', { exact: true }).fill('validation disk');
@@ -148,6 +150,7 @@ test('existing maximum opens losslessly in bytes and equivalent unit edits send 
 test('capacity controls fit approved widths with exact preview', async ({ page }, testInfo) => {
   await setup(page);
   await page.goto('/disks');
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   await page.getByLabel('Label', { exact: true }).fill('Archive capacity');
   await page.getByLabel('Capacity amount').fill('1.5');
   await page.getByLabel('Capacity unit').selectOption('TB');
@@ -171,6 +174,7 @@ test('create validates exact decimal range and preserves literal text without nu
     return r.fulfill({ status: 201, json: ctx.disk });
   });
   await page.goto('/disks');
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   await page.getByLabel('Label', { exact: true }).fill(' <new> ');
   await page.getByLabel('Capacity amount').fill('9223372036854775808');
   await page.getByRole('button', { name: 'Create disk', exact: true }).click();
@@ -268,12 +272,13 @@ test('uncertain PATCH is blocked until manual reconciliation, even after readine
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByRole('alert')).toContainText('may have succeeded');
   await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
   await page.waitForTimeout(1500);
   expect(ctx.writes).toHaveLength(1);
   await expect(page.getByLabel('Label', { exact: true })).toHaveValue(
     'committed but lost response',
   );
-  await page.getByRole('button', { name: 'Reconcile disk', exact: true }).click();
+  await page.getByRole('button', { name: 'Check whether saved', exact: true }).click();
   await expect(page.getByLabel('Capacity amount')).toHaveValue('1.5');
   await expect(page.getByLabel('Capacity unit')).toHaveValue('TB');
   expect(ctx.writes[0]!.body.capacity).toBe('1500000000000');
@@ -305,15 +310,96 @@ test('uncertain creation checks paginated labels and reconciles a created disk w
     }),
   );
   await page.goto('/disks');
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   await page.getByLabel('Label', { exact: true }).fill('new disk');
   await page.getByLabel('Capacity amount').fill('0');
   await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('may have succeeded');
-  await page.getByRole('button', { name: 'Reconcile creation', exact: true }).click();
+  await page.getByRole('button', { name: 'Check whether saved', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Check next disk page' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create disk', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Check next disk page' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Existing disk found' })).toBeVisible();
+  expect(posts).toBe(1);
+});
+
+test('list-first creation has deliberate discard and associated required-field errors', async ({
+  page,
+}) => {
+  const ctx = await setup(page);
+  await page.goto('/disks');
+  await expect(page.getByLabel('Label', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: ctx.disk.label, exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Create disk', exact: true })).toBeFocused();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByLabel('Label', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
+  await expect(page.getByLabel('Label', { exact: true })).toHaveAccessibleDescription(
+    'Enter a disk label.',
+  );
+  await expect(page.getByLabel('Capacity amount')).toHaveAttribute('aria-invalid', 'true');
+  await page.getByLabel('Capacity unit').selectOption('TB');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Keep editing', exact: true }).click();
+  await expect(page.getByLabel('Capacity unit')).toHaveValue('TB');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Discard changes', exact: true }).click();
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
+  await expect(page.getByLabel('Capacity unit')).toHaveValue('B');
+  expect(ctx.writes).toEqual([]);
+});
+
+test('edit closes unchanged drafts, confirms changed drafts and completes saved edits', async ({
+  page,
+}) => {
+  const ctx = await setup(page);
+  await page.goto('/disks/1');
+  await page.getByRole('button', { name: 'Edit disk', exact: true }).click();
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(page.getByLabel('Label', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Edit disk', exact: true }).click();
+  await page.getByLabel('Notes', { exact: true }).fill('unsaved');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByRole('button', { name: 'Discard changes', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit disk', exact: true }).click();
+  await expect(page.getByLabel('Notes', { exact: true })).toHaveValue(ctx.disk.notes ?? '');
+  await page.getByLabel('Notes', { exact: true }).fill('saved');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Disk updated' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Edit disk', exact: true })).toBeEnabled();
+  expect(ctx.writes).toEqual([{ method: 'PATCH', body: { notes: 'saved' } }]);
+});
+
+test('cancel cannot interrupt a dispatched creation or bypass an uncertain outcome', async ({
+  page,
+}) => {
+  await setup(page);
+  let release!: () => void;
+  const pending = new Promise<void>((done) => {
+    release = done;
+  });
+  let posts = 0;
+  await page.route('**/api/v1/disks', async (r) => {
+    posts++;
+    await pending;
+    await r.abort('failed');
+  });
+  await page.goto('/disks');
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
+  await page.getByLabel('Label', { exact: true }).fill('sent draft');
+  await page.getByLabel('Capacity amount').fill('0');
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Saving…', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
+  release();
+  await expect(
+    page.getByRole('region', { name: 'Check whether saved', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
+  await expect(page.getByLabel('Label', { exact: true })).toHaveValue('sent draft');
   expect(posts).toBe(1);
 });
 
@@ -374,7 +460,7 @@ test('context invalidation keeps drafts but requires rebase before PATCH, retain
   await page.getByRole('button', { name: 'Reload disk', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
   await expect(page.getByLabel('Notes', { exact: true })).toHaveValue('retained local note');
-  await page.getByRole('button', { name: 'Reconcile disk', exact: true }).click();
+  await page.getByRole('button', { name: 'Check whether saved', exact: true }).click();
   await expect(page.getByLabel('Serial', { exact: true })).toHaveValue('externally changed');
   await expect(page.getByLabel('Capacity amount')).toHaveValue('9007199254740993');
   await expect(page.getByLabel('Capacity unit')).toHaveValue('B');
@@ -411,7 +497,7 @@ test('failed post-write refetch blocks another write until verified metadata is 
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByRole('alert')).toContainText('Write succeeded but metadata is unverified');
   await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
-  await page.getByRole('button', { name: 'Reconcile disk', exact: true }).click();
+  await page.getByRole('button', { name: 'Check whether saved', exact: true }).click();
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'No changes' })).toBeVisible();
   expect(ctx.writes).toHaveLength(1);
@@ -439,11 +525,12 @@ test('uncertain unmatched creation requires complete label traversal and explici
     });
   });
   await page.goto('/disks');
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   await page.getByLabel('Label', { exact: true }).fill('missing after uncertain POST');
   await page.getByLabel('Capacity amount').fill('0');
   await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('may have succeeded');
-  await page.getByRole('button', { name: 'Reconcile creation', exact: true }).click();
+  await page.getByRole('button', { name: 'Check whether saved', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'I reviewed the disks; allow another creation' }),
   ).toHaveCount(0);
@@ -491,21 +578,76 @@ test('failed creation reconciliation restart cannot reuse an earlier no-match ap
     }),
   );
   await page.goto('/disks');
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   await page.getByLabel('Label', { exact: true }).fill(ctx.disk.label);
   await expect(page.getByRole('status').filter({ hasText: 'Backend ready' })).toBeVisible();
   await page.getByLabel('Capacity amount').fill('0');
   await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('may have succeeded');
-  await page.getByRole('button', { name: 'Reconcile creation', exact: true }).click();
+  await page.getByRole('button', { name: 'Check whether saved', exact: true }).click();
   await expect(
     page.getByRole('button', { name: 'I reviewed the disks; allow another creation' }),
   ).toBeVisible();
   failRead = true;
-  await page.getByRole('button', { name: 'Reconcile creation', exact: true }).click();
+  await page.getByRole('button', { name: 'Check whether saved', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('reconciliation read failed');
   await expect(
     page.getByRole('button', { name: 'I reviewed the disks; allow another creation' }),
   ).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Create disk', exact: true })).toBeDisabled();
   expect(posts).toBe(1);
+});
+
+test('disk lifecycle layouts fit approved widths', async ({ page }, testInfo) => {
+  const ctx = await setup(page);
+  await page.route('**/api/v1/disks', (r) => r.abort('failed'));
+  await page.goto('/disks');
+  const capture = async (state: string) => {
+    for (const width of [1440, 1024, 768]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+      await page.locator('main').screenshot({ path: testInfo.outputPath(`${state}-${width}.png`) });
+    }
+  };
+  await expect(page.getByRole('link', { name: ctx.disk.label, exact: true })).toBeVisible();
+  await capture('list');
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
+  await page.getByLabel('Label', { exact: true }).fill('Archive draft');
+  await page.getByLabel('Capacity amount').fill('1.5');
+  await page.getByLabel('Capacity unit').selectOption('TB');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await capture('discard');
+  await page.getByRole('button', { name: 'Keep editing', exact: true }).click();
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('may have succeeded');
+  await capture('recovery');
+  await page.goto('/disks/1');
+  await page.getByRole('button', { name: 'Edit disk', exact: true }).click();
+  await capture('edit');
+});
+
+test('verified creation closes without discard, but later invalidation must be checked first', async ({
+  page,
+}) => {
+  const ctx = await setup(page);
+  await page.route('**/api/v1/disks', (r) => {
+    ctx.writes.push({ method: 'POST', body: r.request().postDataJSON() });
+    Object.assign(ctx.disk, r.request().postDataJSON());
+    return r.fulfill({ status: 201, json: ctx.disk });
+  });
+  await page.goto('/disks');
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
+  await page.getByLabel('Label', { exact: true }).fill('Verified creation');
+  await page.getByLabel('Capacity amount').fill('0');
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'Open verified disk' })).toBeVisible();
+  await page.route('**/api/v1/disks?**', (r) => r.abort('failed'));
+  await page.getByRole('button', { name: 'Reload results', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Check whether saved', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Discard changes', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Create disk', exact: true })).toBeEnabled();
+  expect(ctx.writes).toHaveLength(1);
 });

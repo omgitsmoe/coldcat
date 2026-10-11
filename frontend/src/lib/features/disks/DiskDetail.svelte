@@ -84,6 +84,7 @@
   {#if editing}
     <DiskForm
       initial={editing}
+      closed={() => (editing = undefined)}
       refreshed={(disk) => {
         view = { status: 'success', value: disk };
         cached = disk;

@@ -339,6 +339,18 @@ No backend/catalog changes or extended audits. U06 is next, sequentially.
 
 ### U06 — Disk creation/editing lifecycle UX
 
+**Progress (2026-10-11):** complete. Executed plan: make disk browsing the default with an
+explicit create panel, add guarded Cancel/Close and deliberate dirty discard, associate required
+field errors and saving/success feedback, and focus uncertain-write recovery on “Check whether
+saved” without replacing the write owner. Drafts, exact capacities, bounded label checks and
+explicit retry approval remain intact; pending/unresolved writes cannot be closed to bypass
+recovery. Check (0 errors/warnings), lint, build, API drift and 224 unit tests passed; 30 focused
+browser tests and four real-backend write/lifecycle tests passed, including committed POST and
+PATCH response loss. Fifteen captures at 1440/1024/768px remain external inspection artifacts,
+not committed images. Interfaces, evidence paths and next-owner constraints:
+[U06 handoff](ui-ux/u06/handoff.md). No backend/workspace-catalog changes or extended audits.
+U07 is next; compact disk/inventory rows remain U08 scope.
+
 **Priority:** P1  
 **Dependencies:** U02, U04  
 **Suggested context:** 45–75k tokens

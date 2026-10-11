@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { resolve } from '$app/paths';
   import type { Result } from '../../api/client';
   import { ApiError } from '../../api/errors';
@@ -9,13 +9,25 @@
   import DiskMetadata from './DiskMetadata.svelte';
 
   type Disk = Result<'GET /api/v1/disks/{id}'>;
-  let { initial, refreshed }: { initial?: Disk; refreshed: (disk: Disk) => void } = $props();
+  let {
+    initial,
+    refreshed,
+    closed,
+  }: {
+    initial?: Disk;
+    refreshed: (disk: Disk) => void;
+    closed: () => void;
+  } = $props();
   const connection = useConnection();
   let before = $state<Disk>();
   let label = $state('');
   let capacity = $state('');
   let capacityUnit = $state<CapacityUnit>('B');
   let capacityTouched = $state(false);
+  let labelTouched = $state(false);
+  let discarding = $state(false);
+  let heading: globalThis.HTMLHeadingElement;
+  let checking = $state(false);
   const formId = $props.id();
   const capacityId = `${formId}-capacity`;
   let serial = $state('');
@@ -53,6 +65,25 @@
     }
   });
   const capacityError = $derived(capacityTouched ? conversion.error : '');
+  const labelError = $derived(labelTouched && label === '' ? 'Enter a disk label.' : '');
+  const dirty = $derived(
+    before
+      ? label !== before.label ||
+          conversion.bytes !== before.capacity ||
+          serial !== (before.serial ?? '') ||
+          notes !== (before.notes ?? '')
+      : label !== '' || capacity !== '' || capacityUnit !== 'B' || serial !== '' || notes !== '',
+  );
+  onMount(() => {
+    heading.focus();
+    heading.scrollIntoView({ block: 'nearest' });
+  });
+
+  function close() {
+    if (busy || blocked) return;
+    if (dirty) discarding = true;
+    else closed();
+  }
   const unbind = connection.onInvalidate(() => {
     if (ownInvalidation) return;
     verified = undefined;
@@ -60,7 +91,9 @@
     checkedRevision = undefined;
     if (before || blocked || busy) {
       blocked = true;
-      error = 'Catalog context changed. Reconcile before submitting; your inputs are retained.';
+      error =
+        'Catalog context changed. Check whether saved before submitting; your inputs are retained.';
+      discarding = false;
     }
   });
   onDestroy(() => {
@@ -80,7 +113,7 @@
     const disk = await connection.client.disk(id, controller.signal);
     if (disposed) return;
     if (epoch !== connection.epoch)
-      throw new Error('Context changed during reload; reconcile again.');
+      throw new Error('Context changed during reload; check whether saved again.');
     if (before) {
       if (label === before.label) label = disk.label;
       if (serial === (before.serial ?? '')) serial = disk.serial ?? '';
@@ -109,7 +142,8 @@
     connection.report(cause);
     if (writing && cause instanceof ApiError && cause.uncertainWrite) {
       blocked = true;
-      error = 'The write may have succeeded. Reconcile before resubmitting; no automatic retry.';
+      error =
+        'The write may have succeeded. Check whether saved before resubmitting; no automatic retry.';
       invalidate();
     } else if (cause instanceof ApiError && cause.status === 409) {
       error = `Conflict: ${cause.message}. Your inputs are retained.`;
@@ -122,7 +156,9 @@
     error = '';
     message = '';
     capacityTouched = true;
-    if (conversion.error) return;
+    labelTouched = true;
+    discarding = false;
+    if (conversion.error || labelError) return;
     let draft;
     try {
       if (label === '') throw new Error('Label must not be empty');
@@ -153,7 +189,9 @@
       written = true;
       blocked = true;
       if (epoch !== connection.epoch) {
-        throw new Error('Catalog context changed during the write. Reconcile before resubmitting.');
+        throw new Error(
+          'Catalog context changed during the write. Check whether saved before resubmitting.',
+        );
       }
       const creating = !before;
       before = disk;
@@ -167,9 +205,12 @@
     } catch (cause) {
       failure(cause, !written);
       if (written)
-        error = `Write succeeded but metadata is unverified. Reconcile before resubmitting. ${error}`;
+        error = `Write succeeded but metadata is unverified. Check whether saved before resubmitting. ${error}`;
     } finally {
-      if (!disposed) busy = false;
+      if (!disposed) {
+        busy = false;
+        checking = false;
+      }
     }
   }
 
@@ -180,6 +221,7 @@
       checkedRevision = undefined;
     }
     busy = true;
+    checking = true;
     error = '';
     message = '';
     try {
@@ -196,10 +238,11 @@
           controller.signal,
         );
         if (disposed) return;
-        if (epoch !== connection.epoch) throw new Error('Context changed; restart reconciliation.');
+        if (epoch !== connection.epoch)
+          throw new Error('Context changed; restart the saved-change check.');
         if (next && checkedRevision !== page.revision) {
           cursor = undefined;
-          throw new Error('Inventory changed; restart reconciliation.');
+          throw new Error('Inventory changed; restart the saved-change check.');
         }
         checkedRevision = page.revision;
         const match = page.items.find((disk) => disk.label === submittedLabel);
@@ -224,16 +267,32 @@
       checkedRevision = undefined;
       failure(cause);
     } finally {
-      if (!disposed) busy = false;
+      if (!disposed) {
+        busy = false;
+        checking = false;
+      }
     }
   }
 </script>
 
-<section aria-label={initial ? 'Edit disk' : 'Create disk'}>
-  <h2>{initial ? 'Edit disk' : 'Create disk'}</h2>
-  <form onsubmit={submit}>
+<section class="panel form-body" aria-label={initial ? 'Edit disk' : 'Create disk'}>
+  <h2 bind:this={heading} tabindex="-1">{initial ? 'Edit disk' : 'Create disk'}</h2>
+  <p class="muted">Label and capacity are required. Serial and notes are optional.</p>
+  <form onsubmit={submit} novalidate aria-busy={busy}>
     <fieldset disabled={busy || created}>
-      <label>Label <input type="text" bind:value={label} required /></label>
+      <label for={`${formId}-label`}>Label</label>
+      <input
+        id={`${formId}-label`}
+        type="text"
+        bind:value={label}
+        oninput={() => (labelTouched = true)}
+        aria-invalid={labelError ? 'true' : undefined}
+        aria-describedby={labelError ? `${formId}-label-error` : undefined}
+        required
+      />
+      {#if labelError}<p id={`${formId}-label-error`} class="status-error" role="alert">
+          {labelError}
+        </p>{/if}
       <div class="capacity-controls">
         <label for={capacityId}
           >Capacity amount
@@ -271,35 +330,67 @@
       {/if}
       <label>Serial <input type="text" bind:value={serial} /></label>
       <label>Notes <textarea bind:value={notes}></textarea></label>
-      <p>Empty serial or notes clears that field. Other text is preserved exactly.</p>
-      <button type="submit" disabled={blocked}>{initial ? 'Save changes' : 'Create disk'}</button>
+      <p class="muted">Empty serial or notes clears that field. Other text is preserved exactly.</p>
     </fieldset>
+    <div class="actions">
+      <button class="button-primary" type="submit" disabled={busy || blocked || created}>
+        <span class="button-labels">
+          <span aria-hidden={busy && !checking}>{initial ? 'Save changes' : 'Create disk'}</span>
+          <span aria-hidden={!busy || checking}>Saving…</span>
+        </span>
+      </button>
+      <button class="button-quiet" type="button" disabled={busy || blocked} onclick={close}>
+        {created || (verified && !dirty) ? 'Close' : 'Cancel'}
+      </button>
+    </div>
   </form>
-  {#if busy}<p role="status">{blocked ? 'Reconciling…' : 'Saving…'}</p>{/if}
-  {#if error}<p role="alert">{error}</p>{/if}
-  {#if message}<p role="status">{message}</p>{/if}
-  {#if blocked && !created}
-    <button disabled={busy} onclick={() => void reconcile()}>
-      {before ? 'Reconcile disk' : 'Reconcile creation'}
-    </button>
-    {#if !before && cursor}<button disabled={busy} onclick={() => void reconcile(true)}
-        >Check next disk page</button
-      >{/if}
-    {#if !before && cursor === null}
-      <button
-        disabled={busy}
-        onclick={() => {
-          blocked = false;
-          cursor = undefined;
-          error = '';
-          message = 'Resubmission allowed by your explicit review. No write has been retried.';
-        }}>I reviewed the disks; allow another creation</button
-      >
-    {/if}
+  {#if discarding}
+    <div class="panel" aria-label="Discard draft">
+      <p>
+        Discard your unsaved changes? This only clears this draft; it does not undo saved changes.
+      </p>
+      <div class="actions">
+        <button onclick={() => (discarding = false)}>Keep editing</button>
+        <button onclick={closed}>Discard changes</button>
+      </div>
+    </div>
+  {/if}
+  {#if busy}<p role="status">{checking ? 'Checking whether saved…' : 'Saving…'}</p>{/if}
+  {#if message}<p class="status-success" role="status">{message}</p>{/if}
+  {#if blocked}
+    <section class="panel" aria-label="Check whether saved">
+      <h3>Check whether saved</h3>
+      {#if error}<p class="status-warning" role="alert">{error}</p>{/if}
+      <p>
+        Your draft is retained. Checking reads the catalog, never retries the write. Cancel cannot
+        undo a sent write; resolve this check before closing.
+      </p>
+      <button class="button-primary" disabled={busy} onclick={() => void reconcile()}>
+        Check whether saved
+      </button>
+      {#if !before && cursor}<button disabled={busy} onclick={() => void reconcile(true)}
+          >Check next disk page</button
+        >{/if}
+      {#if !before && cursor === null}
+        <button
+          disabled={busy}
+          onclick={() => {
+            blocked = false;
+            cursor = undefined;
+            error = '';
+            message = 'Resubmission allowed by your explicit review. No write has been retried.';
+          }}>I reviewed the disks; allow another creation</button
+        >
+      {/if}
+    </section>
+  {:else if error}
+    <p class="status-error" role="alert">{error}</p>
   {/if}
   {#if verified}
-    <h3>Refreshed metadata — compare with your inputs</h3>
-    <DiskMetadata item={verified} />
+    <details open={blocked || created}>
+      <summary>Refreshed metadata — compare with your inputs</summary>
+      <DiskMetadata item={verified} />
+    </details>
     {#if created}<a href={resolve('/disks/[id]', { id: verified.id })}>Open verified disk</a>{/if}
   {/if}
 </section>

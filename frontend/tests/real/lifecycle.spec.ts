@@ -213,7 +213,7 @@ test('committed PATCH response loss, real outage, reconciliation and search labe
   await catalog.restartBackend();
   await page.getByRole('button', { name: 'Retry connection', exact: true }).click();
   await expect(page.locator('header')).toContainText('Backend ready');
-  await page.getByRole('button', { name: 'Reconcile disk', exact: true }).click();
+  await page.getByRole('button', { name: 'Check whether saved', exact: true }).click();
   await expect(
     page.getByRole('status').filter({ hasText: 'Review refreshed metadata' }),
   ).toBeVisible();
@@ -267,6 +267,7 @@ test('committed POST response loss reconciles the existing disk without another 
   catalog,
 }) => {
   await page.goto(`${catalog.origin}/disks`);
+  await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   await page.getByLabel('Label', { exact: true }).fill('Uncertain creation');
   await page.getByLabel('Capacity amount').fill('1.5');
   await page.getByLabel('Capacity unit').selectOption('TB');
@@ -305,7 +306,7 @@ test('committed POST response loss reconciles the existing disk without another 
   await catalog.restartBackend();
   await page.getByRole('button', { name: 'Retry connection', exact: true }).click();
   await expect(page.locator('header')).toContainText('Backend ready');
-  await page.getByRole('button', { name: 'Reconcile creation', exact: true }).click();
+  await page.getByRole('button', { name: 'Check whether saved', exact: true }).click();
   await expect(
     page.getByText('Existing disk found. Review its metadata; no creation was retried.'),
   ).toBeVisible();
