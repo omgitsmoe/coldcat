@@ -60,7 +60,7 @@ func TestImportCleanupReferenceIndexes(t *testing.T) {
 			"INTEGER PRIMARY KEY"},
 		{"directory membership cascade",
 			"SELECT 1 FROM directory_content WHERE snapshot_id=? AND directory_path=?",
-			"USING PRIMARY KEY (snapshot_id=? AND directory_path=?)"},
+			"USING PRIMARY KEY (directory_id=?)"},
 		{"directory parent cascade",
 			"SELECT 1 FROM directory_file WHERE snapshot_id=? AND directory_path=?",
 			"directory_file_parent"},

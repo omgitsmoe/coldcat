@@ -40,6 +40,40 @@ const directoryContentSchema = `CREATE TABLE directory_content (
 CREATE INDEX directory_content_reverse ON directory_content(content_id,snapshot_id,directory_path);
 `
 
+// The view preserves path-based queries on both legacy and normalized catalogs.
+// Only memberships use IDs; file/search paths keep their existing seek indexes.
+const directoryMembershipSchema = `CREATE TABLE directory_membership (
+ directory_id INTEGER NOT NULL REFERENCES directory(id) ON DELETE CASCADE,
+ content_id INTEGER NOT NULL REFERENCES content(id),
+ occurrences INTEGER NOT NULL CHECK(occurrences>0),
+ PRIMARY KEY(directory_id,content_id)
+) WITHOUT ROWID;
+CREATE INDEX directory_content_reverse ON directory_membership(content_id,directory_id);
+CREATE VIEW directory_content AS
+ SELECT d.snapshot_id,d.path AS directory_path,m.content_id,m.occurrences
+ FROM directory_membership m JOIN directory d ON d.id=m.directory_id;
+CREATE TRIGGER directory_content_insert INSTEAD OF INSERT ON directory_content BEGIN
+ INSERT INTO directory_membership(directory_id,content_id,occurrences)
+ VALUES((SELECT id FROM directory WHERE snapshot_id=NEW.snapshot_id
+ AND path=NEW.directory_path),NEW.content_id,NEW.occurrences);
+END;
+`
+
+const directoryMembershipGuards = `
+CREATE TRIGGER immutable_membership_insert BEFORE INSERT ON directory_membership
+ WHEN (SELECT s.state FROM directory d JOIN snapshot s ON s.id=d.snapshot_id
+ WHERE d.id=NEW.directory_id)='complete'
+ BEGIN SELECT RAISE(ABORT,'complete directory memberships are immutable'); END;
+CREATE TRIGGER immutable_membership_update BEFORE UPDATE ON directory_membership
+ WHEN EXISTS(SELECT 1 FROM directory d JOIN snapshot s ON s.id=d.snapshot_id
+ WHERE d.id IN(OLD.directory_id,NEW.directory_id) AND s.state='complete')
+ BEGIN SELECT RAISE(ABORT,'complete directory memberships are immutable'); END;
+CREATE TRIGGER immutable_membership_delete BEFORE DELETE ON directory_membership
+ WHEN (SELECT s.state FROM directory d JOIN snapshot s ON s.id=d.snapshot_id
+ WHERE d.id=OLD.directory_id)='complete'
+ BEGIN SELECT RAISE(ABORT,'complete directory memberships are immutable'); END;
+`
+
 const directorySchema = `
 CREATE TABLE directory (
 	 id INTEGER PRIMARY KEY,
@@ -60,7 +94,7 @@ CREATE TABLE directory (
 );
 CREATE INDEX directory_parent ON directory(snapshot_id,parent_path,path);
 CREATE INDEX directory_fingerprint ON directory(fingerprint_version,fingerprint,snapshot_id,path);
-` + directoryContentSchema + `
+` + directoryMembershipSchema + `
 CREATE TABLE directory_file (
   observation_id INTEGER PRIMARY KEY REFERENCES observation(id) ON DELETE CASCADE,
   snapshot_id INTEGER NOT NULL, directory_path TEXT NOT NULL, path TEXT NOT NULL,
@@ -101,7 +135,7 @@ CREATE TRIGGER immutable_directory_identity BEFORE UPDATE ON directory
  BEGIN SELECT RAISE(ABORT,'complete directory tree is immutable'); END;
 CREATE TRIGGER directory_build_directory_delete AFTER DELETE ON directory
  BEGIN DELETE FROM directory_build WHERE snapshot_id=OLD.snapshot_id; END;
-`
+` + directoryMembershipGuards
 
 const directoryAncestors = `WITH RECURSIVE ancestors(observation_id,content_id,path,rest) AS (
  SELECT id,content_id,'',path FROM observation WHERE snapshot_id=?

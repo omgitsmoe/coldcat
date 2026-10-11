@@ -45,6 +45,68 @@ VALUES(999,999,'dangling')`); err == nil {
 	}
 }
 
+func TestLegacyMembershipOpenDoesNotRewrite(t *testing.T) {
+	for _, version := range []int{1, 2} {
+		t.Run(fmt.Sprint(version), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "legacy.sqlite")
+			db, err := Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = db.db.Exec(`DROP VIEW directory_content;
+DROP TABLE directory_membership;` + directoryContentSchema +
+				fmt.Sprintf("PRAGMA user_version=%d;", version))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Close(); err != nil {
+				t.Fatal(err)
+			}
+			db, err = Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			var kind string
+			if err := db.db.QueryRow("SELECT type FROM sqlite_schema WHERE name='directory_content'").
+				Scan(&kind); err != nil || kind != "table" {
+				t.Fatalf("legacy layout rewritten: %s, %v", kind, err)
+			}
+			var got int
+			if err := db.db.QueryRow("PRAGMA user_version").Scan(&got); err != nil || got != 3 {
+				t.Fatalf("reader version: %d, %v", got, err)
+			}
+			if err := db.applyMigrations(t.Context(), migrations[:2]); err == nil ||
+				!strings.Contains(err.Error(), "unsupported schema version 3") {
+				t.Fatalf("old reader accepted version 3: %v", err)
+			}
+		})
+	}
+}
+
+func TestCompactMembershipMappingFailsWithoutDirectory(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "corrupt.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	_, err = db.db.Exec(`DROP VIEW directory_content;
+DROP TABLE directory_membership;` + directoryContentSchema + `
+PRAGMA foreign_keys=OFF;
+INSERT INTO directory_content VALUES(999,'missing',999,1);
+PRAGMA foreign_keys=ON;`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(t.TempDir(), "output.sqlite")
+	if err := db.CompactInto(t.Context(), output); err == nil {
+		t.Fatal("silently discarded unmappable membership")
+	}
+	if _, err := os.Stat(output); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("left invalid compact output: %v", err)
+	}
+}
+
 func TestCompactIntoPreservesCatalog(t *testing.T) {
 	source := filepath.Join(t.TempDir(), "source.sqlite")
 	db, err := Open(source)
@@ -54,7 +116,8 @@ func TestCompactIntoPreservesCatalog(t *testing.T) {
 	defer db.Close()
 	legacySchema := strings.Replace(directoryContentSchema, ") WITHOUT ROWID;", ");", 1)
 	legacyFTS := strings.Replace(searchTrigramSchema, ", detail=column, columnsize=0", "", 1)
-	if _, err := db.db.Exec(`DROP TABLE directory_content;` + legacySchema + `
+	if _, err := db.db.Exec(`DROP VIEW directory_content;
+DROP TABLE directory_membership;` + legacySchema + `
 DROP TABLE search_trigram;` + legacyFTS + `
 INSERT INTO disk(id,label,capacity) VALUES(1,'disk',0);
 INSERT INTO content(id,hash_type,hash,size) VALUES(1,'sha256',zeroblob(32),7);`); err != nil {
@@ -94,7 +157,7 @@ INSERT INTO content(id,hash_type,hash,size) VALUES(1,'sha256',zeroblob(32),7);`)
 	}
 	defer target.Close()
 	var schema string
-	if err := target.db.QueryRow("SELECT sql FROM sqlite_schema WHERE name='directory_content'").
+	if err := target.db.QueryRow("SELECT sql FROM sqlite_schema WHERE name='directory_membership'").
 		Scan(&schema); err != nil || !strings.Contains(schema, "WITHOUT ROWID") {
 		t.Fatalf("membership layout: %s, %v", schema, err)
 	}
@@ -164,6 +227,20 @@ INSERT INTO content(id,hash_type,hash,size) VALUES(1,'sha256',zeroblob(32),7);`)
 	}
 	if err := target.Check(t.Context()); err != nil {
 		t.Fatal(err)
+	}
+	for _, sql := range []string{
+		`UPDATE directory_membership SET occurrences=2`,
+		`DELETE FROM directory_membership`,
+		`INSERT INTO directory_content VALUES(1,'a',1,2)`,
+	} {
+		if _, err := target.db.Exec(sql); err == nil ||
+			!strings.Contains(err.Error(), "immutable") {
+			t.Fatalf("completed membership changed: %s: %v", sql, err)
+		}
+	}
+	second := filepath.Join(t.TempDir(), "second.sqlite")
+	if err := target.CompactInto(t.Context(), second); err != nil {
+		t.Fatalf("recompact normalized catalog: %v", err)
 	}
 }
 
@@ -241,6 +318,43 @@ func TestStorageAccountsForPages(t *testing.T) {
 	}
 }
 
+func BenchmarkCatalogCompactUpgrade(b *testing.B) {
+	db := buildCatalogStorageFixture(b, func(db *DB) error {
+		_, err := db.db.Exec(`DROP VIEW directory_content;
+DROP TABLE directory_membership;` + directoryContentSchema)
+		return err
+	})
+	before, err := db.Storage(b.Context())
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Logf("legacy full catalog before compact-copy: %d", before.PageCount*before.PageSize)
+	b.ResetTimer()
+	for b.Loop() {
+		output := filepath.Join(b.TempDir(), "compact.sqlite")
+		if err := db.CompactInto(b.Context(), output); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+		target, err := Open(output)
+		if err != nil {
+			b.Fatal(err)
+		}
+		report, err := target.Storage(b.Context())
+		if err != nil {
+			b.Fatal(err)
+		}
+		if report.Snapshots != 4 || report.HistoricalFiles != 50000 {
+			b.Fatalf("history changed: %+v", report)
+		}
+		b.ReportMetric(float64(report.PageCount*report.PageSize), "catalog-bytes")
+		if err := target.Close(); err != nil {
+			b.Fatal(err)
+		}
+		b.StartTimer()
+	}
+}
+
 func BenchmarkDirectoryMembershipLayout(b *testing.B) {
 	for _, rowid := range []bool{true, false} {
 		b.Run(fmt.Sprintf("rowid=%v", rowid), func(b *testing.B) {
@@ -249,11 +363,13 @@ func BenchmarkDirectoryMembershipLayout(b *testing.B) {
 				b.Fatal(err)
 			}
 			defer db.Close()
+			schema := directoryContentSchema
 			if rowid {
-				schema := strings.Replace(directoryContentSchema, ") WITHOUT ROWID;", ");", 1)
-				if _, err := db.db.Exec("DROP TABLE directory_content;" + schema); err != nil {
-					b.Fatal(err)
-				}
+				schema = strings.Replace(schema, ") WITHOUT ROWID;", ");", 1)
+			}
+			if _, err := db.db.Exec(`DROP VIEW directory_content;
+DROP TABLE directory_membership;` + schema); err != nil {
+				b.Fatal(err)
 			}
 			_, err = db.db.Exec(`INSERT INTO disk VALUES(1,'disk',NULL,NULL,0);
 INSERT INTO snapshot(id,disk_id,state,captured_at,imported_at,capture_provenance)

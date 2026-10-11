@@ -90,8 +90,7 @@ VALUES('integrity-check',1)`); err != nil {
 	})
 }
 
-// CompactInto keeps the logical schema compatible with existing catalogs; only
-// the physical membership layout changes. The source is never rewritten here.
+// CompactInto rewrites derived indexes only in a separately locked copy.
 func (db *DB) CompactInto(ctx context.Context, output string) (result error) {
 	if !db.access.TryLock() {
 		return ErrBusy
@@ -131,10 +130,25 @@ func (db *DB) CompactInto(ctx context.Context, output string) (result error) {
 	defer func() { result = errors.Join(result, copied.Close()) }()
 	target := &DB{db: copied}
 	err = target.TransactionContext(ctx, func(tx *Tx) error {
-		_, err := tx.ExecContext(ctx, `DROP INDEX directory_content_reverse;
-ALTER TABLE directory_content RENAME TO directory_content_old;`+directoryContentSchema+`
+		var kind string
+		if err := tx.QueryRowContext(ctx,
+			"SELECT type FROM sqlite_schema WHERE name='directory_content'").Scan(&kind); err != nil {
+			return err
+		}
+		switch kind {
+		case "table":
+			_, err := tx.ExecContext(ctx, `DROP INDEX directory_content_reverse;
+ALTER TABLE directory_content RENAME TO directory_content_old;`+directoryMembershipSchema+`
 INSERT INTO directory_content SELECT * FROM directory_content_old;
-DROP TABLE directory_content_old;`)
+DROP TABLE directory_content_old;`+directoryMembershipGuards)
+			if err != nil {
+				return err
+			}
+		case "view":
+		default:
+			return fmt.Errorf("unsupported directory membership object %q", kind)
+		}
+		_, err := tx.ExecContext(ctx, "PRAGMA user_version=3")
 		return err
 	})
 	if err != nil {
