@@ -13,6 +13,8 @@
   import RequestFeedback from '../../components/RequestFeedback.svelte';
   import DateValue from '../../components/DateValue.svelte';
   import RuleEditor from './RuleEditor.svelte';
+  import AppliedRules from './AppliedRules.svelte';
+  import './comparison.css';
   import type { Rules } from './rules';
 
   let { id, path }: { id: string; path: string } = $props();
@@ -20,6 +22,7 @@
   type Page = Result<'GET /api/v1/snapshots/{id}/directory/coverage'>;
   let draft = $state<Rules>({ allow: [], block: [] });
   let applied = $state<Rules>();
+  let appliedLimit = $state('');
   let dirty = $state(false);
   let limit = $state('50');
   let error = $state('');
@@ -52,6 +55,7 @@
       }
       owner = coveragePages(connection, id, { path, ...rules, limit: Number(limit) });
       applied = rules;
+      appliedLimit = limit;
       dirty = false;
       error = '';
       const traversal = owner.traversal;
@@ -83,7 +87,7 @@
   }
 </script>
 
-<section aria-label="Content on other disks">
+<section class="comparison" aria-label="Content on other disks">
   <h2>Content on other disks</h2>
   <p>
     Selected source content anywhere on each other disk, regardless of destination names or paths.
@@ -92,10 +96,11 @@
   </p>
   <p>
     Distributed coverage is not one complete directory backup. Do not add overlapping per-disk
-    counts. Even complete content coverage does not mean an exact tree copy.
+    counts. Even complete content coverage does not mean an exact tree copy. Coverage is not a
+    backup guarantee.
   </p>
-  <RuleEditor {draft} {changed} {apply} />
-  <label
+  <RuleEditor {draft} {changed} {apply} scope="source" />
+  <label class="field comparison-limit"
     >Comparison page size
     <input
       value={limit}
@@ -106,17 +111,9 @@
       }}
     />
   </label>
+  <AppliedRules {applied} {dirty} limit={appliedLimit} />
   {#if error}<p role="alert">{error}</p>{/if}
-  {#if dirty}<p role="status">Rules changed; apply to compare.</p>
-  {:else if applied}
-    <h3>Applied rules</h3>
-    {#each ['allow', 'block'] as kind (kind)}
-      {@const key = kind as keyof Rules}
-      <p>{key === 'allow' ? 'Allow' : 'Block'}:</p>
-      {#if applied[key].length}<ul>
-          {#each applied[key] as row, index (index)}<li class="literal">{row}</li>{/each}
-        </ul>{:else}<p>None</p>{/if}
-    {/each}
+  {#if !dirty && applied}
     <RequestFeedback
       status={view.status}
       error={view.error}
@@ -125,6 +122,9 @@
       loadingLabel="Comparing content coverage…"
     />
     {#if paging.busy}<button onclick={() => changed()}>Cancel comparison</button>{/if}
+    {#if view.status === 'success'}<p role="status">
+        Comparison complete for loaded destinations.
+      </p>{/if}
     {#if view.status === 'idle'}<p>Comparison invalidated; apply to compare again.</p>{/if}
     {#if first}
       {#if view.error}<p>Previously loaded coverage; not freshly verified.</p>{/if}
@@ -147,41 +147,59 @@
       {#if first.selection.empty_comparison}<p>No files selected</p>
       {:else}
         {#if !items.length}<p>No other disks with current inventories.</p>{/if}
-        <ul class="destinations">
-          {#each items as item (item.disk.id)}
-            <li>
-              <a href="{resolve('/')}{routes.disk(item.disk.id).slice(1)}"
-                >{item.disk.label} — Disk {item.disk.id}</a
-              >
-              <a href="{resolve('/')}{routes.snapshot(item.snapshot.id).slice(1)}"
-                >Current destination inventory {item.snapshot.id}</a
-              >
-              <DateValue value={item.snapshot.captured_at} meaning="captured_at" />
-              <p>{item.complete ? 'Complete content coverage' : 'Partial content coverage'}</p>
-              <p>
-                Covered files: {formatCount(item.covered_file_count)}; missing files: {formatCount(
-                  item.missing_file_count,
-                )}.
-              </p>
-              <p>
-                Covered distinct contents: {formatCount(item.covered_content_count)}; missing
-                distinct contents: {formatCount(item.missing_content_count)}.
-              </p>
-              <p>
-                {percentage(item.covered_content_count, first.selection.content_count)} of selected distinct
-                contents (rounded).
-              </p>
-              <p>
-                Known covered source bytes: <SizeValue value={item.covered_known_bytes} />; known
-                missing source bytes: <SizeValue value={item.missing_known_bytes} />.
-              </p>
-              <p>
-                Covered unknown-size files: {formatCount(item.covered_unknown_size_file_count)};
-                missing unknown-size files: {formatCount(item.missing_unknown_size_file_count)}.
-              </p>
-            </li>
-          {/each}
-        </ul>
+        <table class="data-table comparison-results coverage-results">
+          <caption
+            >Current destination content coverage — counts overlap across disks; do not add them</caption
+          >
+          <thead
+            ><tr
+              ><th>Destination disk</th><th>Coverage</th><th class="numeric">Covered</th><th
+                class="numeric">Missing</th
+              ></tr
+            ></thead
+          >
+          <tbody>
+            {#each items as item (item.disk.id)}
+              <tr>
+                <td data-label="Destination disk">
+                  <a href="{resolve('/')}{routes.disk(item.disk.id).slice(1)}"
+                    >{item.disk.label} — Disk {item.disk.id}</a
+                  >
+                  <a href="{resolve('/')}{routes.snapshot(item.snapshot.id).slice(1)}"
+                    >Current destination inventory {item.snapshot.id}</a
+                  >
+                  <DateValue value={item.snapshot.captured_at} meaning="captured_at" />
+                </td>
+                <td data-label="Coverage">
+                  <span
+                    class="badge"
+                    class:status-success={item.complete}
+                    class:status-warning={!item.complete}
+                    >{item.complete
+                      ? 'Complete content coverage'
+                      : 'Partial content coverage'}</span
+                  >
+                  <p>
+                    {percentage(item.covered_content_count, first.selection.content_count)} of selected
+                    distinct contents (rounded).
+                  </p>
+                </td>
+                <td data-label="Covered" class="numeric">
+                  <p>Files: {formatCount(item.covered_file_count)}</p>
+                  <p>Distinct contents: {formatCount(item.covered_content_count)}</p>
+                  <p>Known covered source bytes: <SizeValue value={item.covered_known_bytes} /></p>
+                  <p>Unknown-size files: {formatCount(item.covered_unknown_size_file_count)}</p>
+                </td>
+                <td data-label="Missing" class="numeric">
+                  <p>Files: {formatCount(item.missing_file_count)}</p>
+                  <p>Distinct contents: {formatCount(item.missing_content_count)}</p>
+                  <p>Known missing source bytes: <SizeValue value={item.missing_known_bytes} /></p>
+                  <p>Unknown-size files: {formatCount(item.missing_unknown_size_file_count)}</p>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
         <PageControls
           {...paging}
           paged={view.paged}
@@ -195,18 +213,5 @@
         />
       {/if}
     {/if}
-  {:else}<p>Apply rules to run a comparison. No comparison has been requested.</p>{/if}
+  {:else if !dirty}<p>Apply rules to run a comparison. No comparison has been requested.</p>{/if}
 </section>
-
-<style>
-  .literal {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  li {
-    margin-block: 0.5rem;
-  }
-  .destinations {
-    padding-inline-start: 1.5rem;
-  }
-</style>

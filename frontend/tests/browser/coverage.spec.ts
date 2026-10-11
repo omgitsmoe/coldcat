@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { searchFixture } from '../fixtures/api';
 import type { components } from '../../src/lib/api/generated/wire';
+import { mkdir } from 'node:fs/promises';
 
 function fixture(url: URL): components['schemas']['DirectoryCoveragePage'] {
   const snapshot = searchFixture().items[0]!.snapshot;
@@ -95,16 +96,17 @@ test('explicit coverage, literal rules, safe large counts, partial status and em
     'Historical source inventory compared against current destination inventories.',
   );
   await expect(coverage).toContainText('9,007,199,254,740,993');
-  await expect(coverage).toContainText('Covered files: 9,007,199,254,740,992; missing files: 1');
-  await expect(coverage).toContainText(
-    'Covered distinct contents: 1; missing distinct contents: 1',
-  );
+  const covered = coverage.locator('td[data-label="Covered"]');
+  const missing = coverage.locator('td[data-label="Missing"]');
+  await expect(covered).toContainText('Files: 9,007,199,254,740,992');
+  await expect(missing).toContainText('Files: 1');
+  await expect(covered).toContainText('Distinct contents: 1');
+  await expect(missing).toContainText('Distinct contents: 1');
   const coveredBytes = coverage.locator('p').filter({ hasText: 'Known covered source bytes:' });
   await coveredBytes.locator('.size-value summary').first().click();
   await expect(coveredBytes.getByText('9,007,199,254,740,993 B', { exact: true })).toBeVisible();
-  await expect(coverage).toContainText(
-    'Covered unknown-size files: 0; missing unknown-size files: 1',
-  );
+  await expect(covered).toContainText('Unknown-size files: 0');
+  await expect(missing).toContainText('Unknown-size files: 1');
   await expect(coverage).toContainText('Source byte total: Unknown');
   await expect(coverage).toContainText('50.0% of selected distinct contents (rounded)');
   await expect(coverage).toContainText('Distributed coverage is not one complete directory backup');
@@ -120,6 +122,78 @@ test('explicit coverage, literal rules, safe large counts, partial status and em
   await expect(coverage.getByText('No files selected', { exact: true })).toBeVisible();
   await expect(coverage).not.toContainText('100%');
   expect(calls.at(-1)!.searchParams.has('cursor')).toBe(false);
+});
+
+test('compact coverage editor and aligned destinations at approved widths', async ({ page }) => {
+  const calls = await setup(page);
+  const region = page.getByRole('region', { name: 'Content on other disks' });
+  const help = region.getByText('Rule syntax and limits', { exact: true });
+  await help.click();
+  await expect(region.getByText('file\\?.txt', { exact: true })).toBeVisible();
+  await expect(region).toContainText('in the source selection only; destination paths are ignored');
+  await help.click();
+  expect(calls).toHaveLength(0);
+  await region.getByRole('button', { name: 'Apply and compare' }).click();
+  const table = region.locator('.coverage-results');
+  await expect(table).toBeVisible();
+  await expect(
+    region.getByText('Comparison complete for loaded destinations.', { exact: true }),
+  ).toBeVisible();
+  await mkdir('/tmp/opencode/u12-screenshots', { recursive: true });
+  for (const width of [1440, 1024, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    expect(
+      await table
+        .locator('td')
+        .evaluateAll((nodes) => nodes.every((node) => node.scrollHeight <= node.clientHeight + 1)),
+    ).toBe(true);
+    const cells = await table
+      .locator('tbody tr')
+      .first()
+      .locator('td')
+      .evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const r = node.getBoundingClientRect();
+          return { x: r.x, y: r.y, right: r.right, bottom: r.bottom };
+        }),
+      );
+    for (let i = 0; i < cells.length; i++)
+      for (let j = i + 1; j < cells.length; j++) {
+        const a = cells[i]!;
+        const b = cells[j]!;
+        expect(a.right <= b.x || b.right <= a.x || a.bottom <= b.y || b.bottom <= a.y).toBe(true);
+      }
+    await expect(table.locator('td[data-label="Covered"]')).toHaveCSS(
+      'text-align',
+      width < 900 ? 'left' : 'right',
+    );
+    await page.screenshot({
+      path: `/tmp/opencode/u12-screenshots/coverage-${width}.png`,
+      fullPage: true,
+    });
+  }
+  await region.getByLabel('Comparison page size').fill('1');
+  await expect(table).toHaveCount(0);
+  await expect(
+    region.getByText('Last applied rules: 0 allow · 0 block · page size 50', { exact: true }),
+  ).toBeVisible();
+  await region.getByRole('button', { name: 'Add allow rule' }).click();
+  await region.getByLabel('Allow pattern 1', { exact: true }).fill(' **/雪\\?.txt ');
+  await region.getByRole('button', { name: 'Remove allow rule 1' }).click();
+  expect(calls).toHaveLength(1);
+  await region.getByRole('button', { name: 'Apply and compare' }).click();
+  await expect(table).toBeVisible();
+  expect(calls.at(-1)!.searchParams.get('limit')).toBe('1');
+  const count = calls.length;
+  await region.getByLabel('Comparison page size').fill('201');
+  await region.getByRole('button', { name: 'Apply and compare' }).click();
+  await expect(region.getByRole('alert')).toHaveText('Page size must be 1–200');
+  await expect(table).toHaveCount(0);
+  expect(calls).toHaveLength(count);
+  await expect(
+    region.getByText('Last applied rules: 0 allow · 0 block · page size 1', { exact: true }),
+  ).toBeVisible();
 });
 
 test('percentage uses large selected-content denominator and complete coverage is not tree equality', async ({

@@ -1,0 +1,58 @@
+.comparison .comparison-limit {
+  width: min(100%, 14rem);
+  margin-block: var(--space-3);
+}
+.comparison .comparison-results th:first-child {
+  width: 34%;
+}
+.comparison .comparison-results th:nth-child(2) {
+  width: 26%;
+}
+.comparison .comparison-results td {
+  vertical-align: top;
+}
+.comparison .comparison-results td > a {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.comparison .comparison-results p {
+  margin: 0 0 var(--space-2);
+}
+.comparison .comparison-results .numeric {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 899px) {
+  .comparison .comparison-results thead {
+    display: none;
+  }
+  .comparison .comparison-results tbody {
+    display: block;
+  }
+  .comparison .comparison-results tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding-block: var(--space-2);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .comparison .comparison-results td {
+    display: block;
+    min-width: 0;
+    min-height: 0;
+    height: auto;
+    border: 0;
+    text-align: left;
+  }
+  .comparison .comparison-results td:first-child {
+    grid-column: 1 / -1;
+  }
+  .comparison .coverage-results td:nth-child(2) {
+    grid-column: 1 / -1;
+  }
+  .comparison .comparison-results td::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--color-muted);
+    font-weight: 600;
+    margin-bottom: var(--space-1);
+  }
+}

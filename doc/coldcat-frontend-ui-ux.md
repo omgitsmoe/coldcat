@@ -584,6 +584,17 @@ No U11 blockers; comparison internals remain U12 and shared recovery/paging poli
 
 ### U12 — Comparison editor and results
 
+**Progress (2026-10-11):** complete. Executed plan: retain explicit comparison/traversal owners
+and literal parsing, compact allow/block rows with contextual syntax help, expose draft/last-applied
+rules and applied page size, and align tree equality and per-disk content coverage in separate
+destination tables/narrow named records. Covered/missing file/content counts, known byte subtotals,
+unknown-size counts and complete/partial status remain explicit; coverage is not a backup guarantee.
+Check (0 errors/warnings), lint, build, API drift and 258 unit tests passed; 47 focused fixture-only
+browser tests passed. Six inspected external captures at 1440/1024/768px have no document overflow
+or cell-content spill. Interfaces, tests, evidence and U13/U14 constraints:
+[U12 handoff](ui-ux/u12/handoff.md). No backend/catalog changes, other agents or extended audits.
+No U12 blockers; real/deployed integration remains U14.
+
 **Priority:** P2  
 **Dependencies:** U02, U05, U11  
 **Suggested context:** 45–80k tokens

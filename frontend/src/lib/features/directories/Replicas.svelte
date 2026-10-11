@@ -12,12 +12,15 @@
   import RequestFeedback from '../../components/RequestFeedback.svelte';
   import DateValue from '../../components/DateValue.svelte';
   import RuleEditor from './RuleEditor.svelte';
+  import AppliedRules from './AppliedRules.svelte';
+  import './comparison.css';
   import type { Rules } from './rules';
   let { id, path }: { id: string; path: string } = $props();
   const connection = useConnection();
   type Page = Result<'GET /api/v1/snapshots/{id}/directory/replicas'>;
   let draft = $state<Rules>({ allow: [], block: [] });
   let applied = $state<Rules>();
+  let appliedLimit = $state('');
   let dirty = $state(false);
   let limit = $state('50');
   let error = $state('');
@@ -47,6 +50,7 @@
       }
       owner = replicaPages(connection, id, { path, ...rules, limit: Number(limit) });
       applied = rules;
+      appliedLimit = limit;
       dirty = false;
       error = '';
       const traversal = owner.traversal;
@@ -77,14 +81,19 @@
   }
 </script>
 
-<section aria-label="Exact tree copies">
+<section class="comparison" aria-label="Exact tree copies">
   <h2>Exact tree copies</h2>
   <p>
     Compare relative file paths and content identities, ignoring root names and mtimes. Destinations
     are current inventories only, even for a historical source.
   </p>
+  <p class="muted">
+    Whole tree equal means an exact tree copy. Equal under these filters means only the selected
+    relative paths and contents match; excluded files may differ. Tree equality is different from
+    content-anywhere coverage; neither is a backup guarantee.
+  </p>
   <RuleEditor {draft} {changed} {apply} />
-  <label
+  <label class="field comparison-limit"
     >Comparison page size
     <input
       value={limit}
@@ -95,18 +104,9 @@
       }}
     />
   </label>
+  <AppliedRules {applied} {dirty} limit={appliedLimit} />
   {#if error}<p role="alert">{error}</p>{/if}
-  {#if dirty}<p role="status">Rules changed; apply to compare.</p>
-  {:else if applied}
-    <h3>Applied rules</h3>
-    {#each ['allow', 'block'] as kind (kind)}
-      {@const key = kind as keyof Rules}
-      <p>{key === 'allow' ? 'Allow' : 'Block'}:</p>
-      {#if applied[key].length}<ul>
-          {#each applied[key] as row, index (index)}<li class="literal">{row}</li>{/each}
-        </ul>
-      {:else}<p>None</p>{/if}
-    {/each}
+  {#if !dirty && applied}
     <RequestFeedback
       status={view.status}
       error={view.error}
@@ -115,6 +115,9 @@
       loadingLabel="Comparing trees…"
     />
     {#if paging.busy}<button onclick={() => changed()}>Cancel comparison</button>{/if}
+    {#if view.status === 'success'}<p role="status">
+        Comparison complete for loaded destinations.
+      </p>{/if}
     {#if view.status === 'idle'}<p>Comparison invalidated; apply to compare again.</p>{/if}
     {#if first}
       {#if view.error}<p>Previously loaded copies; not freshly verified.</p>{/if}
@@ -129,31 +132,55 @@
       {#if first.selection.empty_comparison}<p>No files selected</p>
       {:else}
         {#if !items.length}<p>No exact tree copies match this selection.</p>{/if}
-        <ul>
-          {#each items as item (`${item.disk.id}:${item.snapshot.id}:${item.path}`)}
-            <li>
-              <a href="{resolve('/')}{routes.disk(item.disk.id).slice(1)}"
-                >{item.disk.label} — Disk {item.disk.id}</a
-              >
-              {#if item.same_disk}<strong>Same disk</strong>{/if}
-              <a
-                class="literal"
-                href="{resolve('/')}{directoryBrowseURL(item.snapshot.id, {
-                  path: item.path,
-                }).slice(1)}">{item.path || 'Root'}</a
-              >
-              <a href="{resolve('/')}{routes.snapshot(item.snapshot.id).slice(1)}"
-                >Inventory {item.snapshot.id}</a
-              >
-              <DateValue value={item.snapshot.captured_at} meaning="captured_at" />
-              <p>{item.whole_tree_equal ? 'Whole tree equal' : 'Equal under these filters'}</p>
-              <p>
-                Retained destination files: {formatCount(item.retained_file_count)}; excluded
-                destination files: {formatCount(item.excluded_file_count)}.
-              </p>
-            </li>
-          {/each}
-        </ul>
+        <table class="data-table comparison-results tree-results">
+          <caption>Matching current destination trees — equality is labeled per destination</caption
+          >
+          <thead
+            ><tr
+              ><th>Destination tree</th><th>Equality</th><th class="numeric">Selected files</th><th
+                class="numeric">Excluded files</th
+              ></tr
+            ></thead
+          >
+          <tbody>
+            {#each items as item (`${item.disk.id}:${item.snapshot.id}:${item.path}`)}
+              <tr>
+                <td data-label="Destination tree">
+                  <a href="{resolve('/')}{routes.disk(item.disk.id).slice(1)}"
+                    >{item.disk.label} — Disk {item.disk.id}</a
+                  >
+                  {#if item.same_disk}<strong>Same disk</strong>{/if}
+                  <a
+                    class="literal"
+                    href="{resolve('/')}{directoryBrowseURL(item.snapshot.id, {
+                      path: item.path,
+                    }).slice(1)}">{item.path || 'Root'}</a
+                  >
+                  <a href="{resolve('/')}{routes.snapshot(item.snapshot.id).slice(1)}"
+                    >Inventory {item.snapshot.id}</a
+                  >
+                  <DateValue value={item.snapshot.captured_at} meaning="captured_at" />
+                </td>
+                <td data-label="Equality"
+                  ><span
+                    class="badge"
+                    class:status-success={item.whole_tree_equal}
+                    class:status-warning={!item.whole_tree_equal}
+                    >{item.whole_tree_equal
+                      ? 'Whole tree equal'
+                      : 'Equal under these filters'}</span
+                  ></td
+                >
+                <td data-label="Selected files" class="numeric"
+                  >{formatCount(item.retained_file_count)}</td
+                >
+                <td data-label="Excluded files" class="numeric"
+                  >{formatCount(item.excluded_file_count)}</td
+                >
+              </tr>
+            {/each}
+          </tbody>
+        </table>
         <PageControls
           {...paging}
           paged={view.paged}
@@ -167,15 +194,5 @@
         />
       {/if}
     {/if}
-  {:else}<p>Apply rules to run a comparison. No comparison has been requested.</p>{/if}
+  {:else if !dirty}<p>Apply rules to run a comparison. No comparison has been requested.</p>{/if}
 </section>
-
-<style>
-  .literal {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  li {
-    margin-block: 0.5rem;
-  }
-</style>

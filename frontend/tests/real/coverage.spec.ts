@@ -28,21 +28,25 @@ test('historical source has distributed current coverage, not one complete copy'
   );
   await expect(coverage).toContainText('Selected source files: 3; excluded source files: 0');
   await expect(coverage).toContainText('Selected distinct contents: 2');
-  await expect(coverage).toContainText('Covered files: 2; missing files: 1');
-  await expect(coverage).toContainText(
-    'Known covered source bytes: 26 B; known missing source bytes: 0 B',
-  );
-  await expect(coverage).toContainText(
-    'Covered unknown-size files: 0; missing unknown-size files: 1',
-  );
+  const rows = coverage.locator('.coverage-results tbody tr');
+  const covered = rows.first().locator('td[data-label="Covered"]');
+  const missing = rows.first().locator('td[data-label="Missing"]');
+  await expect(covered).toContainText('Files: 2');
+  await expect(missing).toContainText('Files: 1');
+  await expect(covered).toContainText('Known covered source bytes: 26 B');
+  await expect(missing).toContainText('Known missing source bytes: 0 B');
+  await expect(covered).toContainText('Unknown-size files: 0');
+  await expect(missing).toContainText('Unknown-size files: 1');
   await expect(coverage.getByText('Partial content coverage', { exact: true })).toHaveCount(1);
   expect(calls).toHaveLength(1);
   await page.getByRole('button', { name: 'Load more', exact: true }).click();
   await expect(coverage.getByText('Partial content coverage', { exact: true })).toHaveCount(2);
-  await expect(coverage).toContainText('Covered files: 1; missing files: 2');
-  await expect(coverage).toContainText(
-    'Covered unknown-size files: 1; missing unknown-size files: 0',
-  );
+  const laterCovered = rows.last().locator('td[data-label="Covered"]');
+  const laterMissing = rows.last().locator('td[data-label="Missing"]');
+  await expect(laterCovered).toContainText('Files: 1');
+  await expect(laterMissing).toContainText('Files: 2');
+  await expect(laterCovered).toContainText('Unknown-size files: 1');
+  await expect(laterMissing).toContainText('Unknown-size files: 0');
   await expect(coverage).toContainText('Distributed coverage is not one complete directory backup');
   await expect(coverage.getByText('Complete content coverage', { exact: true })).toHaveCount(0);
   expect(calls[0]!.searchParams.get('path')).toBe(fixture.coverageDirectory);

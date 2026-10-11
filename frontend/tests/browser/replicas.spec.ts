@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { searchFixture } from '../fixtures/api';
 import type { components } from '../../src/lib/api/generated/wire';
+import { mkdir } from 'node:fs/promises';
 
 function fixture(url: URL): components['schemas']['DirectoryReplicaPage'] {
   const snapshot = searchFixture().items[0]!.snapshot;
@@ -101,6 +102,65 @@ test('no preload; literal repeated rules, current destinations, equality and emp
   await page.getByRole('button', { name: 'Apply and compare' }).click();
   await expect(page.getByText('No files selected', { exact: true })).toBeVisible();
   expect(calls.at(-1)!.searchParams.has('cursor')).toBe(false);
+});
+
+test('compact tree rows retain literal destinations and applied drafts at approved widths', async ({
+  page,
+}) => {
+  const calls = await setup(page);
+  const literal = '雪/ space \\ ?#%/' + 'long'.repeat(40);
+  await page.route('**/api/v1/snapshots/1/directory/replicas?**', (route) => {
+    const url = new URL(route.request().url());
+    calls.push(url);
+    const value = fixture(url);
+    value.items[0]!.path = literal;
+    value.items[0]!.disk.label = '雪 literal disk ' + 'label'.repeat(25);
+    value.next_cursor = null;
+    return route.fulfill({ json: value });
+  });
+  const region = page.getByRole('region', { name: 'Exact tree copies' });
+  await region.getByRole('button', { name: 'Add allow rule' }).click();
+  await region.getByLabel('Allow pattern 1', { exact: true }).fill(' **/雪\\?.txt ');
+  expect(calls).toHaveLength(0);
+  await region.getByRole('button', { name: 'Apply and compare' }).click();
+  const table = region.locator('.tree-results');
+  await expect(table).toBeVisible();
+  await expect(table.getByRole('link', { name: literal, exact: true })).toHaveAttribute(
+    'href',
+    `/snapshots/1/directory?${new URLSearchParams({ path: literal })}`,
+  );
+  await region
+    .getByText('Applied rules: 1 allow · 0 block · page size 50', { exact: true })
+    .click();
+  await expect(region.locator('.applied-rules li')).toHaveText(' **/雪\\?.txt ');
+  await mkdir('/tmp/opencode/u12-screenshots', { recursive: true });
+  for (const width of [1440, 1024, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    const input = await region.getByLabel('Allow pattern 1', { exact: true }).boundingBox();
+    const remove = await region.getByRole('button', { name: 'Remove allow rule 1' }).boundingBox();
+    expect(input!.height).toBeGreaterThanOrEqual(32);
+    expect(remove!.height).toBeGreaterThanOrEqual(28);
+    expect(
+      await table
+        .locator('td')
+        .evaluateAll((nodes) => nodes.every((node) => node.scrollHeight <= node.clientHeight + 1)),
+    ).toBe(true);
+    await expect(table.locator('td[data-label="Selected files"]')).toHaveCSS(
+      'text-align',
+      width < 900 ? 'left' : 'right',
+    );
+    await page.screenshot({
+      path: `/tmp/opencode/u12-screenshots/tree-${width}.png`,
+      fullPage: true,
+    });
+  }
+  await region.getByRole('button', { name: 'Remove allow rule 1' }).click();
+  await expect(table).toHaveCount(0);
+  await expect(
+    region.getByText('Last applied rules: 1 allow · 0 block · page size 50', { exact: true }),
+  ).toBeVisible();
+  expect(calls).toHaveLength(1);
 });
 test('bounded copies remain reachable without automatic continuation', async ({ page }) => {
   const calls = await setup(page, undefined, 12);
