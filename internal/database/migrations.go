@@ -70,6 +70,7 @@ type migration func(context.Context, *Tx) error
 var migrations = []migration{
 	migrateInitial, migrateCompactSearchSupport, migrateDirectoryMembershipSupport,
 	migrateDirectoryEntrySupport,
+	migrateDirectoryBasenameSupport,
 }
 
 // Version 2 requires a reader that intersects trigrams rather than issuing
@@ -81,16 +82,18 @@ func migrateDirectoryMembershipSupport(context.Context, *Tx) error { return nil 
 
 func migrateDirectoryEntrySupport(context.Context, *Tx) error { return nil }
 
+func migrateDirectoryBasenameSupport(context.Context, *Tx) error { return nil }
+
 func (db *DB) migrate(ctx context.Context) error {
 	var version int
 	if err := db.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version >= 1 && version <= 3 {
+	if version >= 1 && version <= 4 {
 		// This reader-version bump changes no schema or data, so it must not
 		// reintroduce a catalog-wide validation scan on existing catalogs.
 		if err := db.TransactionContext(ctx, func(tx *Tx) error {
-			_, err := tx.ExecContext(ctx, "PRAGMA user_version=4")
+			_, err := tx.ExecContext(ctx, "PRAGMA user_version=5")
 			return err
 		}); err != nil {
 			return err

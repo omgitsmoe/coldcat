@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/omgitsmoe/coldcat/internal/base"
@@ -123,7 +124,7 @@ func (db *DB) GetDirectory(
 }
 
 func directoryEntriesQuery(
-	f base.DirectoryFilters, diskID base.DiskId, afterPath string, limit int,
+	f base.DirectoryFilters, diskID base.DiskId, afterPath string, limit int, basename bool,
 ) (string, []any) {
 	// Keep the cursor anchor for validation, plus one lookahead row.
 	branchLimit := limit + 2
@@ -137,6 +138,13 @@ func directoryEntriesQuery(
  JOIN observation o ON o.id=df.observation_id
  WHERE df.snapshot_id=? AND df.directory_path=? AND df.path>=?`
 	args := []any{f.SnapshotID, f.Path, afterPath}
+	if basename && !f.Recursive {
+		files = `SELECT o.id,o.content_id,o.path FROM directory_entry df
+ JOIN observation o ON o.id=df.observation_id
+ WHERE df.directory_id=(SELECT id FROM directory WHERE snapshot_id=? AND path=?)
+ AND df.name>=?`
+		args = []any{f.SnapshotID, f.Path, strings.TrimPrefix(afterPath, directoryPrefix(f.Path))}
+	}
 	if f.Recursive {
 		files = `SELECT id,content_id,path FROM observation
  WHERE snapshot_id=? AND path>=? AND path<?`
@@ -145,6 +153,8 @@ func directoryEntriesQuery(
 	if f.OtherReplicas == nil && f.MinOtherReplicas == nil && f.MaxOtherReplicas == nil {
 		if f.Recursive {
 			files += " ORDER BY path LIMIT ?"
+		} else if basename {
+			files += " ORDER BY df.name LIMIT ?"
 		} else {
 			files += " ORDER BY df.path LIMIT ?"
 		}
@@ -228,7 +238,8 @@ func (db *DB) ListDirectoryEntries(
 				return err
 			}
 		}
-		query, args := directoryEntriesQuery(f, result.Snapshot.DiskId, afterPath, limit)
+		query, args := directoryEntriesQuery(
+			f, result.Snapshot.DiskId, afterPath, limit, db.basenameEntries)
 		if expected != nil {
 			var valid bool
 			anchorArgs := append(append([]any{}, args...), afterPath, after.Kind)

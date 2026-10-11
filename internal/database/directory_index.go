@@ -74,20 +74,23 @@ CREATE TRIGGER immutable_membership_delete BEFORE DELETE ON directory_membership
  BEGIN SELECT RAISE(ABORT,'complete directory memberships are immutable'); END;
 `
 
-// Retain the indexed full path for ordered direct-child seeks without sorting.
+// A constant parent prefix does not affect byte ordering within a directory.
 const directoryEntrySchema = `CREATE TABLE directory_entry (
  observation_id INTEGER PRIMARY KEY REFERENCES observation(id) ON DELETE CASCADE,
  directory_id INTEGER NOT NULL REFERENCES directory(id) ON DELETE CASCADE,
- path TEXT NOT NULL
+  name TEXT NOT NULL
 );
-CREATE INDEX directory_file_parent ON directory_entry(directory_id,path,observation_id);
+CREATE INDEX directory_file_parent ON directory_entry(directory_id,name,observation_id);
 CREATE VIEW directory_file AS
- SELECT e.observation_id,d.snapshot_id,d.path AS directory_path,e.path
+  SELECT e.observation_id,d.snapshot_id,d.path AS directory_path,
+  CASE WHEN d.path='' THEN e.name ELSE d.path||'/'||e.name END AS path
  FROM directory_entry e JOIN directory d ON d.id=e.directory_id;
 CREATE TRIGGER directory_file_insert INSTEAD OF INSERT ON directory_file BEGIN
- INSERT INTO directory_entry(observation_id,directory_id,path)
+  SELECT CASE WHEN coldcat_dirname(NEW.path)!=NEW.directory_path
+  THEN RAISE(ABORT,'directory entry parent does not match path') END;
+  INSERT INTO directory_entry(observation_id,directory_id,name)
  VALUES(NEW.observation_id,(SELECT id FROM directory WHERE snapshot_id=NEW.snapshot_id
- AND path=NEW.directory_path),NEW.path);
+  AND path=NEW.directory_path),coldcat_basename(NEW.path));
 END;
 `
 

@@ -136,16 +136,24 @@ func TestDirectoryQueryIndexes(t *testing.T) {
 			"directory_parent"},
 		{`SELECT path FROM directory WHERE snapshot_id=1 AND parent_path='' AND path>'foo'
  ORDER BY path LIMIT 50`, "directory_parent"},
-		{`SELECT path FROM directory_file WHERE snapshot_id=1 AND directory_path='foo'
- ORDER BY path LIMIT 50`, "directory_file_parent"},
-		{`SELECT path FROM directory_file WHERE snapshot_id=1 AND directory_path='foo'
- AND path>'foo/a' ORDER BY path LIMIT 50`, "directory_file_parent"},
-		{`SELECT o.id,o.content_id,o.path FROM directory_file df
+		{`SELECT name FROM directory_entry WHERE directory_id=(
+ SELECT id FROM directory WHERE snapshot_id=1 AND path='foo')
+ ORDER BY name LIMIT 50`, "directory_file_parent"},
+		{`SELECT name FROM directory_entry WHERE directory_id=(
+ SELECT id FROM directory WHERE snapshot_id=1 AND path='foo')
+ AND name>'a' ORDER BY name LIMIT 50`, "directory_file_parent"},
+		{`SELECT o.id,o.content_id,o.path FROM directory_entry df
  JOIN observation o ON o.id=df.observation_id
- WHERE df.snapshot_id=1 AND df.directory_path='foo' AND df.path>='foo/a'
- ORDER BY df.path LIMIT 52`, "directory_file_parent"},
+ WHERE df.directory_id=(SELECT id FROM directory WHERE snapshot_id=1 AND path='foo')
+ AND df.name>='a' ORDER BY df.name LIMIT 52`, "directory_file_parent"},
 		{`SELECT id FROM observation WHERE snapshot_id=1 AND path>='foo/' AND path<'foo0'
  ORDER BY path LIMIT 50`, "sqlite_autoindex_observation_1"},
+		{`SELECT 1 FROM observation o
+ LEFT JOIN directory_entry e ON e.observation_id=o.id
+ LEFT JOIN directory d ON d.id=e.directory_id
+ WHERE o.snapshot_id=1 AND (e.observation_id IS NULL OR d.id IS NULL
+ OR d.snapshot_id!=o.snapshot_id OR d.path!=coldcat_dirname(o.path)
+ OR e.name!=coldcat_basename(o.path))`, "sqlite_autoindex_observation_1"},
 		{`SELECT directory_path FROM directory_content WHERE content_id=1`,
 			"directory_content_reverse"},
 		{`SELECT path FROM directory WHERE fingerprint_version=1 AND fingerprint=zeroblob(32)`,
@@ -165,6 +173,9 @@ func TestDirectoryQueryIndexes(t *testing.T) {
 			plan = append(plan, detail)
 			if strings.Contains(detail, "USE TEMP B-TREE") {
 				t.Fatalf("query requires sorting instead of indexed seek: %s: %s", test.query, detail)
+			}
+			if strings.HasPrefix(detail, "SCAN ") {
+				t.Fatalf("query scans instead of seeking: %s: %s", test.query, detail)
 			}
 		}
 		err = rows.Err()

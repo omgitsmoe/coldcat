@@ -137,15 +137,24 @@ func (db *DB) PublishImport(ctx context.Context, req PublishImportRequest) (base
 		}
 
 		var directoriesBuilt bool
+		filesComplete := `NOT EXISTS(SELECT 1 FROM observation o
+ LEFT JOIN directory_file f ON f.observation_id=o.id
+ WHERE o.snapshot_id=? AND (f.observation_id IS NULL OR f.snapshot_id!=o.snapshot_id
+ OR f.path!=o.path))`
+		if db.basenameEntries {
+			filesComplete = `NOT EXISTS(SELECT 1 FROM observation o
+ LEFT JOIN directory_entry e ON e.observation_id=o.id
+ LEFT JOIN directory d ON d.id=e.directory_id
+ WHERE o.snapshot_id=? AND (e.observation_id IS NULL OR d.id IS NULL
+ OR d.snapshot_id!=o.snapshot_id OR d.path!=coldcat_dirname(o.path)
+ OR e.name!=coldcat_basename(o.path)))`
+		}
 		if err := tx.QueryRowContext(ctx,
 			`SELECT EXISTS(SELECT 1 FROM directory_build WHERE snapshot_id=?)
  AND EXISTS(SELECT 1 FROM directory WHERE snapshot_id=? AND path='')
  AND NOT EXISTS(SELECT 1 FROM directory WHERE snapshot_id=?
  AND (fingerprint_version IS NULL OR fingerprint IS NULL))
- AND NOT EXISTS(SELECT 1 FROM observation o
- LEFT JOIN directory_file f ON f.observation_id=o.id
- WHERE o.snapshot_id=? AND (f.observation_id IS NULL OR f.snapshot_id!=o.snapshot_id
- OR f.path!=o.path))`, id, id, id, id).
+ AND `+filesComplete, id, id, id, id).
 			Scan(&directoriesBuilt); err != nil {
 			return err
 		}

@@ -162,10 +162,39 @@ DROP TABLE directory_file_old;`+directoryEntryGuards)
 				return err
 			}
 		case "view":
+			var basename bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1
+ FROM pragma_table_info('directory_entry') WHERE name='name')`).Scan(&basename); err != nil {
+				return err
+			}
+			if !basename {
+				var mismatched bool
+				if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1
+ FROM directory_entry e JOIN directory d ON d.id=e.directory_id
+ WHERE coldcat_dirname(e.path)!=d.path)`).Scan(&mismatched); err != nil {
+					return err
+				}
+				if mismatched {
+					return fmt.Errorf("directory entry parent does not match path")
+				}
+				_, err := tx.ExecContext(ctx, `DROP TRIGGER directory_file_insert;
+DROP TRIGGER immutable_entry_insert;
+DROP TRIGGER immutable_entry_update;
+DROP TRIGGER immutable_entry_delete;
+DROP VIEW directory_file;
+DROP INDEX directory_file_parent;
+ALTER TABLE directory_entry RENAME TO directory_entry_old;`+directoryEntrySchema+`
+INSERT INTO directory_entry(observation_id,directory_id,name)
+SELECT observation_id,directory_id,coldcat_basename(path) FROM directory_entry_old;
+DROP TABLE directory_entry_old;`+directoryEntryGuards)
+				if err != nil {
+					return err
+				}
+			}
 		default:
 			return fmt.Errorf("unsupported directory file object %q", kind)
 		}
-		_, err := tx.ExecContext(ctx, "PRAGMA user_version=4")
+		_, err := tx.ExecContext(ctx, "PRAGMA user_version=5")
 		return err
 	})
 	if err != nil {

@@ -13,12 +13,13 @@ import (
 )
 
 type DB struct {
-	db          *sql.DB
-	lock        *flock.Flock
-	access      sync.RWMutex
-	closeOnce   sync.Once
-	closeErr    error
-	recoveryErr error
+	db              *sql.DB
+	lock            *flock.Flock
+	access          sync.RWMutex
+	closeOnce       sync.Once
+	closeErr        error
+	recoveryErr     error
+	basenameEntries bool
 }
 
 type Tx struct {
@@ -78,6 +79,12 @@ func OpenContext(ctx context.Context, path string) (*DB, error) {
 			return nil, fmt.Errorf("check search schema: %w", err)
 		}
 		return nil, fmt.Errorf("obsolete pre-0.1 search schema: recreate the catalog and reimport inventories")
+	}
+
+	if err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1
+ FROM pragma_table_info('directory_entry') WHERE name='name')`).Scan(&result.basenameEntries); err != nil {
+		result.Close()
+		return nil, fmt.Errorf("check directory entry layout: %w", err)
 	}
 
 	if err := result.RecoverImports(ctx); err != nil {

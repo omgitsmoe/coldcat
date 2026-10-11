@@ -24,7 +24,31 @@ CREATE INDEX directory_file_parent
  ON directory_file(snapshot_id,directory_path,path,observation_id);
 `
 
+const v4DirectoryEntrySchema = `CREATE TABLE directory_entry (
+ observation_id INTEGER PRIMARY KEY REFERENCES observation(id) ON DELETE CASCADE,
+ directory_id INTEGER NOT NULL REFERENCES directory(id) ON DELETE CASCADE,
+ path TEXT NOT NULL
+);
+CREATE INDEX directory_file_parent ON directory_entry(directory_id,path,observation_id);
+CREATE VIEW directory_file AS
+ SELECT e.observation_id,d.snapshot_id,d.path AS directory_path,e.path
+ FROM directory_entry e JOIN directory d ON d.id=e.directory_id;
+CREATE TRIGGER directory_file_insert INSTEAD OF INSERT ON directory_file BEGIN
+ INSERT INTO directory_entry(observation_id,directory_id,path)
+ VALUES(NEW.observation_id,(SELECT id FROM directory WHERE snapshot_id=NEW.snapshot_id
+ AND path=NEW.directory_path),NEW.path);
+END;
+`
+
+func useV4DirectoryFiles(db *DB) error {
+	db.basenameEntries = false
+	_, err := db.db.Exec(`DROP VIEW directory_file;
+DROP TABLE directory_entry;` + v4DirectoryEntrySchema + directoryEntryGuards)
+	return err
+}
+
 func useLegacyDirectoryFiles(db *DB) error {
+	db.basenameEntries = false
 	_, err := db.db.Exec(`DROP VIEW directory_file;
 DROP TABLE directory_entry;` + legacyDirectoryFileSchema)
 	return err
@@ -61,14 +85,18 @@ VALUES(999,999,'dangling')`); err == nil {
 }
 
 func TestLegacyDirectoryOpenDoesNotRewrite(t *testing.T) {
-	for _, version := range []int{1, 2, 3} {
+	for _, version := range []int{1, 2, 3, 4} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "legacy.sqlite")
 			db, err := Open(path)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := useLegacyDirectoryFiles(db); err != nil {
+			initialize := useLegacyDirectoryFiles
+			if version == 4 {
+				initialize = useV4DirectoryFiles
+			}
+			if err := initialize(db); err != nil {
 				t.Fatal(err)
 			}
 			if version < 3 {
@@ -101,12 +129,16 @@ DROP TABLE directory_membership;` + schema)
 			}
 			defer db.Close()
 			var kind string
+			wantFileKind := "table"
+			if version == 4 {
+				wantFileKind = "view"
+			}
 			if err := db.db.QueryRow("SELECT type FROM sqlite_schema WHERE name='directory_file'").
-				Scan(&kind); err != nil || kind != "table" {
+				Scan(&kind); err != nil || kind != wantFileKind || db.basenameEntries {
 				t.Fatalf("legacy file layout rewritten: %s, %v", kind, err)
 			}
 			wantKind := "table"
-			if version == 3 {
+			if version >= 3 {
 				wantKind = "view"
 			}
 			if err := db.db.QueryRow("SELECT type FROM sqlite_schema WHERE name='directory_content'").
@@ -114,12 +146,12 @@ DROP TABLE directory_membership;` + schema)
 				t.Fatalf("legacy membership layout rewritten: %s, %v", kind, err)
 			}
 			var got int
-			if err := db.db.QueryRow("PRAGMA user_version").Scan(&got); err != nil || got != 4 {
+			if err := db.db.QueryRow("PRAGMA user_version").Scan(&got); err != nil || got != 5 {
 				t.Fatalf("reader version: %d, %v", got, err)
 			}
-			if err := db.applyMigrations(t.Context(), migrations[:3]); err == nil ||
-				!strings.Contains(err.Error(), "unsupported schema version 4") {
-				t.Fatalf("old reader accepted version 4: %v", err)
+			if err := db.applyMigrations(t.Context(), migrations[:4]); err == nil ||
+				!strings.Contains(err.Error(), "unsupported schema version 5") {
+				t.Fatalf("old reader accepted version 5: %v", err)
 			}
 			if _, err := db.db.Exec(`INSERT INTO disk(id,label,capacity) VALUES(1,'disk',0);
 INSERT INTO content(id,hash_type,hash,size) VALUES(1,'sha256',zeroblob(32),7);`); err != nil {
@@ -331,7 +363,7 @@ INSERT INTO content(id,hash_type,hash,size) VALUES(1,'sha256',zeroblob(32),7);`)
 		`UPDATE directory_membership SET occurrences=2`,
 		`DELETE FROM directory_membership`,
 		`INSERT INTO directory_content VALUES(1,'a',1,2)`,
-		`UPDATE directory_entry SET path='changed'`,
+		`UPDATE directory_entry SET name='changed'`,
 		`DELETE FROM directory_entry`,
 		`INSERT INTO directory_file VALUES(999,1,'a','a/new')`,
 	} {
