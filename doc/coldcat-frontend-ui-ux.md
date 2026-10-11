@@ -532,6 +532,17 @@ extended audits or other agents. No U10 blockers; U09 can integrate sequentially
 
 ### U11 — Directory entries and summary layout
 
+**Progress (2026-10-11):** complete. Executed plan: preserve independent summary/entry owners,
+prioritize literal source breadcrumbs, compact unfiltered recursive/unique totals with visible
+incomplete known subtotals, disclose redundancy statistics, reuse U07 replica modes and draft/
+applied status, and group narrow path-first entries with consistent view navigation. Check
+(0 errors/warnings), lint, build, API drift and 244 unit tests passed; 45 focused fixture-only
+browser tests passed, including independent loading/retry and 12-page bounded entry traversal.
+External captures at 1440/1024/768px have no document overflow or overlapping cells; deep literal
+stress-fixture table origins are 675/695/800px. Interfaces, evidence and U12/U13 constraints:
+[U11 handoff](ui-ux/u11/handoff.md). No backend/catalog changes, other agents or extended audits.
+No U11 blockers; comparison internals remain U12 and shared recovery/paging polish remains U13.
+
 **Priority:** P1  
 **Dependencies:** U02, U03, U05, U07  
 **Suggested context:** 45–80k tokens

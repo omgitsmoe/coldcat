@@ -3,6 +3,8 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { directoryBrowseURL, type DirectoryRoute } from '../../state/routes';
+  import ReplicaBounds from '../../components/ReplicaBounds.svelte';
+  import { boundsMode, boundsQuery } from '../search/filters';
   import { decimal } from '../../format/decimal';
   let {
     id,
@@ -17,60 +19,78 @@
   let min = $state(initial.min_other_replicas ?? '');
   let max = $state(initial.max_other_replicas ?? '');
   let limit = $state(String(initial.limit));
-  let error = $state('');
+  let mode = $state(
+    boundsMode(
+      initial.other_replicas ?? '',
+      initial.min_other_replicas ?? '',
+      initial.max_other_replicas ?? '',
+    ),
+  );
+  const validation = $derived.by(() => {
+    try {
+      if (!/^[1-9][0-9]*$/.test(limit)) throw new Error('Page limit must be a positive integer.');
+      const bounds = boundsQuery({ mode, exact, minimum: min, maximum: max });
+      for (const value of Object.values(bounds)) if (value !== undefined) decimal(value);
+      if (
+        bounds.min_other_replicas !== undefined &&
+        bounds.max_other_replicas !== undefined &&
+        decimal(bounds.min_other_replicas) > decimal(bounds.max_other_replicas)
+      ) {
+        throw new Error('Minimum exceeds maximum.');
+      }
+      return {
+        url: directoryBrowseURL(id, {
+          path: query.path,
+          recursive,
+          replica_metric: metric,
+          ...bounds,
+          limit: Number(limit),
+        }),
+        error: '',
+      };
+    } catch (cause) {
+      return { url: undefined, error: cause instanceof Error ? cause.message : 'Invalid filters' };
+    }
+  });
   function apply(event: globalThis.SubmitEvent) {
     event.preventDefault();
-    try {
-      if (exact !== '' && (min !== '' || max !== ''))
-        throw new Error('Exact bounds cannot combine with range bounds.');
-      for (const value of [exact, min, max]) if (value !== '') decimal(value);
-      if (min !== '' && max !== '' && decimal(min) > decimal(max))
-        throw new Error('Minimum exceeds maximum.');
-      if (!/^[1-9][0-9]*$/.test(limit)) throw new Error('Page limit must be a positive integer.');
-      const url = directoryBrowseURL(id, {
-        path: query.path,
-        recursive,
-        replica_metric: metric,
-        other_replicas: exact === '' ? undefined : exact,
-        min_other_replicas: min === '' ? undefined : min,
-        max_other_replicas: max === '' ? undefined : max,
-        limit: Number(limit),
-      });
-      error = '';
+    const url = validation.url;
+    if (url) {
       if (url === directoryBrowseURL(id, query)) resume();
       else void goto(resolve(`/snapshots/[id]/directory?${url.split('?')[1]}`, { id }));
-    } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Invalid filters';
     }
   }
 </script>
 
 <form onsubmit={apply} oninput={retire} onchange={retire}>
-  <fieldset>
-    <legend>Entry filters</legend>
-    <label><input type="checkbox" bind:checked={recursive} /> Recursive files</label>
-    <label
+  <div class="control-group">
+    <label class="check-field"
+      ><input type="checkbox" bind:checked={recursive} /> Recursive files</label
+    >
+    <label class="field"
       >Current replica metric <select bind:value={metric}
         ><option value="disks">Other disks</option><option value="locations">Other locations</option
         ></select
       ></label
     >
-    <label>Exact other replicas <input inputmode="numeric" bind:value={exact} /></label>
-    <label>Minimum other replicas <input inputmode="numeric" bind:value={min} /></label>
-    <label>Maximum other replicas <input inputmode="numeric" bind:value={max} /></label>
-    <label>Page limit <input inputmode="numeric" bind:value={limit} /></label>
-    <button>Apply filters</button>
-  </fieldset>
-  <p>
-    Bounds use the current catalog, even for a historical source. Immediate child directories stay
-    navigable under file filters.
-  </p>
-  {#if error}<p role="alert">{error}</p>{/if}
+    <ReplicaBounds
+      bind:mode
+      bind:exact
+      bind:minimum={min}
+      bind:maximum={max}
+      invalid={!!validation.error}
+    />
+    <label class="field">Page limit <input inputmode="numeric" bind:value={limit} /></label>
+    <button class="button-primary">Apply filters</button>
+  </div>
+  {#if validation.error}<p role="alert">{validation.error}</p>{/if}
 </form>
 
 <style>
-  label {
-    display: block;
-    margin-block: 0.5rem;
+  .control-group {
+    align-items: end;
+  }
+  input:not([type='checkbox']) {
+    width: 6rem;
   }
 </style>

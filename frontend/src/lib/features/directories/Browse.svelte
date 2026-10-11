@@ -22,6 +22,7 @@
   import Filters from './Filters.svelte';
   import Replicas from './Replicas.svelte';
   import Coverage from './Coverage.svelte';
+  import { directorySummary } from './filters';
   let { id, search }: { id: string; search: string } = $props();
   const connection = useConnection();
   type Detail = Result<'GET /api/v1/snapshots/{id}/directory'>;
@@ -96,8 +97,19 @@
 {#if parseError}<p role="alert">{parseError}</p>
   <pre>{search}</pre>
 {:else if query}
-  <p><a href="{resolve('/')}{routes.snapshot(id).slice(1)}">Inventory {id}</a></p>
-  <nav aria-label="Directory breadcrumbs">
+  <div class="source-context">
+    <a href="{resolve('/')}{routes.snapshot(id).slice(1)}">Inventory {id}</a>
+    {#if source}
+      <span class="badge"
+        >{source.is_current ? 'Current source inventory' : 'Historical source inventory'}</span
+      >
+      <a href="{resolve('/')}{routes.disk(source.snapshot.disk_id).slice(1)}"
+        >Disk {source.snapshot.disk_id}</a
+      >
+      <DateValue value={source.snapshot.captured_at} meaning="captured_at" />
+    {/if}
+  </div>
+  <nav class="breadcrumbs" aria-label="Directory breadcrumbs">
     <a href="{resolve('/')}{directoryBrowseURL(id, { ...query, path: '' }).slice(1)}"
       >Root{source ? ` — Disk ${source.snapshot.disk_id}` : ` — Inventory ${id}`}</a
     >
@@ -111,43 +123,54 @@
         >{/if}
     {/each}
   </nav>
-  <section aria-label="Directory summary">
-    <h2>Directory summary</h2>
+  <section class="summary panel" aria-label="Directory summary">
     <RequestFeedback
       status={detail.status}
       error={detail.status === 'failure' ? detail.error : undefined}
       resource="Directory summary"
       retry={() => void detailOwner?.reload()}
     />
-    <button onclick={() => void detailOwner?.reload()}>Reload summary</button>
+    {#if detail.status !== 'failure' && detail.status !== 'success'}<button
+        class="button-quiet button-compact summary-reload"
+        disabled={detail.status === 'loading'}
+        onclick={() => void detailOwner?.reload()}>Reload summary</button
+      >{/if}
     {#if detail.status === 'idle'}<p>
         Summary invalidated; reload to verify current redundancy.
       </p>{/if}
     {#if detail.status === 'success'}
-      <p>
-        {detail.value.is_current ? 'Current source inventory' : 'Historical source inventory'} —
-        <a href="{resolve('/')}{routes.disk(detail.value.snapshot.disk_id).slice(1)}"
-          >Disk {detail.value.snapshot.disk_id}</a
-        >
-      </p>
-      <DateValue value={detail.value.snapshot.captured_at} meaning="captured_at" />
       <Sizes item={detail.value.directory} />
-      <section aria-label="Current other-disk redundancy">
-        <h3>Current other-disk redundancy</h3>
-        <p>
-          All descendant file occurrences, against current destination inventories only; the source
-          disk is excluded. Historical snapshots do not add replicas.
-        </p>
-        <ul>
-          {#each detail.value.redundancy_histogram as bucket (bucket.other_disk_count)}<li>
-              {formatCount(bucket.other_disk_count)} other disks: {formatCount(bucket.file_count)} files
-            </li>{/each}
-        </ul>
-        {#if !detail.value.redundancy_histogram.length}<p>No descendant files.</p>{/if}
-      </section>
+      <div class="summary-footer">
+        <details class="statistics">
+          <summary>Detailed statistics</summary>
+          <p class="muted">
+            Cataloged logical bytes, not filesystem allocation or free space. Sizes include all
+            descendant files, independent of entry filters.
+          </p>
+          <DateValue value={detail.value.directory.max_known_mtime} meaning="mtime" />
+          <section aria-label="Current other-disk redundancy">
+            <h3>Current other-disk redundancy</h3>
+            <p>
+              All descendant file occurrences, against current destination inventories only; the
+              source disk is excluded. Historical snapshots do not add replicas.
+            </p>
+            <ul>
+              {#each detail.value.redundancy_histogram as bucket (bucket.other_disk_count)}<li>
+                  {formatCount(bucket.other_disk_count)} other disks: {formatCount(
+                    bucket.file_count,
+                  )} files
+                </li>{/each}
+            </ul>
+            {#if !detail.value.redundancy_histogram.length}<p>No descendant files.</p>{/if}
+          </section>
+        </details>
+        <button class="button-quiet button-compact" onclick={() => void detailOwner?.reload()}
+          >Reload summary</button
+        >
+      </div>
     {/if}
   </section>
-  <nav aria-label="Directory views">
+  <nav class="directory-views control-group" aria-label="Directory views">
     <button aria-pressed={tab === 'entries'} onclick={() => (tab = 'entries')}>Entries</button>
     <button aria-pressed={tab === 'replicas'} onclick={() => (tab = 'replicas')}
       >Exact tree copies</button
@@ -164,7 +187,14 @@
     <section aria-label="Directory entry listing">
       <h2>Entries</h2>
       <Filters {id} {query} {retire} {resume} />
-      {#if draft}<p role="status">Filters changed; apply to load entries.</p>
+      <p class="muted">{draft ? 'Last applied' : 'Applied'}: {directorySummary(query)}</p>
+      <p class="muted">
+        Replicas use current destination inventories only, even for a historical source; the source
+        disk is excluded. Immediate child directories stay navigable under file replica filters.
+      </p>
+      {#if draft}<p class="status-warning" role="status">
+          Unapplied changes — filters changed; apply to load entries.
+        </p>
       {:else}
         <RequestFeedback
           status={view.status}
@@ -179,12 +209,6 @@
         {#if view.status === 'idle'}<p>Entries invalidated; reload results.</p>{/if}
         {#if view.pages.length}
           {#if view.error}<p>Previously loaded entries; not freshly verified.</p>{/if}
-          <p>
-            {view.pages[0]!.value.is_current
-              ? 'Current source inventory'
-              : 'Historical source inventory'}. Other replica counts refer to current destination
-            inventories, not historical copies.
-          </p>
           {#if items.length}<Entries
               {items}
               {id}
@@ -216,7 +240,37 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
-  nav {
-    margin-block: 1rem;
+  .source-context {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2);
+  }
+  .breadcrumbs {
+    margin-block: var(--space-3);
+    overflow-wrap: anywhere;
+  }
+  .summary-footer {
+    display: flex;
+    align-items: start;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+  .summary-footer details {
+    flex: 1;
+    min-width: 0;
+  }
+  .statistics {
+    margin-top: var(--space-2);
+  }
+  .directory-views {
+    margin-block: var(--space-4);
+  }
+  .directory-views button {
+    border-color: transparent;
+  }
+  .directory-views button[aria-pressed='true'] {
+    border-color: var(--color-accent);
+    text-decoration: underline;
   }
 </style>

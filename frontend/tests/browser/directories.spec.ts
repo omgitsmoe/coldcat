@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import type { components } from '../../src/lib/api/generated/wire';
 import { searchFixture } from '../fixtures/api';
 import { contentFixture, locationsFixture, observationFixture } from '../fixtures/details';
+import { mkdir, writeFile } from 'node:fs/promises';
 
 function summary(path: string): components['schemas']['DirectorySummary'] {
   return {
@@ -141,18 +142,18 @@ test('historical source uses current replicas; sizes, histogram, filters, direct
 }) => {
   const calls = await mock(page);
   await page.goto('/snapshots/1/directory?path=foo');
-  await expect(page.getByRole('region', { name: 'Directory summary' })).toContainText(
-    'Historical source inventory',
-  );
+  await expect(page.locator('.source-context')).toContainText('Historical source inventory');
   await expect(page.getByRole('region', { name: 'Recursive sizes' })).toContainText(
     '9,007,199,254,740,993 B',
   );
   await expect(page.getByRole('region', { name: 'Recursive sizes' })).toContainText('4 B');
   await expect(page.getByRole('region', { name: 'Recursive sizes' })).toContainText('Unknown');
+  await page.getByText('Detailed statistics', { exact: true }).click();
   await expect(page.getByRole('region', { name: 'Current other-disk redundancy' })).toContainText(
     '2 other disks: 2 files',
   );
-  await page.getByLabel('Exact other replicas').fill('0');
+  await page.getByRole('combobox', { name: 'Other-copy matching' }).selectOption('exact');
+  await page.getByLabel('Exact other copies').fill('0');
   await page.getByRole('button', { name: 'Apply filters' }).click();
   await expect(page.getByRole('link', { name: 'foo/child', exact: true })).toBeVisible();
   expect(calls.at(-1)!.searchParams.get('other_replicas')).toBe('0');
@@ -200,7 +201,7 @@ test('ordinary content and observation links return to the same directory filter
   await page.getByRole('link', { name: 'Content 1', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Return to directory' })).toBeVisible();
   await page.getByRole('link', { name: 'Return to directory' }).click();
-  await expect(page.getByLabel('Exact other replicas')).toHaveValue('0');
+  await expect(page.getByLabel('Exact other copies')).toHaveValue('0');
   await page.getByRole('link', { name: 'Observation 3', exact: true }).click();
   await page.getByRole('link', { name: 'Return to directory' }).click();
   await expect(page.getByRole('link', { name: 'foo/child', exact: true })).toBeVisible();
@@ -236,9 +237,193 @@ test('continuation failure retains rows; stale reset never mixes pages and filte
   await expect(page.getByRole('region', { name: 'Recursive sizes' })).toBeVisible();
   await page.getByRole('button', { name: 'Reload results', exact: true }).click();
   await expect(page.getByRole('link', { name: 'foo/child', exact: true })).toBeVisible();
-  await page.getByLabel('Exact other replicas').fill('1');
+  await page.getByRole('combobox', { name: 'Other-copy matching' }).selectOption('exact');
+  await page.getByLabel('Exact other copies').fill('1');
   await expect(page.getByRole('table', { name: 'Directory entries' })).toHaveCount(0);
-  await page.getByLabel('Exact other replicas').fill('');
+  await page.getByRole('combobox', { name: 'Other-copy matching' }).selectOption('any');
   await page.getByRole('button', { name: 'Apply filters' }).click();
   await expect(page.getByRole('table', { name: 'Directory entries' })).toBeVisible();
+});
+
+test('compact unfiltered summary and full deep-path records at approved desktop widths', async ({
+  page,
+}) => {
+  const calls = await mock(page);
+  const path = 'archive/É e\u0301\\x ?#%/' + 'literal-long-segment-'.repeat(8);
+  await mkdir('/tmp/opencode/u11-screenshots', { recursive: true });
+  const measurements = [];
+  for (const width of [1440, 1024, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`/snapshots/1/directory?${new URLSearchParams({ path, other_replicas: '0' })}`);
+    const table = page.getByRole('table', { name: 'Directory entries' });
+    await expect(table).toBeVisible();
+    await expect(table.getByRole('link', { name: `${path}/child`, exact: true })).toBeVisible();
+    await expect(table).toContainText(`${path}/unknown`);
+    const sizes = page.getByRole('region', { name: 'Recursive sizes' });
+    await expect(sizes).toContainText(
+      'All descendants (unfiltered): 3 files / 2 distinct contents',
+    );
+    await expect(sizes).toContainText('Incomplete');
+    await expect(sizes).toContainText('Known file-byte subtotal');
+    await expect(sizes).toContainText('1 unknown-size files');
+    await expect(
+      page.getByRole('region', { name: 'Current other-disk redundancy' }),
+    ).not.toBeVisible();
+    await expect(page.getByLabel('Exact other copies')).toHaveValue('0');
+    const bounds = await table.boundingBox();
+    const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(documentWidth).toBe(width);
+    expect(bounds!.y).toBeLessThan(900);
+    const cells = await table
+      .locator('tbody tr')
+      .first()
+      .locator('td')
+      .evaluateAll((elements) =>
+        elements.map((element) => {
+          const rect = element.getBoundingClientRect();
+          return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right };
+        }),
+      );
+    for (let n = 1; n < cells.length; n++) {
+      if (width <= 900) expect(cells[n]!.top).toBeGreaterThanOrEqual(cells[n - 1]!.bottom);
+      else expect(cells[n]!.left).toBeGreaterThanOrEqual(cells[n - 1]!.right);
+    }
+    if (width <= 900) await expect(table.locator('.narrow-label').first()).toBeVisible();
+    expect(
+      await table
+        .locator('tbody tr')
+        .first()
+        .locator('td.numeric')
+        .first()
+        .evaluate((cell) => getComputedStyle(cell).textAlign),
+    ).toBe(width <= 900 ? 'left' : 'right');
+    await page.screenshot({
+      path: `/tmp/opencode/u11-screenshots/entries-${width}.png`,
+      fullPage: true,
+    });
+    measurements.push({ width, tableOrigin: bounds!.y, documentWidth });
+    const before = calls.length;
+    await page.getByText('Detailed statistics', { exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Current other-disk redundancy' })).toContainText(
+      '2 other disks: 2 files',
+    );
+    expect(calls).toHaveLength(before);
+  }
+  await writeFile(
+    '/tmp/opencode/u11-screenshots/measurements.json',
+    JSON.stringify(measurements, null, 2),
+  );
+});
+
+test('replica range validation retires entries without changing the independent summary', async ({
+  page,
+}) => {
+  const calls = await mock(page);
+  await page.goto('/snapshots/1/directory?path=foo&min_other_replicas=0&max_other_replicas=2');
+  await expect(page.getByLabel('Minimum other copies')).toHaveValue('0');
+  await expect(page.getByLabel('Maximum other copies')).toHaveValue('2');
+  await page.getByLabel('Minimum other copies').fill('3');
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Directory entries' })).toHaveCount(0);
+  await expect(
+    page.getByRole('region', { name: 'Directory entry listing' }).getByRole('status'),
+  ).toContainText('Unapplied changes');
+  await expect(page.getByRole('region', { name: 'Recursive sizes' })).toBeVisible();
+  await page.getByRole('button', { name: 'Apply filters' }).click();
+  expect(calls).toHaveLength(2);
+  await page.getByRole('combobox', { name: 'Other-copy matching' }).selectOption('any');
+  await page.getByRole('button', { name: 'Apply filters' }).click();
+  await expect(page.getByRole('link', { name: 'foo/child', exact: true })).toBeVisible();
+  expect(calls.at(-1)!.searchParams.has('min_other_replicas')).toBe(false);
+});
+
+test('summary loading and retry remain independent of entry loading and retry', async ({
+  page,
+}) => {
+  const calls = await mock(page);
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let attempts = 0;
+  await page.route('**/api/v1/snapshots/1/directory?**', async (route) => {
+    if (++attempts === 1) {
+      await pending;
+      return route.fulfill({
+        status: 500,
+        json: { error: { code: 'internal_error', message: 'Summary failed' } },
+      });
+    }
+    return route.fallback();
+  });
+  await page.goto('/snapshots/1/directory?path=foo');
+  await expect(page.getByRole('link', { name: 'foo/child', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Directory summary' })).toContainText('Loading');
+  await expect(page.locator('.source-context')).toContainText('Historical source inventory');
+  release();
+  const summaryRegion = page.getByRole('region', { name: 'Directory summary' });
+  await expect(summaryRegion.getByRole('alert')).toBeVisible();
+  await expect(summaryRegion.getByRole('button')).toHaveCount(1);
+  const entryCalls = calls.filter((url) => url.pathname.endsWith('/entries')).length;
+  await summaryRegion.getByRole('button', { name: 'Retry', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Recursive sizes' })).toBeVisible();
+  expect(calls.filter((url) => url.pathname.endsWith('/entries'))).toHaveLength(entryCalls);
+  const summaryCalls = attempts;
+  await page.getByRole('button', { name: 'Reload entries', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'foo/child', exact: true })).toBeVisible();
+  expect(attempts).toBe(summaryCalls);
+});
+
+test('directory traversal reaches retained-page navigation without automatic exhaustion', async ({
+  page,
+}) => {
+  const calls = await mock(page);
+  const cursors: string[] = [];
+  await page.route('**/api/v1/snapshots/1/directory/entries?**', async (route) => {
+    const url = new URL(route.request().url());
+    const n = Number(url.searchParams.get('cursor') ?? '0');
+    cursors.push(String(n));
+    const response = {
+      snapshot: { ...searchFixture().items[0]!.snapshot, id: '1', disk_id: '2' },
+      revision: '9007199254740993',
+      is_current: false,
+      replica_scope: 'current' as const,
+      filters: {
+        path: 'foo',
+        recursive: false,
+        directories_only: false,
+        replica_metric: 'disks' as const,
+        other_replicas: null,
+        min_other_replicas: null,
+        max_other_replicas: null,
+      },
+      items: [
+        {
+          kind: 'directory' as const,
+          path: `foo/child-${n}`,
+          directory: summary(`foo/child-${n}`),
+          file: null,
+        },
+      ],
+      next_cursor: n === 11 ? null : String(n + 1),
+    } satisfies components['schemas']['DirectoryPage'];
+    return route.fulfill({ json: response });
+  });
+  await page.goto('/snapshots/1/directory?path=foo&limit=1');
+  const table = page.getByRole('table', { name: 'Directory entries' });
+  await expect(table).toBeVisible();
+  expect(cursors).toHaveLength(1);
+  for (let n = 1; n < 10; n++) {
+    await page.getByRole('button', { name: 'Load more', exact: true }).click();
+    await expect(table.locator('tbody tr')).toHaveCount(n + 1);
+  }
+  for (const n of [10, 11]) {
+    await page.getByRole('button', { name: 'Next page', exact: true }).click();
+    await expect(table.getByRole('link', { name: `foo/child-${n}`, exact: true })).toBeVisible();
+  }
+  expect(cursors).toHaveLength(12);
+  await page.getByRole('button', { name: 'Previous page', exact: true }).click();
+  await expect(table.getByRole('link', { name: 'foo/child-10', exact: true })).toBeVisible();
+  expect(cursors).toHaveLength(12);
+  expect(calls.filter((url) => !url.pathname.endsWith('/entries'))).toHaveLength(1);
 });

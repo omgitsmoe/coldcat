@@ -18,16 +18,19 @@
   } = $props();
 </script>
 
-<table>
+<table class="data-table">
   <caption>Directory entries</caption>
   <thead
-    ><tr><th>Path / kind</th><th>Size</th><th>Current other replicas</th><th>Actions</th></tr
+    ><tr
+      ><th>Path / kind</th><th class="numeric">Size</th><th class="numeric"
+        >Current other replicas</th
+      ><th>Actions</th></tr
     ></thead
   >
   <tbody>
     {#each items as item (`${item.kind}:${item.path}`)}
       <tr>
-        <td>
+        <td class="path">
           {#if item.directory}
             <a
               class="literal"
@@ -38,7 +41,8 @@
           {:else}<span class="literal">{item.path}</span>
             <div>File</div>{/if}
         </td>
-        <td>
+        <td class="numeric">
+          <span class="narrow-label">Size</span>
           {#if item.directory}
             Recursive file bytes: <SizeValue
               value={item.directory.size_complete ? item.directory.known_bytes : null}
@@ -53,13 +57,14 @@
             <DateValue value={item.file.observation.mtime} meaning="mtime" />
           {/if}
         </td>
-        <td
-          >{#if item.file}{formatCount(item.file.other_disk_count)} other disks<br />{formatCount(
-              item.file.other_location_count,
-            )} other locations{:else}Navigation entry (not filtered by file replica bounds){/if}</td
+        <td class="numeric"
+          ><span class="narrow-label">Current other replicas</span>{#if item.file}{formatCount(
+              item.file.other_disk_count,
+            )} other disks<br />{formatCount(item.file.other_location_count)} other locations{:else}Navigation
+            entry (not filtered by file replica bounds){/if}</td
         >
         <td
-          >{#if item.file}
+          ><span class="narrow-label">Actions</span>{#if item.file}
             <a
               href="{resolve('/')}{contentURL(
                 item.file.observation.content_id,
@@ -83,31 +88,35 @@
 </table>
 
 <style>
-  table {
-    width: 100%;
-    border-collapse: collapse;
+  th:first-child {
+    width: 44%;
   }
-  caption,
-  th,
-  td {
-    text-align: left;
+  th:nth-child(2) {
+    width: 23%;
   }
-  th,
-  td {
-    padding: 0.5rem;
-    vertical-align: top;
-    border-bottom: 1px solid #777;
+  th:nth-child(3) {
+    width: 18%;
+  }
+  th:last-child {
+    width: 15%;
+  }
+  .narrow-label {
+    display: none;
   }
   .literal {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
-  @media (max-width: 700px) {
+  @media (max-width: 900px) {
     table,
     tbody,
     tr,
     td {
       display: block;
+    }
+    caption {
+      display: block;
+      width: 100%;
     }
     thead {
       position: absolute;
@@ -117,11 +126,23 @@
       clip-path: inset(50%);
     }
     tr {
-      border: 1px solid #777;
-      margin-block: 1rem;
+      border-bottom: 1px solid var(--color-border);
+      padding-block: var(--space-2);
     }
     td {
       border: 0;
+      height: auto;
+      min-height: 0;
+      text-align: left;
+      padding-block: var(--space-1);
+    }
+    .data-table td.numeric {
+      text-align: left;
+    }
+    .narrow-label {
+      display: block;
+      font-weight: 600;
+      color: var(--color-muted);
     }
   }
 </style>

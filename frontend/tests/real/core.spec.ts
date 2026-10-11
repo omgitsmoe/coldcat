@@ -290,7 +290,8 @@ test('real read pagination, capture order, directory boundaries, literal paths a
   await expect(page.getByRole('region', { name: 'Recursive sizes' })).toContainText('21 B');
   await expect(page.getByRole('region', { name: 'Recursive sizes' })).toContainText('7 B');
   await expect(page.getByRole('region', { name: 'Recursive sizes' })).toContainText('Unknown');
-  await page.getByLabel('Exact other replicas').fill('0');
+  await page.getByRole('combobox', { name: 'Other-copy matching' }).selectOption('exact');
+  await page.getByLabel('Exact other copies').fill('0');
   await page.getByLabel('Page limit', { exact: true }).fill('50');
   await page.getByRole('button', { name: 'Apply filters', exact: true }).click();
   await expect(entries.getByRole('link', { name: 'foo/child', exact: true })).toBeVisible();
@@ -309,9 +310,7 @@ test('real read pagination, capture order, directory boundaries, literal paths a
   await expect(entries).toContainText(`${fixture.longDirectory}/long-report.txt`);
   const oldest = catalog.snapshots[2]!;
   await page.goto(`/snapshots/${oldest.id}/directory?path=foo&recursive=true`);
-  await expect(page.getByRole('region', { name: 'Directory summary' })).toContainText(
-    'Historical source inventory',
-  );
+  await expect(page.locator('.source-context')).toContainText('Historical source inventory');
   await expect(entries.locator('tbody tr')).toHaveCount(2);
   await expect(entries.locator('tbody tr').filter({ hasText: reportPath })).toContainText(
     '2 other disks',
