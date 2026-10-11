@@ -4,7 +4,7 @@
   import type { Result } from '../../api/client';
   import { ApiError } from '../../api/errors';
   import { buildDiskPatch } from '../../api/disks';
-  import { capacityInput, formatBytes } from '../../format/decimal';
+  import { capacityBytes, CAPACITY_UNITS, type CapacityUnit } from '../../format/capacity';
   import { useConnection } from '../../state/context';
   import DiskMetadata from './DiskMetadata.svelte';
 
@@ -14,6 +14,10 @@
   let before = $state<Disk>();
   let label = $state('');
   let capacity = $state('');
+  let capacityUnit = $state<CapacityUnit>('B');
+  let capacityTouched = $state(false);
+  const formId = $props.id();
+  const capacityId = `${formId}-capacity`;
   let serial = $state('');
   let notes = $state('');
   let busy = $state(false);
@@ -41,13 +45,14 @@
       notes = initial.notes ?? '';
     }
   });
-  const preview = $derived.by(() => {
+  const conversion = $derived.by(() => {
     try {
-      return formatBytes(capacityInput(capacity));
-    } catch {
-      return '';
+      return { bytes: capacityBytes(capacity, capacityUnit), error: '' };
+    } catch (cause) {
+      return { bytes: undefined, error: (cause as Error).message };
     }
   });
+  const capacityError = $derived(capacityTouched ? conversion.error : '');
   const unbind = connection.onInvalidate(() => {
     if (ownInvalidation) return;
     verified = undefined;
@@ -82,11 +87,14 @@
       if (notes === (before.notes ?? '')) notes = disk.notes ?? '';
       let capacityChanged: boolean;
       try {
-        capacityChanged = capacityInput(capacity) !== before.capacity;
+        capacityChanged = capacityBytes(capacity, capacityUnit) !== before.capacity;
       } catch {
         capacityChanged = true;
       }
-      if (!capacityChanged) capacity = disk.capacity;
+      if (!capacityChanged && disk.capacity !== before.capacity) {
+        capacity = disk.capacity;
+        capacityUnit = 'B';
+      }
     }
     before = disk;
     verified = disk;
@@ -113,12 +121,14 @@
     if (busy || blocked || created) return;
     error = '';
     message = '';
+    capacityTouched = true;
+    if (conversion.error) return;
     let draft;
     try {
       if (label === '') throw new Error('Label must not be empty');
       draft = {
         label,
-        capacity: capacityInput(capacity),
+        capacity: capacityBytes(capacity, capacityUnit),
         serial: serial === '' ? null : serial,
         notes: notes === '' ? null : notes,
       };
@@ -224,16 +234,41 @@
   <form onsubmit={submit}>
     <fieldset disabled={busy || created}>
       <label>Label <input type="text" bind:value={label} required /></label>
-      <label
-        >Capacity in bytes <input
-          type="text"
-          inputmode="numeric"
-          bind:value={capacity}
-          required
-        /></label
-      >
-      <p>Exact decimal bytes, 0–9223372036854775807. Declared capacity is not measured usage.</p>
-      {#if preview}<p>Capacity preview: {preview}</p>{/if}
+      <div class="capacity-controls">
+        <label for={capacityId}
+          >Capacity amount
+          <input
+            id={capacityId}
+            type="text"
+            inputmode="decimal"
+            bind:value={capacity}
+            oninput={() => (capacityTouched = true)}
+            aria-invalid={capacityError ? 'true' : undefined}
+            aria-describedby={`${capacityId}-help ${capacityId}-preview${capacityError ? ` ${capacityId}-error` : ''}`}
+            required
+          />
+        </label>
+        <label
+          >Capacity unit
+          <select
+            bind:value={capacityUnit}
+            onchange={() => (capacityTouched = true)}
+            aria-describedby={`${capacityId}-help`}
+          >
+            {#each CAPACITY_UNITS as unit (unit)}<option value={unit}>{unit}</option>{/each}
+          </select>
+        </label>
+      </div>
+      <p id={`${capacityId}-help`} class="muted">
+        Changing the unit reinterprets the amount, not converts it. KB–TB use powers of 1000;
+        KiB–TiB use powers of 1024. Declared capacity is not measured usage.
+      </p>
+      <p id={`${capacityId}-preview`} aria-live="polite">
+        Exact bytes: <span class="literal">{conversion.bytes ?? '—'}</span>
+      </p>
+      {#if capacityError}
+        <p id={`${capacityId}-error`} class="status-error" role="alert">{capacityError}</p>
+      {/if}
       <label>Serial <input type="text" bind:value={serial} /></label>
       <label>Notes <textarea bind:value={notes}></textarea></label>
       <p>Empty serial or notes clears that field. Other text is preserved exactly.</p>
@@ -286,5 +321,11 @@
   }
   button {
     justify-self: start;
+  }
+  .capacity-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2);
+    max-width: 40rem;
   }
 </style>

@@ -50,6 +50,117 @@ async function setup(page: Page) {
   return { disk, writes, reads: () => reads, lists: () => lists };
 }
 
+for (const [amount, unit, bytes] of [
+  ['1.5', 'TB', '1500000000000'],
+  ['1', 'TiB', '1099511627776'],
+  ['0', 'B', '0'],
+  ['9223372036854775807', 'B', '9223372036854775807'],
+] as const) {
+  test(`create sends exact ${amount} ${unit} bytes`, async ({ page }) => {
+    const ctx = await setup(page);
+    await page.route('**/api/v1/disks', (r) => {
+      const body = r.request().postDataJSON();
+      ctx.writes.push({ method: 'POST', body });
+      Object.assign(ctx.disk, body);
+      return r.fulfill({ status: 201, json: ctx.disk });
+    });
+    await page.goto('/disks');
+    await page.getByLabel('Label', { exact: true }).fill('unit-aware disk');
+    await page.getByLabel('Capacity amount').fill(amount);
+    await page.getByLabel('Capacity unit').selectOption(unit);
+    await expect(page.getByText(`Exact bytes: ${bytes}`, { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Create disk', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Disk created' })).toBeVisible();
+    expect(ctx.writes).toEqual([
+      {
+        method: 'POST',
+        body: { label: 'unit-aware disk', capacity: bytes, serial: null, notes: null },
+      },
+    ]);
+  });
+}
+
+test('unit selector immediately reinterprets amount and validation describes the capacity field', async ({
+  page,
+}) => {
+  const ctx = await setup(page);
+  await page.route('**/api/v1/disks', (r) => {
+    ctx.writes.push({ method: r.request().method(), body: r.request().postDataJSON() });
+    return r.fulfill({
+      status: 400,
+      json: { error: { code: 'invalid_request', message: 'Unexpected invalid-capacity write' } },
+    });
+  });
+  await page.goto('/disks');
+  const amount = page.getByLabel('Capacity amount');
+  const unit = page.getByLabel('Capacity unit');
+  await page.getByLabel('Label', { exact: true }).fill('validation disk');
+  await expect(unit.locator('option')).toHaveText([
+    'B',
+    'KB',
+    'MB',
+    'GB',
+    'TB',
+    'KiB',
+    'MiB',
+    'GiB',
+    'TiB',
+  ]);
+  await amount.fill('1');
+  await unit.selectOption('TB');
+  await expect(page.getByText('Exact bytes: 1000000000000', { exact: true })).toBeVisible();
+  await unit.selectOption('TiB');
+  await expect(amount).toHaveValue('1');
+  await expect(page.getByText('Exact bytes: 1099511627776', { exact: true })).toBeVisible();
+  await expect(unit).toHaveAccessibleDescription(/Changing the unit reinterprets/);
+  await unit.selectOption('B');
+  for (const invalid of ['-1', '1e3', '1,000', '1_000', '0.5', '9223372036854775808']) {
+    await amount.fill(invalid);
+    await expect(amount).toHaveAttribute('aria-invalid', 'true');
+    await expect(amount).toHaveAccessibleDescription(/Capacity (must|exceeds)/);
+    await expect(page.getByText('Exact bytes: —', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Create disk', exact: true }).click();
+    expect(ctx.writes).toEqual([]);
+  }
+  await amount.fill('1');
+  await expect(amount).not.toHaveAttribute('aria-invalid');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('existing maximum opens losslessly in bytes and equivalent unit edits send no PATCH', async ({
+  page,
+}) => {
+  const ctx = await setup(page);
+  ctx.disk.capacity = '9223372036854775807';
+  await page.goto('/disks/1');
+  await page.getByRole('button', { name: 'Edit disk', exact: true }).click();
+  await expect(page.getByLabel('Capacity amount')).toHaveValue('9223372036854775807');
+  await expect(page.getByLabel('Capacity unit')).toHaveValue('B');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'No changes' })).toBeVisible();
+  await page.getByLabel('Capacity amount').fill('9223372.036854775807');
+  await page.getByLabel('Capacity unit').selectOption('TB');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'No changes' })).toBeVisible();
+  expect(ctx.writes).toEqual([]);
+});
+
+test('capacity controls fit approved widths with exact preview', async ({ page }, testInfo) => {
+  await setup(page);
+  await page.goto('/disks');
+  await page.getByLabel('Label', { exact: true }).fill('Archive capacity');
+  await page.getByLabel('Capacity amount').fill('1.5');
+  await page.getByLabel('Capacity unit').selectOption('TB');
+  for (const width of [1440, 1024, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.getByText('Exact bytes: 1500000000000', { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    await page.getByRole('region', { name: 'Create disk', exact: true }).screenshot({
+      path: testInfo.outputPath(`capacity-${width}.png`),
+    });
+  }
+});
+
 test('create validates exact decimal range and preserves literal text without numeric rounding', async ({
   page,
 }) => {
@@ -61,11 +172,11 @@ test('create validates exact decimal range and preserves literal text without nu
   });
   await page.goto('/disks');
   await page.getByLabel('Label', { exact: true }).fill(' <new> ');
-  await page.getByLabel('Capacity in bytes').fill('9223372036854775808');
+  await page.getByLabel('Capacity amount').fill('9223372036854775808');
   await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('signed 64-bit');
   expect(ctx.writes).toEqual([]);
-  await page.getByLabel('Capacity in bytes').fill('09007199254740993');
+  await page.getByLabel('Capacity amount').fill('09007199254740993');
   await page.getByLabel('Serial', { exact: true }).fill('  literal serial  ');
   await page.getByLabel('Notes', { exact: true }).fill('<script>literal</script>');
   await page.getByRole('button', { name: 'Create disk', exact: true }).click();
@@ -94,7 +205,7 @@ test('edit sends changed fields only, explicit null clearing, and no empty PATCH
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'No changes' })).toBeVisible();
   expect(ctx.writes).toEqual([]);
-  await page.getByLabel('Capacity in bytes').fill('9007199254740993');
+  await page.getByLabel('Capacity amount').fill('9007199254740993');
   await page.getByLabel('Serial', { exact: true }).fill('');
   await page.getByLabel('Notes', { exact: true }).fill('');
   await page.getByRole('button', { name: 'Save changes' }).click();
@@ -152,6 +263,8 @@ test('uncertain PATCH is blocked until manual reconciliation, even after readine
   await page.goto('/disks/1');
   await page.getByRole('button', { name: 'Edit disk', exact: true }).click();
   await page.getByLabel('Label', { exact: true }).fill('committed but lost response');
+  await page.getByLabel('Capacity amount').fill('1.5');
+  await page.getByLabel('Capacity unit').selectOption('TB');
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByRole('alert')).toContainText('may have succeeded');
   await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
@@ -161,6 +274,9 @@ test('uncertain PATCH is blocked until manual reconciliation, even after readine
     'committed but lost response',
   );
   await page.getByRole('button', { name: 'Reconcile disk', exact: true }).click();
+  await expect(page.getByLabel('Capacity amount')).toHaveValue('1.5');
+  await expect(page.getByLabel('Capacity unit')).toHaveValue('TB');
+  expect(ctx.writes[0]!.body.capacity).toBe('1500000000000');
   await expect(
     page.getByRole('status').filter({ hasText: 'Review refreshed metadata' }),
   ).toBeVisible();
@@ -190,7 +306,7 @@ test('uncertain creation checks paginated labels and reconciles a created disk w
   );
   await page.goto('/disks');
   await page.getByLabel('Label', { exact: true }).fill('new disk');
-  await page.getByLabel('Capacity in bytes').fill('0');
+  await page.getByLabel('Capacity amount').fill('0');
   await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('may have succeeded');
   await page.getByRole('button', { name: 'Reconcile creation', exact: true }).click();
@@ -244,17 +360,24 @@ test('context invalidation keeps drafts but requires rebase before PATCH, retain
     }
     reloads++;
     if (reloads === 2) return r.abort('failed');
-    if (reloads > 2) ctx.disk.serial = 'externally changed';
+    if (reloads > 2) {
+      ctx.disk.serial = 'externally changed';
+      ctx.disk.capacity = '9007199254740993';
+    }
     return r.fulfill({ json: ctx.disk });
   });
   await page.goto('/disks/1');
   await page.getByRole('button', { name: 'Edit disk', exact: true }).click();
   await page.getByLabel('Notes', { exact: true }).fill('retained local note');
+  await page.getByLabel('Capacity amount').fill('9223372.036854775807');
+  await page.getByLabel('Capacity unit').selectOption('TB');
   await page.getByRole('button', { name: 'Reload disk', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
   await expect(page.getByLabel('Notes', { exact: true })).toHaveValue('retained local note');
   await page.getByRole('button', { name: 'Reconcile disk', exact: true }).click();
   await expect(page.getByLabel('Serial', { exact: true })).toHaveValue('externally changed');
+  await expect(page.getByLabel('Capacity amount')).toHaveValue('9007199254740993');
+  await expect(page.getByLabel('Capacity unit')).toHaveValue('B');
   await expect(page.getByLabel('Notes', { exact: true })).toHaveValue('retained local note');
   await page.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Disk updated' })).toBeVisible();
@@ -317,7 +440,7 @@ test('uncertain unmatched creation requires complete label traversal and explici
   });
   await page.goto('/disks');
   await page.getByLabel('Label', { exact: true }).fill('missing after uncertain POST');
-  await page.getByLabel('Capacity in bytes').fill('0');
+  await page.getByLabel('Capacity amount').fill('0');
   await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('may have succeeded');
   await page.getByRole('button', { name: 'Reconcile creation', exact: true }).click();
@@ -370,7 +493,7 @@ test('failed creation reconciliation restart cannot reuse an earlier no-match ap
   await page.goto('/disks');
   await page.getByLabel('Label', { exact: true }).fill(ctx.disk.label);
   await expect(page.getByRole('status').filter({ hasText: 'Backend ready' })).toBeVisible();
-  await page.getByLabel('Capacity in bytes').fill('0');
+  await page.getByLabel('Capacity amount').fill('0');
   await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('may have succeeded');
   await page.getByRole('button', { name: 'Reconcile creation', exact: true }).click();

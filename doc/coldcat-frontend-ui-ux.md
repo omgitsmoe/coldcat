@@ -246,6 +246,16 @@ changes or expanded accessibility audit. Interfaces, screenshots, constraints an
 
 ### U04 — Exact unit-aware capacity input
 
+**Progress (2026-10-11):** complete. Executed plan: isolate exact decimal-string/BigInt
+conversion, integrate amount/unit controls with immediate exact-byte preview and associated
+validation, and preserve byte payloads, lossless edits and write recovery. All nine units ship;
+negative/exponent/separator input, fractional bytes and signed-64-bit overflow are rejected
+without rounding. Check (0 errors/warnings), lint, build, API drift check and 187 unit tests
+passed; 25 focused disk-write/inventory browser tests and two real-backend write/recovery
+tests passed with disposable fixtures. Screenshots at 1440/1024/768px show no document overflow.
+Interfaces, tests, screenshots and U05/U06 constraints: [U04 handoff](ui-ux/u04/handoff.md).
+No backend/catalog changes or extended audit. U05 is next, sequentially.
+
 **Priority:** P1  
 **Dependencies:** U02  
 **Suggested context:** 35–60k tokens

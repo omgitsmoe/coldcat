@@ -10,7 +10,7 @@ test('real disk create, conflict, metadata-only rename, precise capacity and nul
   const catalogBefore = await page.request.get(new URL('/api/v1/catalog', catalog.origin).href);
   const revision = (await catalogBefore.json()).revision;
   await page.getByLabel('Label', { exact: true }).fill('F7 browser-created disk');
-  await page.getByLabel('Capacity in bytes').fill('9007199254740993');
+  await page.getByLabel('Capacity amount').fill('9007199254740993');
   await page.getByLabel('Serial', { exact: true }).fill('write serial');
   await page.getByLabel('Notes', { exact: true }).fill('write notes');
   const postResponse = page.waitForResponse(
@@ -34,7 +34,7 @@ test('real disk create, conflict, metadata-only rename, precise capacity and nul
   await expect(page.getByRole('alert')).toContainText('Conflict');
   await expect(page.getByLabel('Label', { exact: true })).toHaveValue(other.label);
   await page.getByLabel('Label', { exact: true }).fill('F7 renamed disk');
-  await page.getByLabel('Capacity in bytes').fill('9223372036854775807');
+  await page.getByLabel('Capacity amount').fill('9223372036854775807');
   await page.getByLabel('Serial', { exact: true }).fill('');
   await page.getByLabel('Notes', { exact: true }).fill('');
   const patchResponse = page.waitForResponse((r) => r.request().method() === 'PATCH');

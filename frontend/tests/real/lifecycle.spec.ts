@@ -268,7 +268,8 @@ test('committed POST response loss reconciles the existing disk without another 
 }) => {
   await page.goto(`${catalog.origin}/disks`);
   await page.getByLabel('Label', { exact: true }).fill('Uncertain creation');
-  await page.getByLabel('Capacity in bytes').fill('9007199254740993');
+  await page.getByLabel('Capacity amount').fill('1.5');
+  await page.getByLabel('Capacity unit').selectOption('TB');
   await page.getByLabel('Notes', { exact: true }).fill('Retained outage draft');
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Fetch.enable', {
@@ -297,6 +298,8 @@ test('committed POST response loss reconciles the existing disk without another 
   await page.getByRole('button', { name: 'Create disk', exact: true }).click();
   await dropped;
   await expect(page.getByRole('alert')).toContainText('write may have succeeded');
+  await expect(page.getByLabel('Capacity amount')).toHaveValue('1.5');
+  await expect(page.getByLabel('Capacity unit')).toHaveValue('TB');
   await expect(page.getByLabel('Notes', { exact: true })).toHaveValue('Retained outage draft');
   await expect(page.getByRole('button', { name: 'Create disk', exact: true })).toBeDisabled();
   await catalog.restartBackend();
@@ -307,11 +310,16 @@ test('committed POST response loss reconciles the existing disk without another 
     page.getByText('Existing disk found. Review its metadata; no creation was retried.'),
   ).toBeVisible();
   expect(writes).toBe(1);
+  await expect(page.getByLabel('Capacity amount')).toHaveValue('1.5');
+  await expect(page.getByLabel('Capacity unit')).toHaveValue('TB');
   await expect(page.getByRole('link', { name: 'Open verified disk' })).toBeVisible();
   const disks = await (await page.request.get(`${catalog.origin}/api/v1/disks`)).json();
   expect(
     disks.items.filter((disk: { label: string }) => disk.label === 'Uncertain creation'),
   ).toHaveLength(1);
+  expect(
+    disks.items.filter((disk: { label: string }) => disk.label === 'Uncertain creation'),
+  ).toMatchObject([{ capacity: '1500000000000' }]);
   await cdp.detach();
 });
 
