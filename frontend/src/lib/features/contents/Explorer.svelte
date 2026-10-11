@@ -11,6 +11,7 @@
   import RequestFeedback from '../../components/RequestFeedback.svelte';
   import PageControls from '../../components/PageControls.svelte';
   import Filters from './Filters.svelte';
+  import { contentSummary } from './filters';
   let { search }: { search: string } = $props();
   const connection = useConnection();
   type Page = Result<'GET /api/v1/contents'>;
@@ -81,9 +82,11 @@
   <pre>{search}</pre>
 {:else if query}
   <Filters {query} {retire} {resume} />
-  {#if draft}<p role="status">Draft filters; apply to load results.</p>
+  <p class="literal muted">{draft ? 'Last applied' : 'Applied'}: {contentSummary(query)}</p>
+  {#if draft}<p role="status" class="status-warning">
+      Unapplied changes — Draft filters; apply to load results.
+    </p>
   {:else}
-    <p>Applied scope: {query.scope}; metric: Other {query.replica_metric}.</p>
     <RequestFeedback status={view.status} error={view.error} resource="Contents" {retry} />
     {#if view.status !== 'stale'}<button disabled={paging.busy} onclick={resume}
         >Reload results</button
@@ -94,7 +97,7 @@
       </p>{/if}
     {#if view.status === 'success' && !items.length}<p>No matching distinct contents.</p>{/if}
   {/if}
-  <table>
+  <table class="data-table">
     <caption>Distinct content identities — {query.scope} membership</caption>
     <thead
       ><tr
@@ -110,9 +113,12 @@
             ><a href="{resolve('/')}{routes.content(item.id).slice(1)}">Content {item.id}</a>
             <div class="literal">{item.hash.algorithm}: {item.hash.hex}</div></td
           >
-          <td><SizeValue value={item.size} /></td>
-          <td
-            ><div>{formatCount(item.current_disk_count)} current disks</div>
+          <td class="numeric"
+            ><span class="record-label">Size</span><SizeValue value={item.size} /></td
+          >
+          <td class="numeric"
+            ><span class="record-label">Current catalog copies</span>
+            <div>{formatCount(item.current_disk_count)} current disks</div>
             <div>{formatCount(item.current_location_count)} current locations</div>
             <strong
               >{formatCount(
@@ -124,8 +130,9 @@
               )} other {query.replica_metric}</strong
             ></td
           >
-          <td
-            ><div>{formatCount(item.disk_count)} {item.scope} distinct disks</div>
+          <td class="numeric"
+            ><span class="record-label">Scoped history / observations</span>
+            <div>{formatCount(item.disk_count)} {item.scope} distinct disks</div>
             <div>{formatCount(item.location_count)} {item.scope} distinct disk/path locations</div>
             <div>
               {formatCount(item.observation_count)} observations across all complete inventories
@@ -151,27 +158,19 @@
 {/if}
 
 <style>
-  table {
-    width: 100%;
-    border-collapse: collapse;
+  th:first-child {
+    width: 40%;
   }
-  caption,
-  th,
-  td {
-    text-align: left;
-  }
-  th,
-  td {
-    padding: 0.5rem;
-    vertical-align: top;
-    border-bottom: 1px solid #777;
+  .record-label {
+    display: none;
   }
   .literal {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
-  @media (max-width: 700px) {
+  @media (max-width: 900px) {
     table,
+    caption,
     tbody,
     tr,
     td {
@@ -185,11 +184,20 @@
       clip-path: inset(50%);
     }
     tr {
-      border: 1px solid #777;
-      margin-block: 1rem;
+      border-bottom: 1px solid var(--color-border);
     }
     td {
       border: 0;
+      height: auto;
+      text-align: left;
+    }
+    table.data-table td.numeric {
+      text-align: left;
+    }
+    .record-label {
+      display: block;
+      font-weight: 600;
+      color: var(--color-muted);
     }
   }
 </style>

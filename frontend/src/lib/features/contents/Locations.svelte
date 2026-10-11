@@ -14,7 +14,7 @@
   } = $props();
 </script>
 
-<table>
+<table class="data-table">
   <caption>Observation locations — inventory history is not a count of current copies</caption>
   <thead><tr><th>Path</th><th>Disk / inventory</th><th>Size / dates</th><th>Actions</th></tr></thead
   >
@@ -23,24 +23,25 @@
       <tr aria-current={context.observation === item.observation.id ? 'true' : undefined}>
         <td
           ><div class="literal">{item.observation.path}</div>
-          <div>{item.is_current ? 'Current' : 'Historical'}</div>
+          <span class="badge">{item.is_current ? 'Current' : 'Historical'}</span>
           {#if context.observation === item.observation.id}<strong>Selected</strong>{/if}
         </td>
         <td
-          ><a href="{resolve('/')}{routes.disk(item.disk.id, context).slice(1)}"
-            >{item.disk.label}</a
+          ><span class="record-label">Disk / inventory</span><a
+            href="{resolve('/')}{routes.disk(item.disk.id, context).slice(1)}">{item.disk.label}</a
           >
           <br /><a href="{resolve('/')}{routes.snapshot(item.snapshot.id, context).slice(1)}"
             >Inventory {item.snapshot.id}</a
           ></td
         >
         <td
-          ><SizeValue value={item.size} />
+          ><span class="record-label">Size / dates</span><SizeValue value={item.size} />
           <DateValue value={item.snapshot.captured_at} meaning="captured_at" />
           <DateValue value={item.observation.mtime} meaning="mtime" /></td
         >
         <td
-          ><a href="{resolve('/')}{routes.observation(item.observation.id, context).slice(1)}"
+          ><span class="record-label">Actions</span><a
+            href="{resolve('/')}{routes.observation(item.observation.id, context).slice(1)}"
             >Observation {item.observation.id}</a
           >
           <br /><a
@@ -55,20 +56,17 @@
 </table>
 
 <style>
-  table {
-    width: 100%;
-    border-collapse: collapse;
+  th:first-child {
+    width: 42%;
   }
-  caption,
-  th,
-  td {
-    text-align: left;
+  th:nth-child(2) {
+    width: 18%;
   }
-  th,
-  td {
-    padding: 0.5rem;
-    vertical-align: top;
-    border-bottom: 1px solid #777;
+  th:nth-child(3) {
+    width: 25%;
+  }
+  .record-label {
+    display: none;
   }
   .literal {
     white-space: pre-wrap;
@@ -78,8 +76,9 @@
     outline: 2px solid currentColor;
     outline-offset: -2px;
   }
-  @media (max-width: 700px) {
+  @media (max-width: 900px) {
     table,
+    caption,
     tbody,
     tr,
     td {
@@ -93,11 +92,16 @@
       clip-path: inset(50%);
     }
     tr {
-      border: 1px solid #777;
-      margin-block: 1rem;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .record-label {
+      display: block;
+      font-weight: 600;
+      color: var(--color-muted);
     }
     td {
       border: 0;
+      height: auto;
     }
   }
 </style>

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { contentFixture } from '../fixtures/details';
+import { mkdir } from 'node:fs/promises';
 
 async function ready(page: Page) {
   await page.route('**/healthz', (r) => r.fulfill({ json: { status: 'ready' } }));
@@ -67,20 +68,28 @@ test('membership counts stay catalog-wide; history-only zero, huge, null and kno
   await expect(page.getByText(/Counts are catalog-wide/)).toBeVisible();
   await expect(rows.first().getByRole('link')).toHaveAttribute('href', '/contents/1');
   expect(calls).toHaveLength(1);
-  await page.getByLabel('Exact other replicas', { exact: true }).fill('0');
+  await page
+    .getByRole('combobox', { name: 'Other-copy matching', exact: true })
+    .selectOption('exact');
+  await page.getByLabel('Exact other copies', { exact: true }).fill('0');
   await expect(rows).toHaveCount(0);
   await page.getByRole('button', { name: 'Apply filters', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('current scope');
   expect(calls).toHaveLength(1);
   await page.getByRole('button', { name: 'Zero other disks', exact: true }).click();
-  await expect(page.getByLabel('Exact other replicas', { exact: true })).toHaveValue('0');
+  await expect(page.getByLabel('Exact other copies', { exact: true })).toHaveValue('0');
   await page.getByRole('button', { name: 'Apply filters', exact: true }).click();
   await expect(rows).toHaveCount(2);
   expect(calls.at(-1)!.searchParams.get('other_replicas')).toBe('0');
   expect(calls.at(-1)!.searchParams.get('scope')).toBe('current');
-  await page.getByLabel('Minimum other replicas', { exact: true }).fill('1');
+  await page
+    .getByRole('combobox', { name: 'Other-copy matching', exact: true })
+    .selectOption('range');
+  await page.getByLabel('Minimum other copies', { exact: true }).fill('2');
+  await page.getByLabel('Maximum other copies', { exact: true }).fill('1');
   await page.getByRole('button', { name: 'Apply filters', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Exact bounds');
+  await expect(page.getByRole('alert')).toContainText('Minimum exceeds maximum');
+  expect(calls).toHaveLength(2);
 });
 
 test('bounded later pages, retained failure retry and stale restart', async ({ page }) => {
@@ -134,6 +143,7 @@ test('draft changes cancel delayed pages and invalid bookmarked combinations nev
     await r.fulfill({ json: result() }).catch(() => {});
   });
   await page.goto('/contents');
+  await page.getByText('Advanced filters (0)', { exact: true }).click();
   await page.getByLabel('Disk ID', { exact: true }).fill('2');
   release();
   await expect(page.getByText(/Draft filters/)).toBeVisible();
@@ -163,11 +173,15 @@ test('obsolete continuation cannot append after a locations/range filter replace
   await expect(page.locator('tbody tr')).toHaveCount(1);
   await page.getByRole('button', { name: 'Load more', exact: true }).click();
   await expect.poll(() => pending !== undefined).toBe(true);
+  await page.getByText('Advanced filters (0)', { exact: true }).click();
   await page
     .getByRole('combobox', { name: 'Current replica metric', exact: true })
     .selectOption('locations');
-  await page.getByLabel('Minimum other replicas', { exact: true }).fill('1');
-  await page.getByLabel('Maximum other replicas', { exact: true }).fill('2');
+  await page
+    .getByRole('combobox', { name: 'Other-copy matching', exact: true })
+    .selectOption('range');
+  await page.getByLabel('Minimum other copies', { exact: true }).fill('1');
+  await page.getByLabel('Maximum other copies', { exact: true }).fill('2');
   await page.getByRole('button', { name: 'Apply filters', exact: true }).click();
   await expect(page.locator('tbody tr a')).toHaveText('Content 9');
   await pending!.fulfill({ json: result('2') }).catch(() => {});
@@ -176,4 +190,79 @@ test('obsolete continuation cannot append after a locations/range filter replace
   expect(calls.at(-1)!.searchParams.get('min_other_replicas')).toBe('1');
   expect(calls.at(-1)!.searchParams.get('max_other_replicas')).toBe('2');
   expect(calls.at(-1)!.searchParams.has('cursor')).toBe(false);
+});
+
+test('bookmarked root and zero stay visible; closed summary and deliberate Any preserve history', async ({
+  page,
+}) => {
+  await ready(page);
+  const calls: URL[] = [];
+  await page.route('**/api/v1/contents?**', (r) => {
+    const url = new URL(r.request().url());
+    calls.push(url);
+    return r.fulfill({ json: result('1', null, url.searchParams.get('scope')!) });
+  });
+  await page.goto('/contents?disk_id=1&directory=&other_replicas=0');
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await expect(page.getByLabel('Exact other copies', { exact: true })).toHaveValue('0');
+  await expect(page.getByLabel('Directory', { exact: true })).toHaveValue('');
+  await page.getByText('Advanced filters (3)', { exact: true }).click();
+  await expect(
+    page.getByText(/Applied: Current membership · Disk 1 · Directory: root/),
+  ).toBeVisible();
+  await page.getByRole('combobox', { name: 'Scope', exact: true }).selectOption('history');
+  await expect(page.locator('tbody tr')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toContainText('current scope');
+  await expect(page.getByText(/Last applied: Current membership/)).toBeVisible();
+  expect(calls).toHaveLength(1);
+  await page.getByText('Advanced filters (3)', { exact: true }).click();
+  await expect(page.getByLabel('Exact other copies', { exact: true })).toHaveValue('0');
+  await page
+    .getByRole('combobox', { name: 'Other-copy matching', exact: true })
+    .selectOption('any');
+  await page.getByRole('button', { name: 'Apply filters', exact: true }).click();
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  expect(calls.at(-1)!.searchParams.has('other_replicas')).toBe(false);
+  expect(calls.at(-1)!.searchParams.get('scope')).toBe('history');
+});
+
+test('content workspace is primary and hash input fits desktop widths', async ({ page }) => {
+  await ready(page);
+  await page.route('**/api/v1/contents?**', (r) => r.fulfill({ json: result() }));
+  await mkdir('/tmp/opencode/u10-screenshots', { recursive: true });
+  for (const width of [1440, 1024, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/contents');
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+    const table = await page.locator('table').boundingBox();
+    const lookup = await page.getByRole('region', { name: 'Hash lookup' }).boundingBox();
+    expect(table!.y).toBeLessThan(lookup!.y);
+    const digest = page.getByLabel('Digest (hex)', { exact: true });
+    expect((await digest.boundingBox())!.width).toBeGreaterThan(600);
+    expect(await digest.evaluate((el) => getComputedStyle(el).fontFamily)).toContain('monospace');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    await expect
+      .poll(() =>
+        page
+          .locator('tbody tr')
+          .first()
+          .evaluate((row, width) => {
+            const cells = Array.from(row.querySelectorAll('td')).map((cell) =>
+              cell.getBoundingClientRect(),
+            );
+            return cells.every(
+              (cell, index) =>
+                !index ||
+                (width > 900
+                  ? cell.x >= cells[index - 1]!.right
+                  : cell.y >= cells[index - 1]!.bottom),
+            );
+          }, width),
+      )
+      .toBe(true);
+    await page.screenshot({
+      path: `/tmp/opencode/u10-screenshots/browse-${width}.png`,
+      fullPage: true,
+    });
+  }
 });

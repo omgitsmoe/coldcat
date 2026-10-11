@@ -3,6 +3,9 @@
   import { goto } from '$app/navigation';
   import { resolve } from '$app/paths';
   import { contentsURL, type ContentsRoute } from '../../state/routes';
+  import ReplicaBounds from '../../components/ReplicaBounds.svelte';
+  import { boundsMode, boundsQuery } from '../search/filters';
+  import { contentFilterCount } from './filters';
   let {
     query,
     retire,
@@ -21,13 +24,39 @@
   let exact = $state(initial.other_replicas ?? '');
   let min = $state(initial.min_other_replicas ?? '');
   let max = $state(initial.max_other_replicas ?? '');
+  let mode = $state(
+    boundsMode(
+      initial.other_replicas ?? '',
+      initial.min_other_replicas ?? '',
+      initial.max_other_replicas ?? '',
+    ),
+  );
+  let advanced = $state(contentFilterCount(initial) > 0);
   let limit = $state(String(initial.limit));
-  let error = $state('');
+  const validation = $derived.by(() => {
+    try {
+      return { url: draftURL(), error: '' };
+    } catch (cause) {
+      return { url: undefined, error: cause instanceof Error ? cause.message : 'Invalid filters' };
+    }
+  });
+  function draftURL() {
+    if (!/^[1-9][0-9]*$/.test(limit)) throw new Error('Page limit must be a positive integer.');
+    return contentsURL({
+      scope,
+      disk_id: disk || undefined,
+      directory: useDirectory ? directory : undefined,
+      replica_metric: metric,
+      ...boundsQuery({ mode, exact, minimum: min, maximum: max }),
+      limit: Number(limit),
+    });
+  }
   function preset(value: 'zero' | 'some' | 'clear') {
     retire();
     exact = value === 'zero' ? '0' : '';
     min = value === 'some' ? '1' : '';
     max = '';
+    mode = value === 'zero' ? 'exact' : value === 'some' ? 'range' : 'any';
     if (value !== 'clear') {
       scope = 'current';
       metric = 'disks';
@@ -35,68 +64,99 @@
   }
   function apply(event: globalThis.SubmitEvent) {
     event.preventDefault();
-    try {
-      if (!/^[1-9][0-9]*$/.test(limit)) throw new Error('Page limit must be a positive integer.');
-      const url = contentsURL({
-        scope,
-        disk_id: disk || undefined,
-        directory: useDirectory ? directory : undefined,
-        replica_metric: metric,
-        other_replicas: exact === '' ? undefined : exact,
-        min_other_replicas: min === '' ? undefined : min,
-        max_other_replicas: max === '' ? undefined : max,
-        limit: Number(limit),
-      });
-      error = '';
+    const url = validation.url;
+    if (url) {
       if (url === contentsURL(query)) resume();
       else void goto(resolve(`/contents?${url.split('?')[1]}`));
-    } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Invalid filters';
     }
   }
 </script>
 
 <form onsubmit={apply} oninput={retire} onchange={retire}>
-  <fieldset>
-    <legend>Content filters</legend>
-    <label
+  <div class="control-group">
+    <label class="field"
       >Scope <select bind:value={scope}
         ><option value="current">Current</option><option value="history">History</option></select
       ></label
     >
-    <label>Disk ID <input inputmode="numeric" bind:value={disk} /></label>
-    <label><input type="checkbox" bind:checked={useDirectory} /> Filter directory membership</label>
-    <label>Directory <input bind:value={directory} disabled={!useDirectory} /></label>
-    <p>
-      Directory requires a disk ID. Empty directory means root; paths are literal and
-      case-sensitive.
-    </p>
-    <label
-      >Current replica metric <select bind:value={metric}
-        ><option value="disks">Other disks</option><option value="locations">Other locations</option
-        ></select
-      ></label
+    <label class="field">Page limit <input inputmode="numeric" bind:value={limit} /></label>
+    <button class="button-primary">Apply filters</button>
+  </div>
+  <details bind:open={advanced}>
+    <summary
+      >Advanced filters ({[
+        disk !== '',
+        useDirectory,
+        metric === 'locations',
+        mode !== 'any',
+      ].filter(Boolean).length})</summary
     >
-    <label>Exact other replicas <input inputmode="numeric" bind:value={exact} /></label>
-    <label>Minimum other replicas <input inputmode="numeric" bind:value={min} /></label>
-    <label>Maximum other replicas <input inputmode="numeric" bind:value={max} /></label>
-    <p>
-      Exact and range bounds are mutually exclusive. Bounds require current scope; switching to
-      history does not clear them.
-    </p>
-    <button type="button" onclick={() => preset('zero')}>Zero other disks</button>
-    <button type="button" onclick={() => preset('some')}>At least one other disk</button>
-    <button type="button" onclick={() => preset('clear')}>Clear bounds</button>
-    <p>Presets update the visible draft values. Apply to request results.</p>
-    <label>Page limit <input inputmode="numeric" bind:value={limit} /></label>
-    <button>Apply filters</button>
-  </fieldset>
-  {#if error}<p role="alert">{error}</p>{/if}
+    <div class="advanced">
+      <fieldset>
+        <legend>Membership</legend>
+        <label class="field">Disk ID <input inputmode="numeric" bind:value={disk} /></label>
+        <label class="check-field"
+          ><input type="checkbox" bind:checked={useDirectory} /> Filter directory membership</label
+        >
+        <label class="field"
+          >Directory <input
+            class="literal"
+            bind:value={directory}
+            disabled={!useDirectory}
+          /></label
+        >
+        <p>
+          Directory requires a disk ID. Empty directory means root; paths are literal and
+          case-sensitive.
+        </p>
+      </fieldset>
+      <fieldset>
+        <legend>Current redundancy</legend>
+        <label class="field"
+          >Current replica metric <select bind:value={metric}
+            ><option value="disks">Other disks</option><option value="locations"
+              >Other locations</option
+            ></select
+          ></label
+        >
+        <ReplicaBounds
+          bind:mode
+          bind:exact
+          bind:minimum={min}
+          bind:maximum={max}
+          invalid={!!validation.error}
+        />
+        <p>
+          Exact and range bounds are mutually exclusive. Bounds require current scope; switching to
+          history does not clear them.
+        </p>
+        <button type="button" onclick={() => preset('zero')}>Zero other disks</button>
+        <button type="button" onclick={() => preset('some')}>At least one other disk</button>
+        <button type="button" onclick={() => preset('clear')}>Clear bounds</button>
+        <p>Presets update the visible draft values. Apply to request results.</p>
+      </fieldset>
+    </div>
+  </details>
+  {#if validation.error}<p role="alert">{validation.error}</p>{/if}
 </form>
 
 <style>
-  label {
-    display: block;
-    margin-block: 0.5rem;
+  form {
+    display: grid;
+    gap: var(--space-3);
+  }
+  .advanced {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+  }
+  .control-group input {
+    width: 6rem;
+  }
+  @media (max-width: 900px) {
+    .advanced {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

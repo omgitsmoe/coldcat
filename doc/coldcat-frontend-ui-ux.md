@@ -492,6 +492,17 @@ extended audits or other packages. No U08 blockers remain.
 
 ### U10 — Contents, locations, and observation details
 
+**Progress (2026-10-11):** complete before U09 integration. Executed plan: preserve request and
+return-context ownership, prioritize the distinct-content workspace with secondary hash lookup,
+reuse U07 replica modes and advanced/draft/applied patterns, group identity/current/history
+metrics, and compact literal locations and observation context. Check (0 errors/warnings), lint,
+build, API drift and 241 unit tests passed; 46 focused fixture-only browser tests passed.
+Nine external captures at 1440/1024/768px have no document overflow or overlapping table cells.
+History locations begin at 559/559/699px versus U01's approximately 1066/1066/1090px; full identity
+and historical-record semantics remain visible. Interfaces, evidence, limitations and especially
+U09 membership-picker integration: [U10 handoff](ui-ux/u10/handoff.md). No backend/catalog changes,
+extended audits or other agents. No U10 blockers; U09 can integrate sequentially.
+
 **Priority:** P1  
 **Dependencies:** U02, U03, U05; U09 integration afterward  
 **Suggested context:** 50–85k tokens

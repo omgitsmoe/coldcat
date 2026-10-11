@@ -46,6 +46,10 @@
 </script>
 
 <h1>Observation {id}</h1>
+<p class="muted">
+  One file location recorded in one inventory, not a distinct content identity or a current-copy
+  count.
+</p>
 {#if parseError}<p role="alert">{parseError}</p>
   <pre>{search}</pre>
 {:else if context}
@@ -68,56 +72,60 @@
     </p>{/if}
   {#if item}
     {#if view.status !== 'success'}<p>Previously loaded observation; not freshly verified.</p>{/if}
-    <h2>Disk-relative path</h2>
-    <div class="literal">{item.observation.path}</div>
-    <CopyButton text={item.observation.path} label="Copy path" />
-    <dl>
-      <dt>Content</dt>
-      <dd>
-        <a
-          href="{resolve('/')}{contentURL(
-            item.content.id,
-            { scope: 'current' },
-            { ...context, observation: context.observation ?? id },
-          ).slice(1)}">Content {item.content.id}</a
-        >
-      </dd>
-      <dt>Algorithm</dt>
-      <dd>{item.content.hash.algorithm}</dd>
-      <dt>Digest</dt>
-      <dd>
-        <code class="literal">{item.content.hash.hex}</code><CopyButton
-          text={item.content.hash.hex}
-          label="Copy digest"
-        />
-      </dd>
-      <dt>Size</dt>
-      <dd><SizeValue value={item.content.size} /></dd>
-      <dt>Disk</dt>
-      <dd>
-        <a href="{resolve('/')}{routes.disk(item.disk.id, context).slice(1)}"
-          >Disk {item.disk.label}</a
-        >
-      </dd>
-      <dt>Inventory</dt>
-      <dd>
-        <a href="{resolve('/')}{routes.snapshot(item.snapshot.id, context).slice(1)}"
-          >Inventory {item.snapshot.id}</a
-        >
-      </dd>
-      <dt>Other current locations</dt>
-      <dd>{formatCount(item.other_location_count)}</dd>
-      <dt>Other current disks</dt>
-      <dd>{formatCount(item.other_disk_count)}</dd>
-    </dl>
-    <p>
+    <section class="panel" aria-labelledby="observation-location">
+      <h2 id="observation-location">Disk-relative path</h2>
+      <div class="literal">{item.observation.path}</div>
+      <CopyButton text={item.observation.path} label="Copy path" />
+      <dl class="context-grid">
+        <dt>Content</dt>
+        <dd>
+          <a
+            href="{resolve('/')}{contentURL(
+              item.content.id,
+              { scope: 'current' },
+              { ...context, observation: context.observation ?? id },
+            ).slice(1)}">Content {item.content.id}</a
+          >
+        </dd>
+        <dt>Algorithm</dt>
+        <dd>{item.content.hash.algorithm}</dd>
+        <dt>Digest</dt>
+        <dd>
+          <code class="literal">{item.content.hash.hex}</code><CopyButton
+            text={item.content.hash.hex}
+            label="Copy digest"
+          />
+        </dd>
+        <dt>Size</dt>
+        <dd><SizeValue value={item.content.size} /></dd>
+        <dt>Disk</dt>
+        <dd>
+          <a href="{resolve('/')}{routes.disk(item.disk.id, context).slice(1)}"
+            >Disk {item.disk.label}</a
+          >
+        </dd>
+        <dt>Inventory</dt>
+        <dd>
+          <a href="{resolve('/')}{routes.snapshot(item.snapshot.id, context).slice(1)}"
+            >Inventory {item.snapshot.id}</a
+          >
+        </dd>
+        <dt>Other current locations</dt>
+        <dd>{formatCount(item.other_location_count)}</dd>
+        <dt>Other current disks</dt>
+        <dd>{formatCount(item.other_disk_count)}</dd>
+      </dl>
+    </section>
+    <p class="muted">
       Other counts exclude this observation's disk/path or disk only when currently present for this
       content. Historical-only content has zero current copies.
     </p>
     <h2>Dates</h2>
-    <DateValue value={item.observation.mtime} meaning="mtime" />
-    <DateValue value={item.snapshot.captured_at} meaning="captured_at" />
-    <DateValue value={item.snapshot.imported_at} meaning="imported_at" />
+    <div class="control-group">
+      <DateValue value={item.observation.mtime} meaning="mtime" />
+      <DateValue value={item.snapshot.captured_at} meaning="captured_at" />
+      <DateValue value={item.snapshot.imported_at} meaning="imported_at" />
+    </div>
     <p>Capture dates describe inventory age, not when an offline disk was last checked.</p>
     <a
       href="{resolve('/')}{directoryBrowseURL(item.snapshot.id, {
@@ -136,6 +144,16 @@
     font-weight: bold;
   }
   dd {
-    margin: 0 0 0.75rem;
+    margin: 0;
+  }
+  .context-grid {
+    display: grid;
+    grid-template-columns: auto 1fr auto 1fr;
+    gap: var(--space-2) var(--space-4);
+  }
+  @media (max-width: 900px) {
+    .context-grid {
+      grid-template-columns: auto 1fr;
+    }
   }
 </style>

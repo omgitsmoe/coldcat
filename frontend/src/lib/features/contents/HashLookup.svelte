@@ -47,52 +47,62 @@
   );
 </script>
 
-<h2>Hash lookup</h2>
-<p>
-  Look up an explicit algorithm and digest across all complete inventories. Different algorithms do
-  not establish content equality.
-</p>
-<form
-  onsubmit={(event) => {
-    event.preventDefault();
-    submit();
-  }}
->
-  <label for="hash-algorithm">Algorithm</label><select
-    id="hash-algorithm"
-    bind:value={algorithm}
-    onchange={edited}
-  >
-    {#each algorithms as item (item)}<option value={item}>{item}</option>{/each}
-  </select>
-  <label for="hash-digest">Digest (hex)</label><input
-    id="hash-digest"
-    bind:value={digest}
-    oninput={edited}
-    autocomplete="off"
-    spellcheck="false"
-  />
-  <button>Look up content</button>
-</form>
-{#if issue}<p role="alert">{issue}</p>{/if}
-{#if missing}<p role="status">No content found for this algorithm and digest.</p>
-{:else}<RequestFeedback
-    status={view.status}
-    error={view.status === 'failure' ? view.error : undefined}
-    resource="Content"
-    retry={submit}
-  />{/if}
-{#if view.status === 'success'}<p role="status">
-    Known content: {view.value.hash.algorithm} / {view.value.hash.hex}
+<section class="panel" aria-labelledby="hash-lookup">
+  <h2 id="hash-lookup">Hash lookup</h2>
+  <p>
+    Look up an explicit algorithm and digest across all complete inventories. Different algorithms
+    do not establish content equality.
   </p>
-  <a href="{resolve('/')}{contentURL(view.value.id, { scope: 'current' }).slice(1)}"
-    >Open content {view.value.id}</a
-  >{/if}
+  <form
+    class="form-body"
+    onsubmit={(event) => {
+      event.preventDefault();
+      submit();
+    }}
+  >
+    <label for="hash-algorithm">Algorithm</label><select
+      id="hash-algorithm"
+      bind:value={algorithm}
+      onchange={edited}
+    >
+      {#each algorithms as item (item)}<option value={item}>{item}</option>{/each}
+    </select>
+    <label for="hash-digest">Digest (hex)</label><input
+      class="literal"
+      id="hash-digest"
+      bind:value={digest}
+      oninput={edited}
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <button>Look up content</button>
+  </form>
+  {#if issue}<p role="alert">{issue}</p>{/if}
+  {#if missing}<p role="status">No content found for this algorithm and digest.</p>
+  {:else}<RequestFeedback
+      status={view.status}
+      error={view.status === 'failure' ? view.error : undefined}
+      resource="Content"
+      retry={submit}
+    />{/if}
+  {#if view.status === 'success'}<p role="status">
+      Known content: {view.value.hash.algorithm} / {view.value.hash.hex}
+    </p>
+    <a href="{resolve('/')}{contentURL(view.value.id, { scope: 'current' }).slice(1)}"
+      >Open content {view.value.id}</a
+    >{/if}
+</section>
 
 <style>
-  label {
-    display: block;
-    margin-block: 0.75rem;
+  section {
+    margin-top: var(--space-6);
+  }
+  form {
+    display: grid;
+    gap: var(--space-2);
+  }
+  form button {
+    justify-self: start;
   }
   input {
     display: block;

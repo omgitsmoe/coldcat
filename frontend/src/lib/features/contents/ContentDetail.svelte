@@ -81,25 +81,27 @@
 </script>
 
 <h1>Content {id}</h1>
-<a href={resolve('/contents')}>Hash lookup</a>
 {#if parseError}<p role="alert">{parseError}</p>
   <pre>{search}</pre>
 {:else if route}
-  {#if route.context.returnTo}<p>
-      <a href="{resolve('/')}{route.context.returnTo.slice(1)}"
-        >{route.context.returnTo.startsWith('/snapshots/')
-          ? 'Return to directory'
-          : 'Return to search'}</a
-      >
-    </p>{/if}
-  {#if route.context.observation}<p>
-      <a
-        href="{resolve('/')}{routes.observation(route.context.observation, route.context).slice(1)}"
-        >Selected observation {route.context.observation}</a
-      >
-      — selection is independent of the location scope and loaded pages.
-    </p>{/if}
-  <section aria-labelledby="content-identity">
+  <div class="context-links actions">
+    <a href={resolve('/contents')}>Browse contents / Hash lookup</a>
+    {#if route.context.returnTo}<p>
+        <a href="{resolve('/')}{route.context.returnTo.slice(1)}"
+          >{route.context.returnTo.startsWith('/snapshots/')
+            ? 'Return to directory'
+            : 'Return to search'}</a
+        >
+      </p>{/if}
+    {#if route.context.observation}<p>
+        <a
+          href="{resolve('/')}{routes
+            .observation(route.context.observation, route.context)
+            .slice(1)}">Selected observation {route.context.observation}</a
+        >
+      </p>{/if}
+  </div>
+  <section class="panel" aria-labelledby="content-identity">
     <h2 id="content-identity">Content identity</h2>
     <RequestFeedback
       status={summary.status}
@@ -115,7 +117,7 @@
       {#if summary.status !== 'success'}<p>
           Previously loaded identity; not freshly verified.
         </p>{/if}
-      <dl>
+      <dl class="identity">
         <dt>Algorithm</dt>
         <dd>{content.hash.algorithm}</dd>
         <dt>Digest</dt>
@@ -127,43 +129,58 @@
         </dd>
         <dt>Size</dt>
         <dd><SizeValue value={content.size} /></dd>
-        <dt>Current disks</dt>
-        <dd>{formatCount(content.current_disk_count)}</dd>
-        <dt>Current locations</dt>
-        <dd>{formatCount(content.current_location_count)}</dd>
-        <dt>History distinct disks</dt>
-        <dd>{formatCount(content.disk_count)}</dd>
-        <dt>History distinct disk/path locations</dt>
-        <dd>{formatCount(content.location_count)}</dd>
-        <dt>Historical observations (all complete inventories)</dt>
-        <dd>{formatCount(content.observation_count)}</dd>
       </dl>
-      <p>
+      <div class="count-groups">
+        <div>
+          <h3>Current copies</h3>
+          <dl class="metrics">
+            <dt>Current disks</dt>
+            <dd>{formatCount(content.current_disk_count)}</dd>
+            <dt>Current locations</dt>
+            <dd>{formatCount(content.current_location_count)}</dd>
+          </dl>
+        </div>
+        <div>
+          <h3>History across complete inventories</h3>
+          <dl class="metrics">
+            <dt>History distinct disks</dt>
+            <dd>{formatCount(content.disk_count)}</dd>
+            <dt>History distinct disk/path locations</dt>
+            <dd>{formatCount(content.location_count)}</dd>
+            <dt>Historical observations (all complete inventories)</dt>
+            <dd>{formatCount(content.observation_count)}</dd>
+          </dl>
+        </div>
+      </div>
+      <p class="muted">
         Current counts use the latest complete inventory of each disk. Multiple paths on one disk
         are locations, not extra disks.
       </p>
     {/if}
   </section>
   <section aria-labelledby="locations">
-    <h2 id="locations">Locations</h2>
-    <nav aria-label="Location scope">
-      <a
-        href="{resolve('/')}{contentURL(
-          id,
-          { ...route.locations, scope: 'current' },
-          route.context,
-        ).slice(1)}"
-        aria-current={route.locations.scope === 'current' ? 'page' : undefined}>Current locations</a
-      >
-      <a
-        href="{resolve('/')}{contentURL(
-          id,
-          { ...route.locations, scope: 'history' },
-          route.context,
-        ).slice(1)}"
-        aria-current={route.locations.scope === 'history' ? 'page' : undefined}>History</a
-      >
-    </nav>
+    <div class="location-toolbar actions">
+      <h2 id="locations">Locations</h2>
+      <nav class="actions" aria-label="Location scope">
+        <a
+          href="{resolve('/')}{contentURL(
+            id,
+            { ...route.locations, scope: 'current' },
+            route.context,
+          ).slice(1)}"
+          aria-current={route.locations.scope === 'current' ? 'page' : undefined}
+          >Current locations</a
+        >
+        <a
+          href="{resolve('/')}{contentURL(
+            id,
+            { ...route.locations, scope: 'history' },
+            route.context,
+          ).slice(1)}"
+          aria-current={route.locations.scope === 'history' ? 'page' : undefined}>History</a
+        >
+      </nav>
+    </div>
     {#if route.locations.scope === 'history'}<p>
         History includes older inventories; repeated observations are not extra current copies.
       </p>{/if}
@@ -210,16 +227,68 @@
 <style>
   .digest {
     overflow-wrap: anywhere;
-    display: block;
+    display: inline;
   }
   dt {
     font-weight: bold;
   }
   dd {
-    margin: 0 0 0.75rem;
+    margin: 0;
+  }
+  .identity {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--space-2) var(--space-4);
+  }
+  .panel h2 {
+    margin: 0 0 var(--space-3);
+  }
+  .identity,
+  .metrics {
+    margin: 0;
+  }
+  .panel p {
+    margin: var(--space-3) 0 0;
+  }
+  .context-links {
+    margin-bottom: var(--space-3);
+  }
+  .context-links p {
+    margin: 0;
+  }
+  .count-groups {
+    display: grid;
+    grid-template-columns: 1fr 1.5fr;
+    gap: var(--space-4);
+  }
+  .metrics {
+    grid-template-columns: auto 1fr;
+    gap: var(--space-1) var(--space-3);
+  }
+  h3 {
+    font-size: 14px;
+    margin-block: var(--space-3) var(--space-2);
+  }
+  @media (max-width: 900px) {
+    .count-groups {
+      grid-template-columns: 1fr;
+    }
   }
   nav a {
-    display: inline-block;
-    margin: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius);
+  }
+  nav a[aria-current='page'] {
+    background: var(--color-raised);
+    font-weight: 600;
+  }
+  .location-toolbar {
+    margin-top: var(--space-4);
+  }
+  .location-toolbar h2 {
+    margin: 0;
   }
 </style>

@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { contentFixture, locationsFixture, observationFixture } from '../fixtures/details';
 import { searchFixture } from '../fixtures/api';
+import { mkdir, writeFile } from 'node:fs/promises';
 
 async function ready(page: Page) {
   await page.route('**/api/v1/contents?**', (r) =>
@@ -114,6 +115,14 @@ test('summary and location failures retain the other section, retries remain ind
   await expect(page.getByRole('region', { name: 'Locations' }).getByRole('alert')).toBeVisible();
   await expect(page.getByText('ab'.repeat(32), { exact: true })).toBeVisible();
   expect(calls.filter((c) => c === 'summary')).toHaveLength(2);
+  locationsFail = false;
+  await page
+    .getByRole('region', { name: 'Locations' })
+    .getByRole('button', { name: 'Retry', exact: true })
+    .click();
+  await expect(page.locator('tbody tr')).toHaveCount(2);
+  expect(calls.filter((c) => c === 'summary')).toHaveLength(2);
+  expect(calls.filter((c) => c === 'locations')).toHaveLength(3);
 });
 
 test('historical-only content, independent history pagination and stale-cursor restart', async ({
@@ -244,7 +253,7 @@ test('clipboard failures are visible and hash lookup validates explicit algorith
         : { status: 404, json: { error: { code: 'not_found', message: 'unknown hash' } } },
     );
   });
-  await page.getByRole('main').getByRole('link', { name: 'Hash lookup' }).click();
+  await page.getByRole('main').getByRole('link', { name: 'Browse contents / Hash lookup' }).click();
   await page.getByLabel('Algorithm', { exact: true }).selectOption('md5');
   await page.getByLabel('Digest (hex)', { exact: true }).fill('zz');
   await page.getByRole('button', { name: 'Look up content' }).click();
@@ -570,4 +579,93 @@ test('keyboard detail to observation to return and successful clipboard preserve
   await page.getByRole('link', { name: 'Return to search' }).focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('[data-selected-content="true"]')).toHaveText('<report>&?.txt');
+});
+
+test('grouped history identity and literal location/context fit desktop widths', async ({
+  page,
+}) => {
+  await ready(page);
+  const content = contentFixture();
+  content.size = null;
+  const locations = locationsFixture();
+  locations.scope = 'history';
+  locations.items[0]!.is_current = false;
+  locations.items[0]!.observation.path = 'archive/É/<report>&?/' + 'literal path '.repeat(12);
+  const observation = observationFixture();
+  observation.observation.path = locations.items[0]!.observation.path;
+  observation.content.size = '9223372036854775807';
+  await page.route('**/api/v1/contents/1**', (r) =>
+    r.fulfill({
+      json: new URL(r.request().url()).pathname.endsWith('/observations') ? locations : content,
+    }),
+  );
+  await page.route('**/api/v1/observations/9007199254740993', (r) =>
+    r.fulfill({ json: observation }),
+  );
+  await mkdir('/tmp/opencode/u10-screenshots', { recursive: true });
+  const measurements = [];
+  for (const width of [1440, 1024, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(
+      '/contents/1?scope=history&return_to=%2Fsnapshots%2F1%2Fdirectory%3Fpath%3Darchive&observation=9007199254740993',
+    );
+    await expect(page.locator('tbody tr')).toHaveCount(2);
+    await expect(page.getByRole('region', { name: 'Content identity' })).toContainText('Unknown');
+    await expect(page.getByText('Historical', { exact: true })).toBeVisible();
+    await expect(page.getByText('Current', { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Return to directory' })).toHaveAttribute(
+      'href',
+      '/snapshots/1/directory?path=archive',
+    );
+    const table = await page.locator('table').boundingBox();
+    measurements.push({
+      width,
+      locationsOrigin: table!.y,
+      documentWidth: await page.evaluate(() => document.documentElement.scrollWidth),
+    });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    if (width === 768) await expect(page.locator('.record-label').first()).toBeVisible();
+    expect(
+      await page
+        .locator('tbody tr')
+        .first()
+        .evaluate((row, width) => {
+          const cells = Array.from(row.querySelectorAll('td')).map((cell) =>
+            cell.getBoundingClientRect(),
+          );
+          return cells.every(
+            (cell, index) =>
+              !index ||
+              (width > 900
+                ? cell.x >= cells[index - 1]!.right
+                : cell.y >= cells[index - 1]!.bottom),
+          );
+        }, width),
+    ).toBe(true);
+    await page.screenshot({
+      path: `/tmp/opencode/u10-screenshots/history-${width}.png`,
+      fullPage: true,
+    });
+    await page
+      .getByRole('link', { name: 'Selected observation 9007199254740993', exact: true })
+      .click();
+    await expect(page.getByRole('heading', { name: 'Disk-relative path' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Return to directory' })).toHaveAttribute(
+      'href',
+      '/snapshots/1/directory?path=archive',
+    );
+    await expect(page.getByRole('link', { name: 'Content 1', exact: true })).toHaveAttribute(
+      'href',
+      /return_to=.*observation=9007199254740993/,
+    );
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    await page.screenshot({
+      path: `/tmp/opencode/u10-screenshots/observation-${width}.png`,
+      fullPage: true,
+    });
+  }
+  await writeFile(
+    '/tmp/opencode/u10-screenshots/measurements.json',
+    JSON.stringify(measurements, null, 2),
+  );
 });

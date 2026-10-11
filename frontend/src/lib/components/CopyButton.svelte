@@ -21,8 +21,19 @@
   }
 </script>
 
-<button disabled={status === 'copying'} onclick={copy}>{label}</button>
+<button class="button-quiet button-compact" disabled={status === 'copying'} onclick={copy}
+  >{label}</button
+>
 {#if status === 'success'}<span role="status">Copied.</span>
 {:else if status === 'failure'}<span role="alert"
     >Copy failed. Select and copy the text manually.</span
   >{/if}
+
+<style>
+  button {
+    margin-inline: var(--space-2);
+  }
+  span {
+    font-size: 13px;
+  }
+</style>
