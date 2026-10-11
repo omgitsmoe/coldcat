@@ -28,7 +28,7 @@
   } = $props();
 </script>
 
-<nav aria-label="Result pages">
+<nav class="page-controls" aria-label="Result pages">
   {#if paged}
     <p role="status">Page {page}. Earlier pages retained from page {firstRetained}.</p>
     <button disabled={busy || !canPrevious} onclick={previous}>Previous page</button>
@@ -36,9 +36,9 @@
   {:else}
     <p role="status">{loaded} loaded</p>
     {#if busy}
-      <button disabled>Loading page…</button>
+      <button class="page-load" disabled>Loading page…</button>
     {:else if canMore}
-      <button disabled={busy} onclick={more}>Load more</button>
+      <button class="page-load" disabled={busy} onclick={more}>Load more</button>
     {:else if canNext}
       <p>Retained-page limit reached. Continue one page at a time; earlier pages are limited.</p>
       <button disabled={busy || !canNext} onclick={next}>Next page</button>

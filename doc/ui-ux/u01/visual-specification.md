@@ -1,9 +1,10 @@
 # U01 — Browser baseline and visual specification
 
-**Status: specification ready for owner review; approval pending.**
-The overall improvement plan was approved on 2026-10-10; this specific visual specification
-has **not** been approved. U02 must wait for that decision. This task changes documentation
-and capture tooling only, not the application, API, or request lifecycle.
+**Status: owner-approved on 2026-10-10.**
+The owner explicitly approved U01's visual specification and directed implementation to
+continue. The palette, type/density, annotated layouts, narrow record grouping,
+full-path wrapping and reachable exact-value defaults below are approved. U01 itself changed
+documentation and capture tooling only, not the application, API, or request lifecycle.
 
 ## Evidence and limits
 
@@ -64,9 +65,9 @@ literal paths survive wrapping; native links remain available; the error leaves 
 Measured document width equals viewport width in all 18 captures. This does not establish
 that every arbitrary label/path or other route is overflow-safe.
 
-## Proposed foundation (owner decision required)
+## Approved foundation
 
-These are implementation-ready defaults to review, not tokens already shipped. The browser
+These are owner-approved implementation defaults. The browser
 review supports reducing chrome and increasing path width. Proposed 32/28/36px controls have
 **not been prototyped**; U02/U14 must validate them with real controls, wrapped labels and
 visible keyboard focus rather than forcing labels into a fixed-height box.
@@ -358,7 +359,11 @@ U01 validation results:
   preserving the capture artifacts and sequentially with the capture suite.
 - Real-backend/deployed/full integration suites and backend race/benchmarks are not U01 gates.
 
-## Required owner approval — parent prompt
+## Owner approval record
+
+On 2026-10-10 the owner explicitly approved this visual specification and said to continue.
+U01's approved-specification/agreed-layout acceptance is complete; U02 is unblocked.
+The original review choices below are retained as decision context, not a new approval gate.
 
 Ask the owner to review this document and the linked images before starting U02:
 
@@ -373,8 +378,6 @@ Ask the owner to review this document and the linked images before starting U02:
    paths; show readable approximate sizes with exact bytes/UTC reachable by keyboard. Alternative:
    an explicit per-row expansion design needs a separately agreed interaction before implementation.
 
-An explicit “Approve U01 as proposed” resolves these choices; otherwise revise the specification
-and resubmit. Record the owner's actual response/date in the plan; **do not infer approval**
-from the earlier general plan approval or this commit. U01's approved-specification/agreed-layout
-acceptance remains open. If the unit/value or shared-UI conventions become architecture policy,
+The explicit owner approval resolves these choices; it is distinct from the earlier general
+plan approval. If the unit/value or shared-UI conventions become architecture policy,
 offer a small ADR (decision, context, alternatives, consequences); none is created automatically.

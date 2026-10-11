@@ -29,7 +29,7 @@
 </script>
 
 <a class="skip-link" href="#main">Skip to main content</a>
-<header>
+<header class="shell-header">
   {@render brand?.()}
   {@render navigation?.()}
   <p role="status" aria-live="polite">
@@ -41,4 +41,4 @@
     <button onclick={() => connection.retry()}>Retry connection</button>
   {/if}
 </header>
-<main id="main" tabindex="-1">{@render children?.()}</main>
+<main class="shell-main" id="main" tabindex="-1">{@render children?.()}</main>

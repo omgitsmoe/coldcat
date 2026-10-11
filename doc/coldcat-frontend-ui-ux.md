@@ -1,8 +1,8 @@
 # Coldcat frontend UI/UX improvement plan
 
-Status: overall plan owner-approved on 2026-10-10. U01 baseline tooling and proposed visual
-specification are delivered; U01 visual approval is pending. No redesign implementation has
-started; U02 is blocked until the owner explicitly approves U01.
+Status: overall plan and U01 visual specification explicitly owner-approved on 2026-10-10.
+The owner directed implementation to continue sequentially; U02 is complete. No further
+approval is needed for these approved defaults. Optional user-feedback tests are deferred.
 
 **Direction: a compact, polished technical workspace—not a dashboard makeover.** Keep
 information density and keyboard efficiency, but introduce clearer hierarchy, consistent
@@ -139,15 +139,15 @@ Implementation paths below are relative to `frontend/src/lib/` unless otherwise 
 
 ### U01 — Browser baseline and design specification
 
-**Progress (2026-10-10):** browser baseline/documentation work delivered; owner review required.
+**Progress (2026-10-10):** browser baseline/documentation delivered and explicitly owner-approved.
 Handoff: [visual specification, annotated layouts, observations and ownership map](ui-ux/u01/visual-specification.md),
 [18-capture manifest](ui-ux/u01/baseline/manifest.json), and
 `frontend/tests/visual/u01-baseline.spec.ts` / `frontend/playwright.u01.config.ts`.
 Capture uses isolated fixtures on the existing static browser host, not a live catalog.
 Validation passed: build, check (0 errors/warnings), lint, 143 unit tests, the 18-capture
 inspection test and 39 focused browser tests. Full deployed/backend checks were not run for U01.
-The specification includes explicit owner choices; agreed-layout/approved-specification
-acceptance is **not complete**. Do not start U02 or invent approval. Follow the owner's
+The owner explicitly approved the specification and directed continuation; agreed-layout and
+approved-specification acceptance is complete. Follow the owner's
 one-agent-at-a-time requirement for all later packages despite parallel opportunities below.
 
 **Priority:** P0  
@@ -175,6 +175,14 @@ one-agent-at-a-time requirement for all later packages despite parallel opportun
 - Proposed changes are separated into presentation-only and behavioral work.
 
 ### U02 — Shared visual foundation and controls
+
+**Progress (2026-10-11):** complete. Approved tokens and native control treatments are shipped,
+with opt-in panels/metrics/badges/tables and scoped shell/pagination styling. Shared-control
+validation passed at 1440/1024/768px; 18 representative page captures have no horizontal
+document overflow. Check (0 errors/warnings), lint, 143 unit tests, API drift check, build,
+the two visual inspection tests and 49 focused behavior tests passed. No backend/catalog
+changes or extended accessibility audit. Durable interfaces, screenshots, constraints and
+follow-up ownership: [U02 handoff](ui-ux/u02/handoff.md). U03 is next, sequentially.
 
 **Priority:** P0  
 **Dependencies:** U01  
@@ -559,7 +567,7 @@ preferable to shipping two competing entry mechanisms initially.
 
 ## 5. Execution order and parallelization
 
-1. **Approve U01’s visual direction.**
+1. **Approve U01’s visual direction.** Done: explicit owner approval on 2026-10-10.
 2. Complete U02’s shared foundation.
 3. Parallel work:
    - U03 shell.
