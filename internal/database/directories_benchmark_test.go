@@ -198,6 +198,11 @@ func BenchmarkDirectoryEnrichment(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
+				var searchInsert string
+				if err := db.db.QueryRow(`SELECT sql FROM sqlite_schema
+ WHERE name='observation_search_insert'`).Scan(&searchInsert); err != nil {
+					b.Fatal(err)
+				}
 				_, err = db.db.ExecContext(b.Context(), `DROP TRIGGER observation_search_insert;
  DROP TRIGGER observation_search_delete; DROP TRIGGER observation_search_update;
  INSERT INTO disk(id,label,capacity) VALUES(1,'source',0);
@@ -221,8 +226,8 @@ func BenchmarkDirectoryEnrichment(b *testing.B) {
  (id,disk_id,state,captured_at,imported_at,capture_provenance,input_format)
  VALUES(2,1,'importing','2024-01-01T00:00:00.000000000Z',
  '2024-01-01T00:00:00.000000000Z','explicit','cshd');
- INSERT INTO observation(snapshot_id,content_id,path) VALUES(2,1,'new/known');
- INSERT INTO search_path(path,name) VALUES('new/known','known');
+  `+searchInsert+`;
+  INSERT INTO observation(snapshot_id,content_id,path) VALUES(2,1,'new/known');
  INSERT INTO pending_size(snapshot_id,content_id,size) VALUES(2,1,7);`, count)
 				if err != nil {
 					b.Fatal(err)

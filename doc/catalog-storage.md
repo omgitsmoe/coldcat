@@ -20,11 +20,18 @@ file-path seek indexes. That reader advanced versions 1, 2, or 3 to version
 Older readers reject version 4. New catalogs use both normalized layouts; explicit
 compact-copy converts existing catalogs, including original version-1 layouts.
 
-Version 5 stores only the basename in direct-file memberships. The current reader
-advances versions 1–4 to version 5 with a metadata-only marker update and detects
+Version 5 stores only the basename in direct-file memberships. It introduced
+a metadata-only marker update for versions 1–4 and detects
 the entry layout from column metadata. Existing paths/memberships are not rewritten
 or scanned at startup. All four old layouts remain readable until explicit
 compact-copy; older readers reject version 5. New catalogs use basename entries.
+
+Version 6 derives the non-folded search basename from the canonical path through
+a generated virtual column. Stored folded name/path text, exact-search indexes,
+and FTS external content remain intact. Opens advance versions 1–5 to version 6
+with a metadata-only update, without rewriting or scanning any index. All older
+physical layouts remain readable; explicit compact-copy converts them. Older
+readers reject version 6.
 
 ## Measure before rewriting
 
@@ -69,6 +76,7 @@ ancestor memberships as a `WITHOUT ROWID` table keyed by directory ID and conten
 ID, rebuilds the trigram index with
 column-level rather than positional detail and no token-count table, rebuilds
 direct-file memberships using directory IDs and indexed basenames,
+derives search basenames from canonical paths while preserving search IDs,
 reclaims free pages in the copy, and validates it. It does not delete history or rewrite
 the source as part of compaction. New catalogs already use these compact layouts.
 The logical directory keys and file/search paths remain unchanged.
@@ -470,3 +478,148 @@ evidence against the same fixed v4 baseline. Ranked candidates for investigation
 3. Further FTS posting representation changes; `search_trigram_data` is the
    owner's largest object, but broad/rare/Unicode substring retrieval must remain
    within the cap and no search function or index can be removed.
+
+### Full-catalog pass: derived search basenames (reader version 6)
+
+`search_path.name` is now a generated **VIRTUAL** basename of the canonical path.
+The folded name/path columns remain **STORED**, as do both exact-search indexes;
+FTS retains the same column-only postings and external-content contract. Canonical
+paths, search/observation IDs, source identities, complete history, snapshot and
+replica selection, Unicode folding, ranking, and public cursor semantics remain.
+This is a proposed ADR topic: eliminate a redundant display basename but retain
+stored folded retrieval text. Alternatives are retained stored basenames or deriving
+them eagerly during retrieval. Consequences are a new reader marker, explicit copy
+conversion, and a bounded ID lookup after page selection. No ADR was created.
+
+The naive virtual-column variant saved space but failed the performance cap. Five
+matched samples against fixed v4 showed common/Unicode name substring medians
+**+10.73% / +10.37%**, and common/Unicode path substring **+9.30% / +9.85%**.
+`SELECT p.*` caused virtual basename evaluation during broad candidate
+materialization. The final query projects only path/ID/folded text through candidate
+selection and retrieves `name` by search ID after selecting the observation page.
+That also retains stored-name behavior on unconverted legacy catalogs. EXPLAIN
+bytecode tests prohibit basename evaluation before page selection; the final
+basename lookup uses `SEARCH search_path USING INTEGER PRIMARY KEY (rowid=?)`.
+Existing exact/FTS seek-plan tests still pass; no new broad scan or sort is required.
+
+Five final fixture builds consistently measured these **whole-catalog** totals:
+
+| Layout | Before VACUUM | After VACUUM | After / original |
+| --- | ---: | ---: | ---: |
+| Original `e768b14` | 166,932,480 | 154,939,392 | 100% |
+| Fixed v4 `ed2e792` | 76,939,264 | 70,475,776 | 45.49% |
+| Previous v5 `1a49044` | 62,554,112 | 57,982,976 | 37.42% |
+| Derived search basenames | 62,070,784 | 57,499,648 | 37.11% |
+
+The identical 50,000-observation/four-snapshot fixture and complete indexes are
+unchanged. Both final layouts have 4,096 free bytes before VACUUM and zero after.
+This pass saves **483,328 compacted bytes (0.83% versus v5)** and reaches **62.89%**
+reduction versus original, or **18.41%** versus fixed v4. This smaller reduction is
+not evidence that all remaining meaningful savings are exhausted. It removes one
+redundant string per distinct search path; real-catalog savings remain unverified.
+
+Five fresh matched isolated sequential v4/candidate samples per workflow used
+`-benchtime=1s`, unchanged benchmark sources, and identically VACUUMed fixtures.
+These are medians of warm serial run means, not cold latency, p95, or confidence
+intervals. Counts span roughly 30 broad searches to thousands of small lookups per
+sample; compare within this run group, not against earlier timing groups.
+
+| Workflow | Fixed v4 median ms | v6 median ms | Cumulative delta |
+| --- | ---: | ---: | ---: |
+| Root detail | 8.248588 | 7.942475 | -3.71% |
+| Nested detail | 0.173433 | 0.169784 | -2.10% |
+| Direct children, first page | 1.021964 | 0.975251 | -4.57% |
+| Direct children, deep anchor | 1.076376 | 1.059904 | -1.53% |
+| Historical direct children | 1.009136 | 0.993811 | -1.52% |
+| Replica-filtered direct children | 1.280316 | 1.238841 | -3.24% |
+| Recursive entries | 0.971753 | 0.971907 | +0.02% |
+| Root entries | 0.369675 | 0.362649 | -1.90% |
+| Exact Unicode name, hit | 0.576946 | 0.589066 | +2.10% |
+| Exact Unicode name, miss | 0.532400 | 0.537477 | +0.95% |
+| Exact Unicode path, hit | 0.579466 | 0.596066 | +2.86% |
+| Exact Unicode path, miss | 0.526045 | 0.535074 | +1.72% |
+| Name substring, common | 31.994619 | 30.747585 | -3.90% |
+| Name substring, rare | 2.322390 | 2.324874 | +0.11% |
+| Name substring, Unicode | 30.191911 | 29.631395 | -1.86% |
+| Path substring, common | 33.972394 | 33.382820 | -1.74% |
+| Path substring, rare | 3.318431 | 3.371299 | +1.59% |
+| Path substring, Unicode | 32.042610 | 31.284413 | -2.37% |
+
+**All 18 cumulative medians satisfy the +5% cap versus fixed v4.**
+
+Operational measurements are separate five-pair sequential comparisons versus
+v4: ten production imports per sample, five full-fixture builds, and twenty
+late-enrichment publications per sample. The enrichment fixture restores its
+original observation insertion trigger for the new snapshot rather than explicitly
+writing a now-generated column; both layouts use identical fixture source/data,
+and initial historical observations still exclude search indexing.
+
+| Batch | Total v4/v6 ms | Ingestion v4/v6 ms | Directory build v4/v6 ms | Publication v4/v6 ms |
+| --- | ---: | ---: | ---: | ---: |
+| 1,000 | 877.091 / 889.750 (+1.44%) | 518.7 / 531.0 (+2.37%) | 245.6 / 240.3 (-2.16%) | 115.5 / 118.2 (+2.34%) |
+| 5,000 | 622.375 / 609.312 (-2.10%) | 259.0 / 255.6 (-1.31%) | 245.8 / 238.7 (-2.89%) | 116.4 / 115.6 (-0.69%) |
+| 10,000 | 596.265 / 577.822 (-3.09%) | 229.7 / 225.6 (-1.78%) | 251.7 / 237.2 (-5.76%) | 118.8 / 111.9 (-5.81%) |
+
+Construction medians are **3.592966 / 3.605813 s (+0.36%)**; late-enrichment
+publication is **50.300316 / 26.341652 ms (-47.63%)**. The latter includes the prior
+pass's indexed publication validation benefit. No severe operational regression is
+evidenced. These timings show substantial environmental drift versus earlier run
+groups and should not be presented as absolute throughput guarantees.
+
+Five explicit v5 full-index compact-copy upgrades each convert **62,554,112** source
+bytes into a validated **57,495,552-byte** destination, retaining four complete
+snapshots and 50,000 observations. Median copy/conversion/FTS rebuild/VACUUM/check
+time is **1.678158 s**. The output is one page smaller than a fresh catalog because
+it is a separate physical build. Conversion validates old name/path equality before
+removing stored names, preserves search IDs/sealed state, copies completed history
+before installing guards, and rebuilds external-content FTS. Latest-layout
+recompaction also validates. Errors/cancellation retain existing destination cleanup
+and exclusive ownership behavior; tests compare source bytes unchanged.
+
+Full normal Go tests with an owned `/home/agent` temporary directory,
+`go vet ./...`, and focused serial race checks pass. Focused regressions cover metadata-only v1–v5 opens retaining
+stored search names, rejection by v5 readers, logical-record equality across all
+tables, complete current/history search pagination, exact/substring name/path
+queries, snapshot/directory/replica filters, Unicode and literal path punctuation,
+immutability, publication rollback, recovery, repeat conversion, corrupt-name
+failure cleanup, locks, and cancellation. No full race suite was run; the parent
+owns the once-at-end race check. Independent review was not delegated.
+
+Reproduction, always using disposable catalogs and sequential execution:
+
+```sh
+# Use fixed v4 worktree and unchanged workflow/fixture sources as above.
+# Copy the updated enrichment fixture to v4 as well:
+cp internal/database/directories_benchmark_test.go \
+  /tmp/opencode/coldcat-basename-baseline-v4/internal/database/
+# Run v4 then candidate for each of five matched samples:
+go test ./internal/database -run '^$' \
+  -bench '^BenchmarkCatalogBasenameWorkflows$' -benchtime=1s -benchmem -v
+go test ./internal/database -run '^$' -bench '^BenchmarkCatalogStorage$' -benchtime=1x -v
+go test ./internal/importer -run '^$' -bench '^BenchmarkImportPhases$' -benchtime=10x -benchmem -v
+go test ./internal/database -run '^$' -bench '^BenchmarkDirectoryEnrichment/50000$' \
+  -benchtime=20x -benchmem -v
+go test ./internal/database -run '^$' \
+  -bench '^BenchmarkCatalogSearchBasenameCompactUpgrade$' -benchtime=1x -count=5 -benchmem -v
+```
+
+Raw logs: `/tmp/opencode/catalog-derived-name-late-{v4,candidate}-{1..5}.txt`,
+`catalog-derived-name-{build,import,enrichment}-{v4,candidate}-{1..5}.txt`,
+`catalog-derived-name-compact.txt`, `catalog-derived-name-focused.txt`,
+`catalog-derived-name-full-tests.txt`, and `catalog-derived-name-vet.txt`.
+Rejected eager-projection samples remain in
+`catalog-derived-name-{v4,candidate}-{1..5}.txt`; they are not used for final
+acceptance. No application/workspace catalog or permission-blocked million-input
+fixture was opened. Real v6 savings and cold/p95 behavior remain unverified.
+
+Ranked remaining hypotheses for a subsequent measured pass:
+
+1. Conditional stored folded-text overrides where folded text equals canonical
+   text, retaining indexed generated folded values and FTS semantics. Potentially
+   more substantial than this basename pass, but compute-on-read across broad
+   searches is a demonstrated hazard, not a free transformation.
+2. Share canonical paths between observations and search storage without deleting
+   ordered observation seeks. Larger opportunity, higher join/order/conversion risk.
+3. Further FTS posting representation changes with identical full substring
+   semantics; the owner's largest object remains FTS data. No index/function/history
+   removal is acceptable, and each candidate must pass the same cumulative cap.

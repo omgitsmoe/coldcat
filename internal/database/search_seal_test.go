@@ -54,7 +54,7 @@ func TestSearchPathSealingRollsBackWithPublication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.db.Exec(`INSERT INTO search_path(path,name) VALUES('missing','missing')`); err == nil {
+	if _, err := db.db.Exec(`INSERT INTO search_path(path) VALUES('missing')`); err == nil {
 		t.Fatal("inserted an unsealed index for a completed observation")
 	}
 }

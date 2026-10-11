@@ -26,16 +26,19 @@ const searchTrigramSchema = `CREATE VIRTUAL TABLE search_trigram USING fts5(
 );
 `
 
-const searchSchema = `
+const searchPathSchema = `
 CREATE TABLE search_path (
- id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+ id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE,
+ name TEXT GENERATED ALWAYS AS (coldcat_basename(path)) VIRTUAL,
  sealed INTEGER NOT NULL DEFAULT 0 CHECK(sealed IN (0,1)),
  name_fold TEXT GENERATED ALWAYS AS (coldcat_fold_v1(name)) STORED,
  path_fold TEXT GENERATED ALWAYS AS (coldcat_fold_v1(path)) STORED
 );
 CREATE INDEX search_name ON search_path(name_fold,path);
 CREATE INDEX search_path_fold ON search_path(path_fold);
-` + searchTrigramSchema + `
+`
+
+const searchTriggers = `
 CREATE TRIGGER search_path_insert AFTER INSERT ON search_path BEGIN
  INSERT INTO search_trigram(rowid,name_fold,path_fold)
  VALUES(NEW.id,NEW.name_fold,NEW.path_fold);
@@ -45,7 +48,7 @@ CREATE TRIGGER search_path_delete AFTER DELETE ON search_path BEGIN
  VALUES('delete',OLD.id,OLD.name_fold,OLD.path_fold);
 END;
 CREATE TRIGGER observation_search_insert AFTER INSERT ON observation BEGIN
- INSERT INTO search_path(path,name) VALUES(NEW.path,coldcat_basename(NEW.path))
+ INSERT INTO search_path(path) VALUES(NEW.path)
  ON CONFLICT(path) DO NOTHING;
 END;
 CREATE TRIGGER observation_search_delete AFTER DELETE ON observation BEGIN
@@ -53,7 +56,7 @@ CREATE TRIGGER observation_search_delete AFTER DELETE ON observation BEGIN
  AND NOT EXISTS(SELECT 1 FROM observation WHERE path=OLD.path);
 END;
 CREATE TRIGGER observation_search_update AFTER UPDATE OF path ON observation BEGIN
- INSERT INTO search_path(path,name) VALUES(NEW.path,coldcat_basename(NEW.path))
+ INSERT INTO search_path(path) VALUES(NEW.path)
  ON CONFLICT(path) DO NOTHING;
  DELETE FROM search_path WHERE path=OLD.path
  AND NOT EXISTS(SELECT 1 FROM observation WHERE path=OLD.path);
@@ -77,4 +80,17 @@ CREATE TRIGGER seal_completed_search_paths AFTER UPDATE OF state ON snapshot
  UPDATE search_path SET sealed=1 WHERE sealed=0
  AND path IN (SELECT path FROM observation WHERE snapshot_id=NEW.id);
 END;
+`
+
+const searchSchema = searchPathSchema + searchTrigramSchema + searchTriggers
+
+const dropSearchTriggers = `DROP TRIGGER search_path_insert;
+DROP TRIGGER search_path_delete;
+DROP TRIGGER observation_search_insert;
+DROP TRIGGER observation_search_delete;
+DROP TRIGGER observation_search_update;
+DROP TRIGGER immutable_search_path_update;
+DROP TRIGGER immutable_completed_search_path_insert;
+DROP TRIGGER immutable_search_path_delete;
+DROP TRIGGER seal_completed_search_paths;
 `

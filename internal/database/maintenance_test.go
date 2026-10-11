@@ -85,7 +85,7 @@ VALUES(999,999,'dangling')`); err == nil {
 }
 
 func TestLegacyDirectoryOpenDoesNotRewrite(t *testing.T) {
-	for _, version := range []int{1, 2, 3, 4} {
+	for _, version := range []int{1, 2, 3, 4, 5} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "legacy.sqlite")
 			db, err := Open(path)
@@ -96,7 +96,12 @@ func TestLegacyDirectoryOpenDoesNotRewrite(t *testing.T) {
 			if version == 4 {
 				initialize = useV4DirectoryFiles
 			}
-			if err := initialize(db); err != nil {
+			if version < 5 {
+				if err := initialize(db); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := useStoredSearchNames(db); err != nil {
 				t.Fatal(err)
 			}
 			if version < 3 {
@@ -128,13 +133,18 @@ DROP TABLE directory_membership;` + schema)
 				t.Fatal(err)
 			}
 			defer db.Close()
+			var searchNameKind int
+			if err := db.db.QueryRow(`SELECT hidden FROM pragma_table_xinfo('search_path')
+ WHERE name='name'`).Scan(&searchNameKind); err != nil || searchNameKind != 0 {
+				t.Fatalf("legacy search names rewritten: %d, %v", searchNameKind, err)
+			}
 			var kind string
 			wantFileKind := "table"
-			if version == 4 {
+			if version >= 4 {
 				wantFileKind = "view"
 			}
 			if err := db.db.QueryRow("SELECT type FROM sqlite_schema WHERE name='directory_file'").
-				Scan(&kind); err != nil || kind != wantFileKind || db.basenameEntries {
+				Scan(&kind); err != nil || kind != wantFileKind || db.basenameEntries != (version == 5) {
 				t.Fatalf("legacy file layout rewritten: %s, %v", kind, err)
 			}
 			wantKind := "table"
@@ -146,12 +156,12 @@ DROP TABLE directory_membership;` + schema)
 				t.Fatalf("legacy membership layout rewritten: %s, %v", kind, err)
 			}
 			var got int
-			if err := db.db.QueryRow("PRAGMA user_version").Scan(&got); err != nil || got != 5 {
+			if err := db.db.QueryRow("PRAGMA user_version").Scan(&got); err != nil || got != 6 {
 				t.Fatalf("reader version: %d, %v", got, err)
 			}
-			if err := db.applyMigrations(t.Context(), migrations[:4]); err == nil ||
-				!strings.Contains(err.Error(), "unsupported schema version 5") {
-				t.Fatalf("old reader accepted version 5: %v", err)
+			if err := db.applyMigrations(t.Context(), migrations[:5]); err == nil ||
+				!strings.Contains(err.Error(), "unsupported schema version 6") {
+				t.Fatalf("old reader accepted version 6: %v", err)
 			}
 			if _, err := db.db.Exec(`INSERT INTO disk(id,label,capacity) VALUES(1,'disk',0);
 INSERT INTO content(id,hash_type,hash,size) VALUES(1,'sha256',zeroblob(32),7);`); err != nil {
@@ -242,6 +252,9 @@ func TestCompactIntoPreservesCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	if err := useStoredSearchNames(db); err != nil {
+		t.Fatal(err)
+	}
 	if err := useLegacyDirectoryFiles(db); err != nil {
 		t.Fatal(err)
 	}

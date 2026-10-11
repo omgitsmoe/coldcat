@@ -69,20 +69,22 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 	folded := searchFold(f.Query)
 	var source string
 	var args []any
+	// Do not materialize virtual basenames for every FTS candidate. Fetch them
+	// by immutable search ID only after selecting the public observation page.
 	if limit == 0 && after.ID > 0 {
 		// Anchor validation needs one path, not the full FTS posting list;
 		// the folded predicate below still verifies substring membership.
-		source = "SELECT p.* FROM search_path p WHERE p.path=?"
+		source = "SELECT p.id,p.path,p.name_fold,p.path_fold FROM search_path p WHERE p.path=?"
 		args = []any{after.Path}
 		if f.Match == "exact" {
 			source += " AND " + column + "=?"
 			args = append(args, folded)
 		}
 	} else if f.Match == "exact" {
-		source = "SELECT p.* FROM search_path p WHERE " + column + "=?"
+		source = "SELECT p.id,p.path,p.name_fold,p.path_fold FROM search_path p WHERE " + column + "=?"
 		args = []any{folded}
 	} else {
-		source = `SELECT p.* FROM search_trigram t
+		source = `SELECT p.id,p.path,p.name_fold,p.path_fold FROM search_trigram t
  CROSS JOIN search_path p ON p.id=t.rowid WHERE search_trigram MATCH ?`
 		args = []any{searchTrigramMatch(f.Field, folded)}
 	}
@@ -160,7 +162,8 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 		args = append(args, limit+1)
 	}
 	query += `), matches AS (
- SELECT o.id,o.content_id,o.snapshot_id,o.path,p.name,cs.id IS NOT NULL AS is_current,p.rank
+ SELECT o.id,o.content_id,o.snapshot_id,o.path,p.id AS search_id,
+ cs.id IS NOT NULL AS is_current,p.rank
  FROM paths p CROSS JOIN observation o ON o.path=p.path
  JOIN snapshot s ON s.id=o.snapshot_id LEFT JOIN search_current_snapshot cs ON cs.id=s.id
  WHERE s.state='complete' AND (?='history' OR cs.id IS NOT NULL)
@@ -334,7 +337,7 @@ func (db *DB) Search(
  ), page_contents AS MATERIALIZED (SELECT DISTINCT content_id FROM page),
  page_counts AS MATERIALIZED (SELECT c.content_id,` + searchReplicaCounts + `
  FROM page_contents c)
- SELECT p.id,p.content_id,p.snapshot_id,p.path,p.name,p.is_current,p.rank,
+ SELECT p.id,p.content_id,p.snapshot_id,p.path,sp.name,p.is_current,p.rank,
  o.mtime,c.size,c.hash_type,c.hash,
  s.disk_id,d.label,COALESCE(d.notes,''),COALESCE(d.serial,''),d.capacity,
  s.captured_at,s.imported_at,s.capture_provenance,COALESCE(s.input_path,''),
@@ -349,6 +352,7 @@ func (db *DB) Search(
  FROM observation co JOIN snapshot ss ON ss.id=co.snapshot_id
  WHERE co.content_id=p.content_id AND ss.state='complete') END
  FROM page p JOIN observation o ON o.id=p.id JOIN content c ON c.id=p.content_id
+ JOIN search_path sp ON sp.id=p.search_id
  JOIN page_counts pc ON pc.content_id=p.content_id
  JOIN snapshot s ON s.id=p.snapshot_id JOIN disk d ON d.id=s.disk_id
  ORDER BY p.rank,p.path,p.id`

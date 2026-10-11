@@ -194,14 +194,43 @@ DROP TABLE directory_entry_old;`+directoryEntryGuards)
 		default:
 			return fmt.Errorf("unsupported directory file object %q", kind)
 		}
-		_, err := tx.ExecContext(ctx, "PRAGMA user_version=5")
+		_, err := tx.ExecContext(ctx, "PRAGMA user_version=6")
 		return err
 	})
 	if err != nil {
 		return fmt.Errorf("compact directory indexes: %w", err)
 	}
 	err = target.TransactionContext(ctx, func(tx *Tx) error {
-		_, err := tx.ExecContext(ctx, `DROP TABLE search_trigram;`+searchTrigramSchema+`
+		var derived bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1
+ FROM pragma_table_xinfo('search_path') WHERE name='name' AND hidden=2)`).
+			Scan(&derived); err != nil {
+			return err
+		}
+		if !derived {
+			var mismatched bool
+			if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM search_path
+ WHERE name!=coldcat_basename(path))`).Scan(&mismatched); err != nil {
+				return err
+			}
+			if mismatched {
+				return fmt.Errorf("search basename does not match path")
+			}
+			// Copy completed history before installing immutable guards and FTS triggers.
+			_, err := tx.ExecContext(ctx, dropSearchTriggers+`DROP TABLE search_trigram;
+DROP INDEX search_name;
+DROP INDEX search_path_fold;
+ALTER TABLE search_path RENAME TO search_path_old;`+searchPathSchema+`
+INSERT INTO search_path(id,path,sealed) SELECT id,path,sealed FROM search_path_old;
+DROP TABLE search_path_old;`+searchTrigramSchema+searchTriggers)
+			if err != nil {
+				return err
+			}
+		} else if _, err := tx.ExecContext(ctx,
+			`DROP TABLE search_trigram;`+searchTrigramSchema); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `
 INSERT INTO search_trigram(search_trigram) VALUES('rebuild');`)
 		return err
 	})
