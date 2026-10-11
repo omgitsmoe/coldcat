@@ -201,24 +201,28 @@
           error={view.error}
           resource="Directory entries"
           {retry}
+          retained={view.pages.length > 0}
+          retainedLabel="Previously loaded entries; not freshly verified."
+          invalidatedLabel="Entries invalidated; reload results."
+          emptyLabel={!items.length
+            ? 'No entries match this listing. This does not imply an empty recursive summary.'
+            : undefined}
         />
-        {#if view.status !== 'stale'}<button
+        {#if view.status === 'idle' || view.status === 'loading'}<button
             disabled={paging.busy}
             onclick={() => void pagesOwner?.traversal.restart()}>Reload entries</button
           >{/if}
-        {#if view.status === 'idle'}<p>Entries invalidated; reload results.</p>{/if}
         {#if view.pages.length}
-          {#if view.error}<p>Previously loaded entries; not freshly verified.</p>{/if}
           {#if items.length}<Entries
               {items}
               {id}
               {query}
               returnTo={directoryBrowseURL(id, query)}
             />
-          {:else}<p>
-              No entries match this listing. This does not imply an empty recursive summary.
-            </p>{/if}
+          {/if}
           <PageControls
+            reload={() => void pagesOwner?.traversal.restart()}
+            reloadLabel={view.status === 'failure' ? 'Reload from first page' : 'Reload entries'}
             {...paging}
             paged={view.paged}
             page={view.active}

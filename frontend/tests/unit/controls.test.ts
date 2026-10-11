@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import PageControls from '../../src/lib/components/PageControls.svelte';
 import RequestFeedback from '../../src/lib/components/RequestFeedback.svelte';
 import { ApiError } from '../../src/lib/api/errors';
+import { CursorTraversal } from '../../src/lib/state/traversal';
 
 afterEach(() => {
   cleanup();
@@ -33,7 +34,9 @@ describe('shared controls and feedback', () => {
   });
   it('labels limited restoration and disables previous at the retained edge', () => {
     render(PageControls, { ...props, paged: true, page: 15, firstRetained: 6, canNext: false });
-    expect(screen.getByText('Page 15. Earlier pages retained from page 6.')).toBeTruthy();
+    expect(
+      screen.getByText('Page 15. 500 loaded on this page. Earlier pages retained from page 6.'),
+    ).toBeTruthy();
     expect(
       (screen.getByRole('button', { name: 'Previous page' }) as HTMLButtonElement).disabled,
     ).toBe(true);
@@ -78,5 +81,95 @@ describe('shared controls and feedback', () => {
     render(PageControls, { ...props, canNext: false });
     expect(screen.getByText(/Continuation unavailable/)).toBeTruthy();
     expect(screen.queryByText('All results loaded.')).toBeNull();
+  });
+  it('keeps action labels stable and disables reload while loading', async () => {
+    const reload = vi.fn();
+    const view = render(PageControls, { ...props, canMore: true, reload });
+    await view.rerender({ busy: true, canMore: false, canNext: false });
+    expect((screen.getByRole('button', { name: 'Load more' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(
+      (screen.getByRole('button', { name: 'Reload results' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(screen.getByRole('navigation').getAttribute('aria-busy')).toBe('true');
+    expect(reload).not.toHaveBeenCalled();
+    await view.rerender({ busy: false });
+    await fireEvent.click(screen.getByRole('button', { name: 'Reload results' }));
+    expect(reload).toHaveBeenCalledOnce();
+  });
+  it('keeps Next page, not Load more, while entering retained-page navigation', async () => {
+    const view = render(PageControls, props);
+    const button = screen.getByRole('button', { name: 'Next page' });
+    expect(button.classList.contains('page-load')).toBe(false);
+    await view.rerender({ busy: true, canNext: false });
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Next page' }).classList.contains('page-load')).toBe(
+      false,
+    );
+  });
+  it('separates validation, empty, invalidated and retained failure states without owning requests', async () => {
+    const retry = vi.fn();
+    const view = render(RequestFeedback, {
+      status: 'validation',
+      validationLabel: 'Literal <invalid>',
+      retry,
+      emptyLabel: 'No matching rows.',
+      invalidatedLabel: 'Data invalidated; reload explicitly.',
+    });
+    expect(screen.getByRole('alert').textContent).toBe('Literal <invalid>');
+    expect(screen.queryByRole('button')).toBeNull();
+    await view.rerender({ status: 'success' });
+    expect(screen.getByRole('status').textContent).toBe('No matching rows.');
+    await view.rerender({ status: 'idle' });
+    expect(screen.getByRole('status').textContent).toContain('reload explicitly');
+    expect(retry).not.toHaveBeenCalled();
+    await view.rerender({
+      status: 'failure',
+      retained: true,
+      error: new ApiError('http', 'failed', { status: 500 }),
+    });
+    expect(screen.getByRole('alert').textContent).toContain('not freshly verified');
+    expect(screen.queryByText('No matching rows.')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(retry).toHaveBeenCalledOnce();
+  });
+  it('reflects retained controller navigation during suspension and never fetches on presentation changes', async () => {
+    const load = vi.fn(async (cursor: string | undefined) => {
+      const n = Number(cursor ?? 1);
+      return { items: [n], revision: '1', next_cursor: String(n + 1) };
+    });
+    const traversal = new CursorTraversal({ endpoint: 'disks', resource: '', query: '' }, load, 2);
+    await traversal.restart();
+    await traversal.more();
+    await traversal.next();
+    const snapshot = () => ({
+      ...props,
+      busy: traversal.busy,
+      canMore: traversal.canMore,
+      canNext: traversal.canNext,
+      canPrevious: traversal.canPrevious,
+      paged: traversal.state.paged,
+      page: traversal.state.active,
+      firstRetained: traversal.state.pages[0]!.number,
+      loaded: traversal.items.length,
+      complete: false,
+      previous: () => traversal.previous(),
+      next: () => void traversal.next(),
+    });
+    const view = render(PageControls, snapshot());
+    traversal.suspend();
+    await view.rerender(snapshot());
+    expect((screen.getByRole('button', { name: 'Next page' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    await fireEvent.click(screen.getByRole('button', { name: 'Previous page' }));
+    await view.rerender(snapshot());
+    expect(screen.getByRole('status').textContent).toContain('Page 2. 1 loaded on this page.');
+    await fireEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    await view.rerender(snapshot());
+    expect(traversal.state.status).toBe('failure');
+    expect(load).toHaveBeenCalledTimes(3);
+    traversal.dispose();
   });
 });

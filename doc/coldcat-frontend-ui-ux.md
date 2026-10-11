@@ -623,6 +623,18 @@ No U12 blockers; real/deployed integration remains U14.
 
 ### U13 — Shared feedback and pagination polish
 
+**Progress (2026-10-11):** complete after U07–U12 integrations. Executed plan: keep request owners
+and cursor rules unchanged, share contextual loading/validation/empty/invalidated/retained-failure
+presentation, consolidate scoped recovery actions, and align loaded counts with bounded paging and
+explicit reload. Load more and Next page keep their labels/dimensions while pending; retained-page
+status names the displayed count and oldest retained page without inventing totals or last pages.
+Check (0 errors/warnings), lint, build, API drift and 262 unit tests passed; 119 focused fixture-only
+browser tests passed, including retained paging failures, suspension/cached navigation, reconnect,
+revision mismatch and explicit first-page reload. Nine external captures cover loading/transition/
+retained navigation at 1440/1024/768px with no document overflow. Interfaces, tests, artifact limits
+and U14 integration constraints: [U13 handoff](ui-ux/u13/handoff.md). No backend/catalog changes,
+other agents or extended audits. No U13 blockers; real/deployed release gates remain U14.
+
 **Priority:** P1  
 **Dependencies:** U02; feature integration after U07–U12  
 **Suggested context:** 30–55k tokens

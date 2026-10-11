@@ -77,7 +77,7 @@
     />
     <button>Look up content</button>
   </form>
-  {#if issue}<p role="alert">{issue}</p>{/if}
+  {#if issue}<RequestFeedback status="validation" validationLabel={issue} />{/if}
   {#if missing}<p role="status">No content found for this algorithm and digest.</p>
   {:else}<RequestFeedback
       status={view.status}

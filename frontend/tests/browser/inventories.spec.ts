@@ -330,7 +330,10 @@ test('history loads independently when disk metadata fails, without inferred lat
   const history = page.getByRole('region', { name: 'Inventory history' });
   await expect(history.locator('tbody tr')).toHaveCount(1);
   await expect(history.locator('.badge')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Reload disk', exact: true }).click();
+  await page
+    .getByRole('region', { name: 'Disk metadata' })
+    .getByRole('button', { name: 'Retry', exact: true })
+    .click();
   await expect(page.getByRole('alert')).toContainText('Unexpected backend response: 500');
   expect(reads).toBe(1);
 });

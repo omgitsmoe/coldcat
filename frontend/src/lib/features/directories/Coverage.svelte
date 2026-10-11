@@ -118,6 +118,8 @@
       status={view.status}
       error={view.error}
       resource="Content coverage"
+      retained={view.pages.length > 0}
+      retainedLabel="Previously loaded coverage; not freshly verified."
       {retry}
       loadingLabel="Comparing content coverage…"
     />
@@ -127,7 +129,6 @@
       </p>{/if}
     {#if view.status === 'idle'}<p>Comparison invalidated; apply to compare again.</p>{/if}
     {#if first}
-      {#if view.error}<p>Previously loaded coverage; not freshly verified.</p>{/if}
       <p>
         {first.is_current ? 'Current' : 'Historical'} source inventory compared against current destination
         inventories.

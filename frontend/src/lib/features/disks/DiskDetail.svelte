@@ -67,7 +67,10 @@
       resource="Disk"
       retry={() => void owner?.reload()}
     />
-    <button onclick={() => void owner?.reload()}>Reload disk</button>
+    {#if view.status !== 'failure'}<button
+        disabled={view.status === 'loading'}
+        onclick={() => void owner?.reload()}>Reload disk</button
+      >{/if}
     {#if view.status === 'idle'}<p>Disk data invalidated; not freshly verified.</p>{/if}
     {#if item}
       {#if view.status !== 'success'}<p>Previously loaded disk; not freshly verified.</p>{/if}

@@ -58,7 +58,10 @@
     resource="Inventory"
     retry={() => void owner?.reload()}
   />
-  <button onclick={() => void owner?.reload()}>Reload inventory</button>
+  {#if view.status !== 'failure'}<button
+      disabled={view.status === 'loading'}
+      onclick={() => void owner?.reload()}>Reload inventory</button
+    >{/if}
   {#if view.status === 'idle'}<p>Inventory data invalidated; not freshly verified.</p>{/if}
   {#if item}
     {#if view.status !== 'success'}<p>Previously loaded inventory; not freshly verified.</p>{/if}

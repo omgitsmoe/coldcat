@@ -519,6 +519,10 @@
   status={view.status}
   error={view.error}
   resource="Search"
+  retained={view.pages.length > 0}
+  emptyLabel={items.length === 0
+    ? 'No matching observations. Try another literal query or deliberately choose History scope.'
+    : undefined}
   loadingLabel={view.status === 'loading-more' ? 'Loading another page…' : 'Searching…'}
   retry={() => {
     if (view.pages.length) {
@@ -533,17 +537,13 @@
     >
   </p>
 {/if}
-{#if !dirty && !parseError && view.status === 'success' && items.length === 0}
-  <p role="status">
-    No matching observations. Try another literal query or deliberately choose History scope.
-  </p>
-{/if}
 {#if items.length}
-  {#if view.paged}<p>{items.length} observations displayed on this page.</p>{/if}
   <Results {items} {selected} {returnTo} select={(id) => workspace?.select(id)} />
 {/if}
 {#if view.pages.length && traversal}
   <PageControls
+    reload={() => workspace?.restart()}
+    reloadLabel="Reload from first page"
     busy={traversal.traversal.busy}
     canMore={traversal.traversal.canMore}
     canNext={traversal.traversal.canNext}
@@ -566,7 +566,6 @@
       traversal?.traversal.previous();
     }}
   />
-  <button onclick={() => workspace?.restart()}>Reload from first page</button>
 {/if}
 
 <style>

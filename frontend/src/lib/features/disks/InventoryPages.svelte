@@ -70,15 +70,19 @@
   error={view.error}
   resource={diskID ? 'Inventory history' : 'Disks'}
   {retry}
+  retained={view.pages.length > 0}
+  invalidatedLabel="Data invalidated; reload results."
+  emptyLabel={items.length === 0
+    ? diskID
+      ? 'No complete inventories'
+      : 'No disks cataloged'
+    : undefined}
 />
-{#if view.status !== 'stale'}<button
+{#if (view.status === 'idle' || view.status === 'loading') && !view.pages.length}<button
     disabled={paging.busy}
     onclick={() => void owner?.traversal.restart()}>Reload results</button
   >{/if}
-{#if view.status === 'idle'}<p role="status">Data invalidated; reload results.</p>{/if}
-{#if view.error && view.pages.length}<p>Previously loaded results; not freshly verified.</p>{/if}
 {#if view.status === 'success' && items.length === 0}
-  <p>{diskID ? 'No complete inventories' : 'No disks cataloged'}</p>
   <p>Imports are CLI-only. Stop the server before CLI catalog operations, then restart it.</p>
 {/if}
 {#if items.length}
@@ -167,6 +171,8 @@
 {/if}
 {#if view.pages.length}
   <PageControls
+    reload={() => void owner?.traversal.restart()}
+    reloadLabel={view.status === 'failure' ? 'Reload from first page' : 'Reload results'}
     {...paging}
     paged={view.paged}
     page={view.active}

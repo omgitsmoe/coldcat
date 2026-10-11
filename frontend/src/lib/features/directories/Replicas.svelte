@@ -113,6 +113,8 @@
       resource="Exact tree copies"
       {retry}
       loadingLabel="Comparing trees…"
+      retained={view.pages.length > 0}
+      retainedLabel="Previously loaded copies; not freshly verified."
     />
     {#if paging.busy}<button onclick={() => changed()}>Cancel comparison</button>{/if}
     {#if view.status === 'success'}<p role="status">
@@ -120,7 +122,6 @@
       </p>{/if}
     {#if view.status === 'idle'}<p>Comparison invalidated; apply to compare again.</p>{/if}
     {#if first}
-      {#if view.error}<p>Previously loaded copies; not freshly verified.</p>{/if}
       <p>
         {first.is_current ? 'Current' : 'Historical'} source inventory compared against current destination
         inventories.

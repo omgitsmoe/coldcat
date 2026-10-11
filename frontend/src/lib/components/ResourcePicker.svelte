@@ -3,7 +3,7 @@
   import { ApiError } from '../api/errors';
   import { useConnection } from '../state/context';
   import { diskPages, snapshotPages } from '../state/feature-requests';
-  import { errorPresentation } from '../state/presentation';
+  import RequestFeedback from './RequestFeedback.svelte';
   import type { TraversalState } from '../state/traversal';
   import DateValue from './DateValue.svelte';
 
@@ -29,7 +29,6 @@
   const name = $derived(kind === 'disk' ? 'Disk' : 'Inventory');
   const available = $derived(kind === 'disk' || /^[1-9][0-9]*$/.test(diskID));
   const selected = $derived(items.find((item) => item.id === value));
-  const message = $derived(errorPresentation(view.error, `${name} options`));
 
   $effect(() => {
     if (!open || !available) {
@@ -121,25 +120,32 @@
           Enter a valid Disk ID first. A Snapshot ID can still be entered directly without a disk.
         </p>
       {:else}
-        {#if paging.busy}<p role="status">Loading {name.toLowerCase()} options…</p>
-        {:else if view.status === 'stale'}
-          <p role="alert">Inventory changed; reload options. Old cursors are retired.</p>
-        {:else if view.status === 'failure'}
-          <p role="alert">
-            {message.title}: {message.detail} Options unavailable or not freshly verified; direct IDs
-            are retained.
-          </p>
-          <button type="button" onclick={retry}>Retry options</button>
-        {:else if view.status === 'idle'}
-          <p role="status">Options invalidated; reload explicitly.</p>
-        {:else if !items.length}
-          <p>
-            {kind === 'disk' ? 'No disks cataloged.' : 'No complete inventories for this disk.'}
-          </p>
-        {/if}
-        <button type="button" disabled={paging.busy} onclick={() => void owner?.traversal.restart()}
-          >Reload options</button
-        >
+        <RequestFeedback
+          status={view.status}
+          error={view.error}
+          resource={`${name} options`}
+          loadingLabel={`Loading ${name.toLowerCase()} options…`}
+          {retry}
+          retryLabel="Retry options"
+          staleLabel="Inventory changed; reload options. Old cursors are retired."
+          staleActionLabel="Reload options"
+          invalidatedLabel="Options invalidated; reload explicitly."
+          retained={view.pages.length > 0}
+          retainedLabel="Options unavailable or not freshly verified; direct IDs are retained."
+          emptyLabel={!items.length
+            ? kind === 'disk'
+              ? 'No disks cataloged.'
+              : 'No complete inventories for this disk.'
+            : undefined}
+        />
+        {#if view.status !== 'stale' && (view.status !== 'failure' || view.pages.length > 0)}<button
+            type="button"
+            disabled={paging.busy}
+            onclick={() => void owner?.traversal.restart()}
+            >{view.status === 'failure'
+              ? 'Reload options from first page'
+              : 'Reload options'}</button
+          >{/if}
         {#if items.length}
           <ul>
             {#each items as item (item.id)}

@@ -99,15 +99,19 @@
       Unapplied changes — Draft filters; apply to load results.
     </p>
   {:else}
-    <RequestFeedback status={view.status} error={view.error} resource="Contents" {retry} />
-    {#if view.status !== 'stale'}<button disabled={paging.busy} onclick={resume}
-        >Reload results</button
+    <RequestFeedback
+      status={view.status}
+      error={view.error}
+      resource="Contents"
+      {retry}
+      retained={view.pages.length > 0}
+      invalidatedLabel="Data invalidated; reload results."
+      emptyLabel={!items.length ? 'No matching distinct contents.' : undefined}
+    />
+    {#if view.status === 'idle' || view.status === 'loading'}<button
+        disabled={paging.busy}
+        onclick={resume}>Reload results</button
       >{/if}
-    {#if view.status === 'idle'}<p role="status">Data invalidated; reload results.</p>{/if}
-    {#if view.error && view.pages.length}<p>
-        Previously loaded results; not freshly verified.
-      </p>{/if}
-    {#if view.status === 'success' && !items.length}<p>No matching distinct contents.</p>{/if}
   {/if}
   <table class="data-table">
     <caption>Distinct content identities — {query.scope} membership</caption>
@@ -156,6 +160,8 @@
   </table>
   {#if !draft && view.pages.length}
     <PageControls
+      reload={resume}
+      reloadLabel={view.status === 'failure' ? 'Reload from first page' : 'Reload results'}
       {...paging}
       paged={view.paged}
       page={view.active}

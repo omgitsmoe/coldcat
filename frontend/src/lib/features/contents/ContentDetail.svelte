@@ -189,23 +189,23 @@
       error={view.error}
       resource="Content locations"
       retry={retryLocations}
+      retained={view.pages.length > 0}
+      retainedLabel="Retained locations are not freshly verified."
+      invalidatedLabel="Location data invalidated."
+      emptyLabel={!items.length
+        ? route.locations.scope === 'history'
+          ? 'No historical observations in complete inventories.'
+          : 'No current locations in complete inventories.'
+        : undefined}
     />
     {#if view.status === 'idle'}<p>
-        Location data invalidated. <button onclick={() => void owner?.traversal.restart()}
-          >Reload locations</button
-        >
-      </p>{/if}
-    {#if view.error && view.pages.length}<p role="status">
-        Retained locations are not freshly verified.
-      </p>{/if}
-    {#if view.status === 'success' && !items.length}<p>
-        {route.locations.scope === 'history'
-          ? 'No historical observations in complete inventories.'
-          : 'No current locations in complete inventories.'}
+        <button onclick={() => void owner?.traversal.restart()}>Reload locations</button>
       </p>{/if}
     {#if items.length}<Locations {items} context={route.context} />{/if}
     {#if view.pages.length && owner}
       <PageControls
+        reload={() => void owner?.traversal.restart()}
+        reloadLabel={view.status === 'failure' ? 'Reload from first page' : 'Reload locations'}
         busy={paging.busy}
         canMore={paging.canMore}
         canNext={paging.canNext}
@@ -219,7 +219,6 @@
         next={() => void owner?.traversal.next()}
         previous={() => owner?.traversal.previous()}
       />
-      <button onclick={() => void owner?.traversal.restart()}>Reload locations</button>
     {/if}
   </section>
 {/if}
