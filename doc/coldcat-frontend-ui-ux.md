@@ -464,6 +464,18 @@ extended audits or other packages. No U08 blockers remain.
 
 ### U09 — Label-based resource filter pickers
 
+**Progress (2026-10-11):** complete after U07/U10. Executed plan: reuse independent bounded disk/
+inventory read owners, offer explicit lazy label/capture choices alongside direct ID inputs,
+integrate draft-only selection into Search and Contents, and cover paging/error/bookmark/reconnect
+ownership. Options use 25-row requests and the existing ten-page retention bound; no preload,
+per-row reads, automatic exhaustion, scope switching or implicit application. Contents adds only
+disk membership and allows correction of malformed disk-ID bookmarks without dispatching them;
+unrelated invalid query combinations remain explicit failures. Check (0 errors/warnings), lint,
+build, API drift and 258 unit tests passed; 56 focused fixture-only browser tests passed, including
+ten picker regressions. Six external captures at 1440/1024/768px have no document overflow.
+Interfaces, evidence and remaining parser boundaries: [U09 handoff](ui-ux/u09/handoff.md).
+No backend/catalog changes, other agents or audits. No U09 blockers remain.
+
 **Priority:** P2  
 **Dependencies:** U02, U07; coordinate with U10  
 **Suggested context:** 45–80k tokens

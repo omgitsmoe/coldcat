@@ -22,6 +22,7 @@
     type BoundsMode,
   } from './filters';
   import ReplicaBounds from '../../components/ReplicaBounds.svelte';
+  import ResourcePicker from '../../components/ResourcePicker.svelte';
   import type { TraversalState } from '../../state/traversal';
   import RequestFeedback from '../../components/RequestFeedback.svelte';
   import PageControls from '../../components/PageControls.svelte';
@@ -417,10 +418,13 @@
       <fieldset>
         <legend>Membership</legend>
         <div class="control-group">
-          <label class="field">Disk ID <input bind:value={disk} inputmode="numeric" /></label>
-          <label class="field"
-            >Snapshot ID <input bind:value={snapshot} inputmode="numeric" /></label
-          >
+          <ResourcePicker bind:value={disk} edited={editedFilter} />
+          <ResourcePicker
+            kind="inventory"
+            diskID={disk}
+            bind:value={snapshot}
+            edited={editedFilter}
+          />
           <label class="check-field"
             ><input type="checkbox" bind:checked={directoryEnabled} /> Filter directory membership</label
           >

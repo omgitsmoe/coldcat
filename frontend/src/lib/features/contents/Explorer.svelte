@@ -12,6 +12,7 @@
   import PageControls from '../../components/PageControls.svelte';
   import Filters from './Filters.svelte';
   import { contentSummary } from './filters';
+  import { parseMembershipDraft } from './membership-draft';
   let { search }: { search: string } = $props();
   const connection = useConnection();
   type Page = Result<'GET /api/v1/contents'>;
@@ -21,13 +22,20 @@
   let view = $state<TraversalState<Page>>({ status: 'idle', pages: [], active: 0, paged: false });
   let items = $state<Page['items']>([]);
   let draft = $state(false);
+  let bookmarkedDraft = $state(false);
   let paging = $state({ busy: false, canMore: false, canNext: false, canPrevious: false });
   $effect(() => {
     let input: ContentsRoute;
     try {
       input = parseContents(new globalThis.URLSearchParams(search));
     } catch (error) {
-      parseError = error instanceof Error ? error.message : 'Invalid content filters';
+      try {
+        query = parseMembershipDraft(new globalThis.URLSearchParams(search));
+        draft = true;
+        bookmarkedDraft = true;
+      } catch {
+        parseError = error instanceof Error ? error.message : 'Invalid content filters';
+      }
       return;
     }
     query = input;
@@ -81,8 +89,12 @@
 {#if parseError}<p role="alert">{parseError}</p>
   <pre>{search}</pre>
 {:else if query}
-  <Filters {query} {retire} {resume} />
-  <p class="literal muted">{draft ? 'Last applied' : 'Applied'}: {contentSummary(query)}</p>
+  <Filters {query} {retire} {resume} {bookmarkedDraft} />
+  <p class="literal muted">
+    {bookmarkedDraft ? 'Bookmarked draft (not applied)' : draft ? 'Last applied' : 'Applied'}: {contentSummary(
+      query,
+    )}
+  </p>
   {#if draft}<p role="status" class="status-warning">
       Unapplied changes — Draft filters; apply to load results.
     </p>

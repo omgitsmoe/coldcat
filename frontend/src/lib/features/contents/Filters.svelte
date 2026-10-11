@@ -4,16 +4,19 @@
   import { resolve } from '$app/paths';
   import { contentsURL, type ContentsRoute } from '../../state/routes';
   import ReplicaBounds from '../../components/ReplicaBounds.svelte';
+  import ResourcePicker from '../../components/ResourcePicker.svelte';
   import { boundsMode, boundsQuery } from '../search/filters';
   import { contentFilterCount } from './filters';
   let {
     query,
     retire,
     resume,
+    bookmarkedDraft = false,
   }: {
     query: ContentsRoute;
     retire: () => void;
     resume: () => void;
+    bookmarkedDraft?: boolean;
   } = $props();
   const initial = untrack(() => query);
   let scope = $state(initial.scope ?? 'current');
@@ -66,7 +69,7 @@
     event.preventDefault();
     const url = validation.url;
     if (url) {
-      if (url === contentsURL(query)) resume();
+      if (!bookmarkedDraft && url === contentsURL(query)) resume();
       else void goto(resolve(`/contents?${url.split('?')[1]}`));
     }
   }
@@ -94,7 +97,7 @@
     <div class="advanced">
       <fieldset>
         <legend>Membership</legend>
-        <label class="field">Disk ID <input inputmode="numeric" bind:value={disk} /></label>
+        <ResourcePicker bind:value={disk} edited={retire} />
         <label class="check-field"
           ><input type="checkbox" bind:checked={useDirectory} /> Filter directory membership</label
         >
