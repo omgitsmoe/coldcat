@@ -1,0 +1,449 @@
+{
+  "browser": "156.0.8078.4",
+  "measurements": [
+    {
+      "state": "ready",
+      "width": 1440,
+      "screenshot": "ready-1440.png",
+      "documentWidth": 1440,
+      "headerHeight": 57,
+      "mainGutter": "24px",
+      "barGutter": "24px",
+      "formWidth": 720,
+      "items": [
+        {
+          "text": "Coldcat",
+          "left": 24,
+          "right": 108.515625,
+          "top": 18,
+          "bottom": 38
+        },
+        {
+          "text": "Search",
+          "left": 132.515625,
+          "right": 202.71875,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Contents",
+          "left": 214.71875,
+          "right": 293.703125,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Disks",
+          "left": 305.703125,
+          "right": 359.078125,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Backend ready",
+          "left": 1319.3125,
+          "right": 1416,
+          "top": 18,
+          "bottom": 38
+        }
+      ]
+    },
+    {
+      "state": "checking",
+      "width": 1440,
+      "screenshot": "checking-1440.png",
+      "documentWidth": 1440,
+      "headerHeight": 57,
+      "mainGutter": "24px",
+      "barGutter": "24px",
+      "formWidth": 720,
+      "items": [
+        {
+          "text": "Coldcat",
+          "left": 24,
+          "right": 108.515625,
+          "top": 18,
+          "bottom": 38
+        },
+        {
+          "text": "Search",
+          "left": 132.515625,
+          "right": 202.71875,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Contents",
+          "left": 214.71875,
+          "right": 293.703125,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Disks",
+          "left": 305.703125,
+          "right": 359.078125,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Checking backend…",
+          "left": 1283.84375,
+          "right": 1416,
+          "top": 18,
+          "bottom": 38
+        }
+      ]
+    },
+    {
+      "state": "unavailable",
+      "width": 1440,
+      "screenshot": "unavailable-1440.png",
+      "documentWidth": 1440,
+      "headerHeight": 63,
+      "mainGutter": "24px",
+      "barGutter": "24px",
+      "formWidth": 720,
+      "items": [
+        {
+          "text": "Coldcat",
+          "left": 24,
+          "right": 108.515625,
+          "top": 21,
+          "bottom": 41
+        },
+        {
+          "text": "Search",
+          "left": 132.515625,
+          "right": 202.71875,
+          "top": 15,
+          "bottom": 47
+        },
+        {
+          "text": "Contents",
+          "left": 214.71875,
+          "right": 293.703125,
+          "top": 15,
+          "bottom": 47
+        },
+        {
+          "text": "Disks",
+          "left": 305.703125,
+          "right": 359.078125,
+          "top": 15,
+          "bottom": 47
+        },
+        {
+          "text": "Backend unavailable. Start the local server, then retry.",
+          "left": 897.8125,
+          "right": 1270.65625,
+          "top": 21,
+          "bottom": 41
+        },
+        {
+          "text": "Retry connection",
+          "left": 1278.65625,
+          "right": 1407,
+          "top": 17,
+          "bottom": 45
+        }
+      ]
+    },
+    {
+      "state": "ready",
+      "width": 1024,
+      "screenshot": "ready-1024.png",
+      "documentWidth": 1024,
+      "headerHeight": 57,
+      "mainGutter": "24px",
+      "barGutter": "24px",
+      "formWidth": 720,
+      "items": [
+        {
+          "text": "Coldcat",
+          "left": 24,
+          "right": 108.515625,
+          "top": 18,
+          "bottom": 38
+        },
+        {
+          "text": "Search",
+          "left": 132.515625,
+          "right": 202.71875,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Contents",
+          "left": 214.71875,
+          "right": 293.703125,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Disks",
+          "left": 305.703125,
+          "right": 359.078125,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Backend ready",
+          "left": 903.3125,
+          "right": 1000,
+          "top": 18,
+          "bottom": 38
+        }
+      ]
+    },
+    {
+      "state": "checking",
+      "width": 1024,
+      "screenshot": "checking-1024.png",
+      "documentWidth": 1024,
+      "headerHeight": 57,
+      "mainGutter": "24px",
+      "barGutter": "24px",
+      "formWidth": 720,
+      "items": [
+        {
+          "text": "Coldcat",
+          "left": 24,
+          "right": 108.515625,
+          "top": 18,
+          "bottom": 38
+        },
+        {
+          "text": "Search",
+          "left": 132.515625,
+          "right": 202.71875,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Contents",
+          "left": 214.71875,
+          "right": 293.703125,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Disks",
+          "left": 305.703125,
+          "right": 359.078125,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Checking backend…",
+          "left": 867.84375,
+          "right": 1000,
+          "top": 18,
+          "bottom": 38
+        }
+      ]
+    },
+    {
+      "state": "unavailable",
+      "width": 1024,
+      "screenshot": "unavailable-1024.png",
+      "documentWidth": 1024,
+      "headerHeight": 63,
+      "mainGutter": "24px",
+      "barGutter": "24px",
+      "formWidth": 720,
+      "items": [
+        {
+          "text": "Coldcat",
+          "left": 24,
+          "right": 108.515625,
+          "top": 21,
+          "bottom": 41
+        },
+        {
+          "text": "Search",
+          "left": 132.515625,
+          "right": 202.71875,
+          "top": 15,
+          "bottom": 47
+        },
+        {
+          "text": "Contents",
+          "left": 214.71875,
+          "right": 293.703125,
+          "top": 15,
+          "bottom": 47
+        },
+        {
+          "text": "Disks",
+          "left": 305.703125,
+          "right": 359.078125,
+          "top": 15,
+          "bottom": 47
+        },
+        {
+          "text": "Backend unavailable. Start the local server, then retry.",
+          "left": 481.8125,
+          "right": 854.65625,
+          "top": 21,
+          "bottom": 41
+        },
+        {
+          "text": "Retry connection",
+          "left": 862.65625,
+          "right": 991,
+          "top": 17,
+          "bottom": 45
+        }
+      ]
+    },
+    {
+      "state": "ready",
+      "width": 768,
+      "screenshot": "ready-768.png",
+      "documentWidth": 768,
+      "headerHeight": 57,
+      "mainGutter": "16px",
+      "barGutter": "16px",
+      "formWidth": 720,
+      "items": [
+        {
+          "text": "Coldcat",
+          "left": 16,
+          "right": 100.515625,
+          "top": 18,
+          "bottom": 38
+        },
+        {
+          "text": "Search",
+          "left": 124.515625,
+          "right": 194.71875,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Contents",
+          "left": 206.71875,
+          "right": 285.703125,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Disks",
+          "left": 297.703125,
+          "right": 351.078125,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Backend ready",
+          "left": 655.3125,
+          "right": 752,
+          "top": 18,
+          "bottom": 38
+        }
+      ]
+    },
+    {
+      "state": "checking",
+      "width": 768,
+      "screenshot": "checking-768.png",
+      "documentWidth": 768,
+      "headerHeight": 57,
+      "mainGutter": "16px",
+      "barGutter": "16px",
+      "formWidth": 720,
+      "items": [
+        {
+          "text": "Coldcat",
+          "left": 16,
+          "right": 100.515625,
+          "top": 18,
+          "bottom": 38
+        },
+        {
+          "text": "Search",
+          "left": 124.515625,
+          "right": 194.71875,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Contents",
+          "left": 206.71875,
+          "right": 285.703125,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Disks",
+          "left": 297.703125,
+          "right": 351.078125,
+          "top": 12,
+          "bottom": 44
+        },
+        {
+          "text": "Checking backend…",
+          "left": 619.84375,
+          "right": 752,
+          "top": 18,
+          "bottom": 38
+        }
+      ]
+    },
+    {
+      "state": "unavailable",
+      "width": 768,
+      "screenshot": "unavailable-768.png",
+      "documentWidth": 768,
+      "headerHeight": 103,
+      "mainGutter": "16px",
+      "barGutter": "16px",
+      "formWidth": 720,
+      "items": [
+        {
+          "text": "Coldcat",
+          "left": 16,
+          "right": 100.515625,
+          "top": 14,
+          "bottom": 34
+        },
+        {
+          "text": "Search",
+          "left": 124.515625,
+          "right": 194.71875,
+          "top": 8,
+          "bottom": 40
+        },
+        {
+          "text": "Contents",
+          "left": 206.71875,
+          "right": 285.703125,
+          "top": 8,
+          "bottom": 40
+        },
+        {
+          "text": "Disks",
+          "left": 297.703125,
+          "right": 351.078125,
+          "top": 8,
+          "bottom": 40
+        },
+        {
+          "text": "Backend unavailable. Start the local server, then retry.",
+          "left": 233.8125,
+          "right": 606.65625,
+          "top": 61,
+          "bottom": 81
+        },
+        {
+          "text": "Retry connection",
+          "left": 614.65625,
+          "right": 743,
+          "top": 57,
+          "bottom": 85
+        }
+      ]
+    }
+  ]
+}

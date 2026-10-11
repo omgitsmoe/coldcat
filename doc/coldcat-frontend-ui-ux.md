@@ -211,6 +211,15 @@ follow-up ownership: [U02 handoff](ui-ux/u02/handoff.md). U03 is next, sequentia
 
 ### U03 — Application shell and navigation
 
+**Progress (2026-10-11):** complete. Executed plan: compose the approved compact
+brand/navigation/connection bar, map nested routes to their owning section, and publish shared
+workspace/form widths and gutters without changing connection or keyboard ownership. Ready and
+checking bars are 57px at 1440/1024/768px; outage wraps to 103px at 768px with the existing retry.
+Check (0 errors/warnings), lint, build, 143 unit tests, five focused shell/visual tests, 18
+representative page captures and 55 focused browser behavior tests passed. No backend/catalog
+changes or expanded accessibility audit. Interfaces, screenshots, constraints and follow-up:
+[U03 handoff](ui-ux/u03/handoff.md). U04–U14 remain for subsequent sequential packages.
+
 **Priority:** P1  
 **Dependencies:** U02  
 **Suggested context:** 25–45k tokens

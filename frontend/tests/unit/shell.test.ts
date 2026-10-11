@@ -1,4 +1,4 @@
-import { cleanup, render, screen, fireEvent } from '@testing-library/svelte';
+import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Shell from '../../src/lib/components/Shell.svelte';
 
@@ -41,9 +41,11 @@ describe('shell connection', () => {
       .mockResolvedValueOnce(json(catalog));
     vi.stubGlobal('fetch', request);
     render(Shell);
-    expect(
-      await screen.findByText('Backend unavailable. Start the local server, then retry.'),
-    ).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toBe(
+        'Backend unavailable. Start the local server, then retry.',
+      ),
+    );
     await fireEvent.click(screen.getByRole('button', { name: 'Retry connection' }));
     expect(await screen.findByText('Backend ready')).toBeTruthy();
     expect(request).toHaveBeenCalledTimes(3);
@@ -56,8 +58,10 @@ describe('shell connection', () => {
   ])('never treats an error or unexpected response as ready', async (response) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
     render(Shell);
-    expect(
-      await screen.findByText('Backend unavailable. Start the local server, then retry.'),
-    ).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toBe(
+        'Backend unavailable. Start the local server, then retry.',
+      ),
+    );
   });
 });

@@ -30,15 +30,19 @@
 
 <a class="skip-link" href="#main">Skip to main content</a>
 <header class="shell-header">
-  {@render brand?.()}
-  {@render navigation?.()}
-  <p role="status" aria-live="polite">
-    {#if state.status === 'checking'}Checking backend…
-    {:else if state.status === 'ready'}Backend ready
-    {:else}Backend unavailable. Start the local server, then retry.{/if}
-  </p>
-  {#if state.status === 'unavailable'}
-    <button onclick={() => connection.retry()}>Retry connection</button>
-  {/if}
+  <div class="shell-bar shell-frame">
+    {@render brand?.()}
+    {@render navigation?.()}
+    <div class="shell-connection" class:unavailable={state.status === 'unavailable'}>
+      <p role="status" aria-live="polite">
+        {#if state.status === 'checking'}Checking backend…
+        {:else if state.status === 'ready'}Backend ready
+        {:else}<strong>Backend unavailable.</strong> Start the local server, then retry.{/if}
+      </p>
+      {#if state.status === 'unavailable'}
+        <button class="button-compact" onclick={() => connection.retry()}>Retry connection</button>
+      {/if}
+    </div>
+  </div>
 </header>
-<main class="shell-main" id="main" tabindex="-1">{@render children?.()}</main>
+<main class="shell-main shell-frame" id="main" tabindex="-1">{@render children?.()}</main>
