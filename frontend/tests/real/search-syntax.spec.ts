@@ -46,6 +46,19 @@ test('default syntax combines wildcards and Boolean search with pagination and n
   expect(errors).toEqual([]);
 });
 
+test('spaces imply AND while quoted phrases stay literal', async ({ page }) => {
+  await page.goto('/?q=report%20foobar&field=path');
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await expect(page.locator('tbody')).toContainText('foobar/report.txt');
+  await expect(page.locator('#search-syntax-hint')).toContainText('Spaces imply AND');
+  await page.getByRole('searchbox').fill('"report foobar"');
+  await expect(page.getByText('No matching observations.', { exact: false })).toBeVisible();
+  await page.getByRole('searchbox').fill('"foobar/report.txt"');
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await page.getByText('Search syntax help', { exact: true }).click();
+  await expect(page.locator('.syntax-help')).toContainText('tax AND return');
+});
+
 test('whole-field and literal options remain explicit', async ({ page }) => {
   await page.goto('/?q=report.txt&field=path');
   await expect(page.locator('tbody tr')).toHaveCount(4);

@@ -393,7 +393,7 @@
   {#if match === 'syntax' || match === 'whole'}
     Wildcards + AND / OR: <code>gwa*cshd OR report*.pdf</code>.
     {match === 'whole' ? 'Whole-field terms.' : 'Matches anywhere.'}
-    AND binds before OR.
+    Spaces imply AND; AND binds before OR. Use quotes for a literal phrase.
   {:else if match === 'exact'}
     Exact matches the whole field, ignoring case. Short queries and punctuation are literal.
   {:else}
@@ -514,9 +514,9 @@
         characters; at most 32 terms, 32 indexed runs and 16 nesting levels.
       </li>
       <li>
-        AND binds before OR. Plain <code>tax return</code> is one substring, not implicit AND.
-        Quotes make syntax literal: <code>"report*.pdf"</code> searches for an actual asterisk. NOT and
-        regex are not supported.
+        AND binds before OR. Plain <code>tax return</code> means <code>tax AND return</code>, in
+        either order. Use <code>"tax return"</code> for one literal substring. Quotes make syntax
+        literal: <code>"report*.pdf"</code> searches for an actual asterisk. NOT and regex are not supported.
       </li>
       <li>
         Search syntax matches each term anywhere; Whole-field syntax anchors each term to the entire

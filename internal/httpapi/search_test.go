@@ -99,11 +99,11 @@ func testSearchHTTPWorkflow(t *testing.T, match string) {
 		searchURL = "/api/v1/search?q=" + url.QueryEscape("REPORT AND txt") + "&match=expression&"
 		relevance = "match"
 	} else if match == "syntax" || match == "whole" {
-		searchURL = "/api/v1/search?q=" + url.QueryEscape("report*txt OR absent*.pdf") +
+		searchURL = "/api/v1/search?q=" + url.QueryEscape("*REPORT* *txt OR absent*.pdf") +
 			"&match=" + match + "&"
 		relevance = "match"
 	} else if match == "" {
-		searchURL = "/api/v1/search?q=" + url.QueryEscape("REPORT*txt OR absent") + "&"
+		searchURL = "/api/v1/search?q=" + url.QueryEscape("REPORT txt OR absent") + "&"
 		relevance = "match"
 	}
 	get(searchURL+"limit=1", 200, &page, "/api/v1/search")

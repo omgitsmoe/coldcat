@@ -189,10 +189,16 @@ func (p *searchParser) expression(minPrecedence, depth int) (*searchExpression, 
 	}
 	for {
 		op, precedence := p.operator()
+		implicit := op == "" && p.unified && p.pos < len(p.input) && p.input[p.pos] != ')'
+		if implicit {
+			op, precedence = "AND", 2
+		}
 		if op == "" || precedence < minPrecedence {
 			return left, nil
 		}
-		p.pos += len(op)
+		if !implicit {
+			p.pos += len(op)
+		}
 		right, err := p.expression(precedence+1, depth)
 		if err != nil {
 			return nil, err
@@ -270,7 +276,7 @@ func (p *searchParser) atom(depth int) (*searchExpression, error) {
 }
 
 func (p *searchParser) pattern() (*searchExpression, error) {
-	var pattern, pendingSpace strings.Builder
+	var pattern strings.Builder
 	quoted := false
 	started := false
 	writeLiteral := func(r rune) {
@@ -286,11 +292,9 @@ func (p *searchParser) pattern() (*searchExpression, error) {
 				break
 			}
 			if unicode.IsSpace(r) {
-				pendingSpace.WriteRune(r)
-				p.pos++
-				continue
+				break
 			}
-			if !started || pendingSpace.Len() > 0 {
+			if !started {
 				op, _ := p.operator()
 				if op != "" {
 					break
@@ -305,8 +309,6 @@ func (p *searchParser) pattern() (*searchExpression, error) {
 				}
 			}
 		}
-		pattern.WriteString(pendingSpace.String())
-		pendingSpace.Reset()
 		started = true
 		p.pos++
 		if r == '"' {

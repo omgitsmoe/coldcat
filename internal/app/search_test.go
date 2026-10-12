@@ -326,12 +326,15 @@ func testSearchRecovery(t *testing.T, match string) {
 	if err := json.Unmarshal(data, &cursor); err != nil {
 		t.Fatal(err)
 	}
-	for _, version := range []int{1, 2} {
+	for _, version := range []int{1, 2, 5} {
 		obsolete := cursor
 		obsolete.Version = version
 		obsolete.Kind = "search:rank:path:id"
 		if version == 2 {
 			obsolete.Kind = "search:fuzzy-v1:rank:path:id"
+		}
+		if version == 5 {
+			obsolete.Kind = "search:syntax-v2:fold-v1:path:id"
 		}
 		obsoleteData, err := json.Marshal(obsolete)
 		if err != nil {

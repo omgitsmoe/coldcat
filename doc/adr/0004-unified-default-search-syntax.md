@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-11
 - Supersedes: ADR 0003's separate browser modes and literal default
+- Partially superseded by: ADR 0005's implicit AND between terms
 
 ## Context
 

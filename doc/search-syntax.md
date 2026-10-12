@@ -10,7 +10,8 @@ behavior remain unchanged. **Name** searches the last `/`-separated segment;
 | Search syntax | `gwa*cshd` | Ordered fragments anywhere in Name or Path |
 | Search syntax | `gwa*cshd OR report*.pdf` | Either wildcard pattern, anywhere in the field |
 | Search syntax | `(personal OR work) AND "tax return"` | Alternatives with a shared literal substring |
-| Search syntax | `tax return` | One literal substring, including the space |
+| Search syntax | `tax return` | Both substrings, anywhere in the field and in either order |
+| Search syntax | `"tax return"` | One literal substring, including the space |
 | Search syntax | `"report*.pdf"` | Literal substring containing an actual asterisk |
 | Whole-field syntax | `gwa*cshd` | Entire field begins with `gwa` and ends with `cshd` |
 | Whole-field syntax | `(personal/* OR work/*) AND *report*` | Whole-field patterns combined logically |
@@ -23,9 +24,11 @@ Brackets are literal, not character classes. Each term must include an uninterru
 literal run of at least three Unicode code points. At most 32 terms and 32 indexed
 literal runs across the entire query are allowed; every OR branch must be indexable.
 
-Both syntax options use explicit uppercase `AND` and `OR`; `AND` binds more tightly.
-Plain multiword text is one term, not implicit AND. Leading/trailing unquoted
-whitespace is ignored around terms; quoted whitespace is preserved. Double quotes
+Both syntax options support uppercase `AND` and `OR`; `AND` binds more tightly.
+Adjacent terms or parenthesized groups imply `AND`, so `tax return` means
+`tax AND return` and `personal OR tax return` means `personal OR (tax AND return)`.
+Unquoted whitespace separates terms; leading/trailing whitespace is ignored.
+Quoted whitespace is preserved. Double quotes
 make their contents literal, including operators, parentheses and wildcards.
 Quoted and unquoted segments can be concatenated: `report*".pdf"` retains the wildcard.
 Operators must be separated by whitespace or parentheses. At most 16 parenthesis
@@ -54,7 +57,9 @@ Omitted `match` defaults to `syntax`; `whole` selects whole-field syntax.
 no Boolean operators) and `expression` (Boolean literal substrings, no wildcard
 patterns) remain available through the API, but are no longer browser options.
 There is no legacy bookmark migration. New syntax cursors are separate from legacy
-mode cursors. No schema migration, additional index or catalog rebuild is required.
+mode cursors. Cursors issued before implicit AND was introduced are rejected for
+`syntax` and `whole`; restart pagination under the new grammar. No schema migration,
+additional index or catalog rebuild is required.
 
 ## Performance measurements
 

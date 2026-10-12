@@ -1,5 +1,5 @@
 // Generated from doc/openapi.json; do not edit.
-// SHA-256: 5fcd91b95676643d5ede52601b6a5ce18c9667a6d5e9b2f371c41da4f5803949
+// SHA-256: af14cf60b77e35c0bc511546a71697ca7803cdfe72c359cafe466edd0ec70f16
 export interface components {
   schemas: {
     CatalogSummary: {

@@ -226,10 +226,37 @@ func TestSearchUnifiedSyntax(t *testing.T) {
 		{"syntax", "name", "missing OR tax AND return", []string{
 			"work/tax other return", "work/tax return",
 		}},
-		{"syntax", "name", "tax return", []string{"work/tax return"}},
+		{"syntax", "name", "tax return", []string{"work/tax other return", "work/tax return"}},
+		{"syntax", "name", "return tax", []string{"work/tax other return", "work/tax return"}},
+		{"syntax", "name", "tax\t\n\u2003return", []string{
+			"work/tax other return", "work/tax return",
+		}},
+		{"syntax", "name", "missing OR tax return", []string{
+			"work/tax other return", "work/tax return",
+		}},
+		{"syntax", "name", "tax return OR report*.pdf", []string{
+			"work/report*.pdf", "work/report-2024.pdf", "work/tax other return", "work/tax return",
+		}},
+		{"syntax", "name", "tax (missing OR return)", []string{
+			"work/tax other return", "work/tax return",
+		}},
+		{"syntax", "name", "(tax)(return)", []string{
+			"work/tax other return", "work/tax return",
+		}},
+		{"syntax", "name", `"tax" "return"`, []string{
+			"work/tax other return", "work/tax return",
+		}},
+		{"syntax", "name", `"tax "return`, []string{"work/tax return"}},
+		{"syntax", "name", `"tax other" return`, []string{"work/tax other return"}},
+		{"syntax", "name", "report* pdf", []string{"work/report*.pdf", "work/report-2024.pdf"}},
 		{"syntax", "name", `"tax return"`, []string{"work/tax return"}},
 		{"whole", "path", "tax return", nil},
-		{"whole", "name", "tax return", []string{"work/tax return"}},
+		{"whole", "name", "tax return", nil},
+		{"whole", "name", `"tax return"`, []string{"work/tax return"}},
+		{"whole", "name", "*tax* *return*", []string{
+			"work/tax other return", "work/tax return",
+		}},
+		{"substring", "name", "tax return", []string{"work/tax return"}},
 		{"syntax", "name", `"report*.pdf"`, []string{"work/report*.pdf"}},
 		{"syntax", "name", `report\*.pdf`, []string{"work/report*.pdf"}},
 		{"syntax", "name", `report*".pdf"`, []string{"work/report*.pdf", "work/report-2024.pdf"}},
@@ -241,7 +268,9 @@ func TestSearchUnifiedSyntax(t *testing.T) {
 		{"syntax", "name", `é猫σ?txt`, []string{"work/é猫Σ.txt"}},
 		{"syntax", "path", "abc\ufffe OR absent", []string{"work/abc\ufffe"}},
 		{"syntax", "path", "abc\ufffd", []string{"work/abc\ufffd"}},
-		{"syntax", "path", "  tax return  ", []string{"work/tax return"}},
+		{"syntax", "path", "  tax return  ", []string{
+			"work/tax other return", "work/tax return",
+		}},
 		{"syntax", "path", "missing OR(tax AND return)", []string{
 			"work/tax other return", "work/tax return",
 		}},
@@ -258,7 +287,7 @@ func TestSearchUnifiedSyntax(t *testing.T) {
 			var got []string
 			for _, item := range page.Items {
 				got = append(got, item.Observation.Path)
-				if item.Relevance != "match" {
+				if test.mode != "substring" && item.Relevance != "match" {
 					t.Fatalf("unexpected relevance %q", item.Relevance)
 				}
 			}
@@ -273,7 +302,7 @@ func TestSearchUnifiedSyntax(t *testing.T) {
 			if plan := searchWindowPlan(t, db, query, args); !strings.Contains(plan, "VIRTUAL TABLE INDEX 0:M") {
 				t.Fatalf("missing indexed MATCH constraint:\n%s", plan)
 			}
-			if len(page.Items) > 0 {
+			if test.mode != "substring" && len(page.Items) > 0 {
 				first := page.Items[0]
 				after := base.SearchAnchor{ID: first.Observation.Id,
 					Path: first.Observation.Path, Relevance: "exact"}
@@ -292,6 +321,8 @@ func TestSearchUnifiedSyntaxValidation(t *testing.T) {
 			"abc OR", "(abc", "abc)", "()", `"abc`, `""`, `abc\`, `abc\x`,
 			strings.Repeat("(", 17) + "abc" + strings.Repeat(")", 17),
 			strings.Repeat("abc OR ", 32) + "def",
+			strings.Repeat("abc ", 32) + "def", "abc ab", "abc AND OR def",
+			"abc (def OR)", "abc ()", "abc NOT", "abc OR NOT def",
 			strings.Repeat("abc*", 17) + " OR " + strings.Repeat("def*", 16),
 		} {
 			f := base.SearchFilters{Query: query, Field: "path", Match: mode,
@@ -305,6 +336,7 @@ func TestSearchUnifiedSyntaxValidation(t *testing.T) {
 		for _, query := range []string{
 			strings.Repeat("(", 16) + "abc" + strings.Repeat(")", 16),
 			strings.Repeat("abc OR ", 31) + "def", `"NOT"`, `abc?`,
+			strings.Repeat("abc ", 31) + "def", `"a quote should be used"`,
 		} {
 			if _, err := parseSearchSyntax(query, mode == "whole"); err != nil {
 				t.Errorf("rejected %s %q: %v", mode, query, err)
