@@ -15,6 +15,21 @@ const input = (q: string, extra = '') =>
 afterEach(() => vi.useRealTimers());
 
 describe('search dispatch eligibility', () => {
+  it('dispatches standalone match-all only in syntax modes, preserving filter validation', () => {
+    for (const mode of ['', '&match=syntax', '&match=whole']) {
+      expect(searchIssue(input('*', mode))).toBeUndefined();
+      expect(searchIssue(input(' \t*\n', mode))).toBeUndefined();
+      expect(
+        searchIssue(input('*', mode + '&other_replicas=1&replica_metric=disks')),
+      ).toBeUndefined();
+      expect(searchIssue(input('*', mode + '&scope=history&other_replicas=1'))?.kind).toBe(
+        'invalid',
+      );
+    }
+    expect(searchIssue(input('*', '&match=substring'))?.kind).toBe('short');
+    expect(searchIssue(input('*', '&match=exact'))).toBeUndefined();
+    expect(searchIssue(input('**'))?.kind).toBe('short');
+  });
   it('counts code points, preserves literal input and enforces UTF-8/NUL', () => {
     expect(searchIssue(input(''))?.kind).toBe('idle');
     expect(searchIssue(input('😀雪'))?.kind).toBe('short');

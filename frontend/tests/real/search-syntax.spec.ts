@@ -1,5 +1,27 @@
 import { test, expect } from './test';
 
+test('standalone star matches all files with advanced replica filters and pagination', async ({
+  page,
+}) => {
+  for (const mode of ['syntax', 'whole']) {
+    await page.goto(`/?q=*&match=${mode}&other_replicas=1&replica_metric=disks&limit=1`);
+    await expect(page.getByText('No matching observations.', { exact: false })).toBeVisible();
+    await page.goto(`/?q=*&match=${mode}&other_replicas=2&replica_metric=disks&limit=1`);
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+    await expect(page.locator('#search-syntax-hint')).toContainText('*');
+    const continuation = page.waitForResponse((r) => {
+      const url = new URL(r.url());
+      return url.pathname === '/api/v1/search' && url.searchParams.has('cursor');
+    });
+    await page.getByRole('button', { name: 'Load more', exact: true }).click();
+    expect((await continuation).status()).toBe(200);
+    await expect(page.locator('tbody tr')).toHaveCount(2);
+    await page.reload();
+    await expect(page.getByRole('searchbox')).toHaveValue('*');
+    await expect(page.locator('tbody tr')).toHaveCount(1);
+  }
+});
+
 test('default syntax combines wildcards and Boolean search with pagination and navigation', async ({
   page,
 }) => {

@@ -7,6 +7,7 @@ behavior remain unchanged. **Name** searches the last `/`-separated segment;
 
 | Mode | Query | Meaning |
 | --- | --- | --- |
+| Either syntax mode | `*` | All files, subject to scope and advanced filters |
 | Search syntax | `gwa*cshd` | Ordered fragments anywhere in Name or Path |
 | Search syntax | `gwa*cshd OR report*.pdf` | Either wildcard pattern, anywhere in the field |
 | Search syntax | `(personal OR work) AND "tax return"` | Alternatives with a shared literal substring |
@@ -21,7 +22,8 @@ behavior remain unchanged. **Name** searches the last `/`-separated segment;
 Wildcard `*` matches zero or more characters, including `/`; `?` matches one Unicode
 code point. Escape literal syntax with `\*`, `\?`, `\\`, `\"`, `\(`, and `\)`.
 Brackets are literal, not character classes. Each term must include an uninterrupted
-literal run of at least three Unicode code points. At most 32 terms and 32 indexed
+literal run of at least three Unicode code points, except a standalone unquoted `*`
+in Search syntax or Whole-field syntax. At most 32 terms and 32 indexed
 literal runs across the entire query are allowed; every OR branch must be indexable.
 
 Both syntax options support uppercase `AND` and `OR`; `AND` binds more tightly.
@@ -42,7 +44,17 @@ Whole-field syntax; use `*gwa*cshd` there to allow parent directories.
 
 Contains requires three code points; Exact permits shorter queries. All queries are
 limited to 1024 UTF-8 bytes. Invalid or unindexable queries return HTTP 400; there is
-no hidden full-catalog scan fallback or candidate cap.
+no hidden full-catalog scan fallback or candidate cap. Standalone `*` explicitly
+bypasses the name/path predicate and trigram lookup; other patterns still require
+indexable literals. Outer whitespace is ignored. `**`, `?`, `(*)`, `* OR report`,
+quoted `"*"`, and escaped `\*` do not qualify for this exception. Contains and Exact
+retain literal asterisk semantics; legacy API modes are unchanged.
+
+To show files with exactly one other disk copy, use `q=*` with current scope,
+`replica_metric=disks`, and `other_replicas=1`. Membership filters restrict returned
+observations, not catalog-wide copy counts. Results remain individual file
+observations, not one row per unique content. Broad replica-filtered requests may
+inspect many paths before filling a page.
 
 Syntax results have relevance `match` and sort by original binary
 path, then observation ID. Contains still ranks exact matches before prefixes before
@@ -62,6 +74,21 @@ mode cursors. Cursors issued before implicit AND was introduced are rejected for
 additional index or catalog rebuild is required.
 
 ## Performance measurements
+
+### Explicit match-all
+
+`BenchmarkSearchMatchAll` uses 50,000 current observations across two disks with
+one snapshot each, 50 items per first page. Four locations of one shared content
+span both disks; other contents have one location. Three warm serial iterations
+measured 1.56 ms unfiltered, 84.4 ms for exactly one other disk, and 72.3 ms for
+exactly one other location (no results). Other checks ran concurrently; these are
+synthetic warm means, not cold latency or p95. Replica filtering can inspect most
+paths even when the returned page is small or empty.
+
+```sh
+go test ./internal/database -run '^$' -bench '^BenchmarkSearchMatchAll$' \
+  -benchtime=3x -benchmem -v
+```
 
 ### Unified syntax
 

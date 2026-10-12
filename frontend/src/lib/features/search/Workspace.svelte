@@ -391,9 +391,8 @@
 </form>
 <p id="search-syntax-hint" class="muted syntax-hint">
   {#if match === 'syntax' || match === 'whole'}
-    Wildcards + AND / OR: <code>gwa*cshd OR report*.pdf</code>.
     {match === 'whole' ? 'Whole-field terms.' : 'Matches anywhere.'}
-    Spaces imply AND; AND binds before OR. Use quotes for a literal phrase.
+    Spaces imply AND; AND binds before OR. * alone matches all.
   {:else if match === 'exact'}
     Exact matches the whole field, ignoring case. Short queries and punctuation are literal.
   {:else}
@@ -506,12 +505,17 @@
       </li>
       <li>Contains and Exact treat spaces, quotes, operators and wildcard characters literally.</li>
       <li>
+        Use <code>*</code> alone in either syntax mode to match all files, then apply advanced filters
+        (for example, exactly 1 other disk copy). Outer whitespace is ignored.
+      </li>
+      <li>
         Search syntax combines wildcards, uppercase AND / OR and parentheses.
         <code>*</code> matches any characters (including <code>/</code>),
         <code>?</code> matches one Unicode character. Escape literal characters with
         <code>\*</code>, <code>\?</code>, <code>\\</code>, <code>\"</code>, <code>\(</code> or
-        <code>\)</code>. Brackets are literal. Each term needs an uninterrupted literal run of 3
-        characters; at most 32 terms, 32 indexed runs and 16 nesting levels.
+        <code>\)</code>. Brackets are literal. Except for standalone <code>*</code>, each term needs
+        an uninterrupted literal run of 3 characters; at most 32 terms, 32 indexed runs and 16
+        nesting levels.
       </li>
       <li>
         AND binds before OR. Plain <code>tax return</code> means <code>tax AND return</code>, in

@@ -317,7 +317,7 @@ func TestSearchUnifiedSyntax(t *testing.T) {
 func TestSearchUnifiedSyntaxValidation(t *testing.T) {
 	for _, mode := range []string{"syntax", "whole"} {
 		for _, query := range []string{
-			"*", "abc OR a*b", "abc AND ??", "abc AND", "OR abc", "abc NOT def",
+			"**", "abc OR a*b", "abc AND ??", "abc AND", "OR abc", "abc NOT def",
 			"abc OR", "(abc", "abc)", "()", `"abc`, `""`, `abc\`, `abc\x`,
 			strings.Repeat("(", 17) + "abc" + strings.Repeat(")", 17),
 			strings.Repeat("abc OR ", 32) + "def",

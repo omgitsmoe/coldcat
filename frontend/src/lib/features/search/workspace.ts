@@ -44,8 +44,11 @@ export function searchIssue(input: SearchRoute): SearchIssue | undefined {
   }
   if (input.q === '')
     return { kind: 'idle', message: 'Search for a remembered filename or disk-relative path.' };
-  if (input.match !== 'exact' && Array.from(input.q).length < 3)
-    return { kind: 'short', message: 'Type at least 3 characters, or choose Exact.' };
+  const matchAll =
+    (input.match === undefined || input.match === 'syntax' || input.match === 'whole') &&
+    input.q.trim() === '*';
+  if (!matchAll && input.match !== 'exact' && Array.from(input.q).length < 3)
+    return { kind: 'short', message: 'Use 3+ characters, Exact, or * in a syntax mode.' };
 }
 
 export class SearchWorkspace {

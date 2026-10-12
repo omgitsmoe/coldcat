@@ -36,7 +36,7 @@ func ValidateSearchFilters(f base.SearchFilters) error {
 			return fmt.Errorf("%w: %v", ErrValidation, err)
 		}
 	}
-	if f.Match == "syntax" || f.Match == "whole" {
+	if (f.Match == "syntax" || f.Match == "whole") && !searchMatchAll(f) {
 		if _, err := parseSearchSyntax(f.Query, f.Match == "whole"); err != nil {
 			return fmt.Errorf("%w: %v", ErrValidation, err)
 		}
@@ -52,6 +52,10 @@ func ValidateSearchFilters(f base.SearchFilters) error {
 
 func searchCandidates(f base.SearchFilters) (string, []any, error) {
 	return searchWindow(f, 0, base.SearchAnchor{})
+}
+
+func searchMatchAll(f base.SearchFilters) bool {
+	return (f.Match == "syntax" || f.Match == "whole") && strings.TrimSpace(f.Query) == "*"
 }
 
 func searchTrigramMatch(field, folded string) string {
@@ -86,7 +90,9 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 	folded := searchFold(f.Query)
 	var candidate, predicate string
 	var predicateArgs []any
-	if f.Match == "wildcard" {
+	if searchMatchAll(f) {
+		predicate = "1"
+	} else if f.Match == "wildcard" {
 		pattern, fragments, err := searchWildcard(f.Query)
 		if err != nil {
 			return "", nil, fmt.Errorf("%w: %v", ErrValidation, err)
@@ -126,6 +132,8 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 	} else if f.Match == "exact" {
 		source = "SELECT p.id,p.path,p.name_fold,p.path_fold FROM search_path p WHERE " + column + "=?"
 		args = []any{folded}
+	} else if searchMatchAll(f) {
+		source = "SELECT p.id,p.path,p.name_fold,p.path_fold FROM search_path p"
 	} else if searchSyntaxMode(f.Match) {
 		source = `SELECT p.id,p.path,p.name_fold,p.path_fold FROM search_trigram t
  CROSS JOIN search_path p ON p.id=t.rowid WHERE search_trigram MATCH ?`
@@ -158,7 +166,7 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 		// every matching path into its historical observations before sorting.
 		query += ` WHERE (p.rank,p.path)>=(?,?)`
 		args = append(args, searchRank(after.Relevance), after.Path)
-		if f.Match == "exact" && after.ID > 0 {
+		if (f.Match == "exact" || searchMatchAll(f)) && after.ID > 0 {
 			query += ` AND p.path>=?`
 			args = append(args, after.Path)
 		}
@@ -204,7 +212,7 @@ func searchWindow(f base.SearchFilters, limit int, after base.SearchAnchor) (str
 			}
 		}
 		query += `) ORDER BY `
-		if f.Match == "exact" {
+		if f.Match == "exact" || searchMatchAll(f) {
 			query += `p.path`
 		} else {
 			query += `p.rank,p.path`

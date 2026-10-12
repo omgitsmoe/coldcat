@@ -6,6 +6,7 @@
 - Focused small history benchmark: `go test ./internal/database -run '^$' -bench '^BenchmarkSearchSyntaxHistory$/50000/' -benchtime=3x -benchmem -v -timeout=30m`. Successfully measured 50,000 current/250,000 historical and 1,000,000 current/5,000,000 historical observations across 3 disks/5 snapshots, with current/history first/next pages. Fixture creation is untimed; results are warm serial means, not cold-cache or p95 measurements.
 - Never test against the workspace catalog.
 - Unified syntax benchmark selection: `go test ./internal/database -run '^$' -bench '^BenchmarkSearchSyntax$/50000/^(syntax_selective|syntax_broad|whole_combined)$/' -benchtime=3x -benchmem -v -timeout=30m`; use `/1000000/` instead for large scale. These use disposable fixtures and report warm serial means, not p95 or cold timings.
+- Match-all benchmark: `go test ./internal/database -run '^$' -bench '^BenchmarkSearchMatchAll$' -benchtime=3x -benchmem -v`. Fixture: 50,000 current observations across two disks; unfiltered, exactly one other disk, and no-match location bounds. Results are warm serial first-page means, not cold or p95 measurements.
 
 # Directory enrichment checks
 

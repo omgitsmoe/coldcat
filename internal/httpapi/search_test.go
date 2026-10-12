@@ -16,7 +16,10 @@ import (
 )
 
 func TestSearchHTTPWorkflow(t *testing.T) {
-	for _, match := range []string{"", "syntax", "whole", "substring", "exact", "wildcard", "expression"} {
+	for _, match := range []string{
+		"", "syntax", "whole", "substring", "exact", "wildcard", "expression",
+		"all-default", "all-syntax", "all-whole",
+	} {
 		t.Run(match, func(t *testing.T) { testSearchHTTPWorkflow(t, match) })
 	}
 }
@@ -104,6 +107,14 @@ func testSearchHTTPWorkflow(t *testing.T, match string) {
 		relevance = "match"
 	} else if match == "" {
 		searchURL = "/api/v1/search?q=" + url.QueryEscape("REPORT txt OR absent") + "&"
+		relevance = "match"
+	} else if match == "all-default" || match == "all-syntax" || match == "all-whole" {
+		searchURL = "/api/v1/search?q=" + url.QueryEscape(" \t*\n") + "&"
+		if match == "all-syntax" {
+			searchURL += "match=syntax&"
+		} else if match == "all-whole" {
+			searchURL += "match=whole&"
+		}
 		relevance = "match"
 	}
 	get(searchURL+"limit=1", 200, &page, "/api/v1/search")

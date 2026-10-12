@@ -1,5 +1,5 @@
 // Generated from doc/openapi.json; do not edit.
-// SHA-256: af14cf60b77e35c0bc511546a71697ca7803cdfe72c359cafe466edd0ec70f16
+// SHA-256: c06374ad8c602fc6a4b00c9fe6ac85daa51f97a1a8d197222f65af8f18abd555
 import type { Schema, Operation } from '../schema';
 import type { operations } from './wire';
 export const schemas: Record<
