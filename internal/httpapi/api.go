@@ -159,6 +159,9 @@ func New(a *app.App) http.Handler {
 	register("/api/v1/search", func(w http.ResponseWriter, r *http.Request) error {
 		return search(a, w, r)
 	})
+	register("/api/v1/search/directories", func(w http.ResponseWriter, r *http.Request) error {
+		return searchDirectories(a, w, r)
+	})
 	register("/api/v1/snapshots/{id}/directory", func(w http.ResponseWriter, r *http.Request) error {
 		return getDirectory(a, w, r)
 	})

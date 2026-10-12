@@ -1,5 +1,5 @@
 // Generated from doc/openapi.json; do not edit.
-// SHA-256: c06374ad8c602fc6a4b00c9fe6ac85daa51f97a1a8d197222f65af8f18abd555
+// SHA-256: 6464bfd0a2ee8d0f09ceabface2de10d08cbde50e1089237f0391717030fafdf
 import type { Schema, Operation } from '../schema';
 import type { operations } from './wire';
 export const schemas: Record<
@@ -23,6 +23,8 @@ export const schemas: Record<
   | 'Decimal'
   | 'ContentPage'
   | 'SearchPage'
+  | 'DirectorySearchPage'
+  | 'DirectorySearchItem'
   | 'SearchItem'
   | 'SnapshotPage'
   | 'ID'
@@ -489,6 +491,40 @@ export const schemas: Record<
       next_cursor: { type: ['string', 'null'] },
     },
   },
+  DirectorySearchPage: {
+    type: 'object',
+    required: ['scope', 'revision', 'filters', 'items', 'next_cursor'],
+    properties: {
+      scope: { type: 'string', enum: ['current', 'history'] },
+      revision: { ref: 'Decimal' },
+      filters: {
+        type: 'object',
+        required: ['q', 'field', 'match', 'scope', 'disk_id', 'snapshot_id'],
+        properties: {
+          q: { type: 'string', minLength: 1 },
+          field: { type: 'string', enum: ['name', 'path'] },
+          match: { type: 'string', enum: ['syntax', 'whole', 'exact', 'substring'] },
+          scope: { type: 'string', enum: ['current', 'history'] },
+          disk_id: { type: ['string', 'null'], pattern: '^[1-9][0-9]*$' },
+          snapshot_id: { type: ['string', 'null'], pattern: '^[1-9][0-9]*$' },
+        },
+      },
+      items: { type: 'array', items: { ref: 'DirectorySearchItem' } },
+      next_cursor: { type: ['string', 'null'] },
+    },
+  },
+  DirectorySearchItem: {
+    type: 'object',
+    required: ['id', 'directory', 'snapshot', 'disk', 'basename', 'is_current'],
+    properties: {
+      id: { ref: 'ID' },
+      directory: { ref: 'DirectorySummary' },
+      snapshot: { ref: 'Snapshot' },
+      disk: { ref: 'Disk' },
+      basename: { type: 'string' },
+      is_current: { type: 'boolean' },
+    },
+  },
   SearchItem: {
     type: 'object',
     required: ['observation', 'content', 'disk', 'snapshot', 'basename', 'is_current', 'relevance'],
@@ -803,6 +839,25 @@ export const contract: Record<keyof operations, Operation> = {
       cursor: { schema: { type: 'string', minLength: 1, maxLength: 16384 }, required: false },
     },
     response: { ref: 'SearchPage' },
+  },
+  'GET /api/v1/search/directories': {
+    method: 'GET',
+    path: '/api/v1/search/directories',
+    status: 200,
+    query: {
+      q: { schema: { type: 'string', minLength: 1 }, required: true },
+      field: { schema: { type: 'string', enum: ['name', 'path'] }, required: false },
+      match: {
+        schema: { type: 'string', enum: ['syntax', 'whole', 'exact', 'substring'] },
+        required: false,
+      },
+      scope: { schema: { type: 'string', enum: ['current', 'history'] }, required: false },
+      disk_id: { schema: { ref: 'ID' }, required: false },
+      snapshot_id: { schema: { ref: 'ID' }, required: false },
+      limit: { schema: { type: 'integer', minimum: 1, maximum: 200 }, required: false },
+      cursor: { schema: { type: 'string', minLength: 1, maxLength: 16384 }, required: false },
+    },
+    response: { ref: 'DirectorySearchPage' },
   },
   'GET /healthz': {
     method: 'GET',

@@ -53,6 +53,28 @@ describe('search dispatch eligibility', () => {
 });
 
 describe('search scheduling and ordering', () => {
+  it('retires file requests and selection before dispatching directory search', async () => {
+    const pending: Array<{ url: string; signal?: AbortSignal | null }> = [];
+    const connection = new Connection(
+      createClient((url, init) => {
+        pending.push({ url: String(url), signal: init?.signal });
+        return new Promise<Response>(() => {});
+      }),
+    );
+    const workspace = new SearchWorkspace(connection);
+    workspace.update(input('report'), true);
+    workspace.select('1');
+    workspace.update(input('photos', '&target=directories'), true);
+    expect(pending).toHaveLength(2);
+    expect(pending[0]!.signal?.aborted).toBe(true);
+    expect(workspace.selected).toBeUndefined();
+    expect(pending[1]!.url).toContain('/api/v1/search/directories?');
+    const url = new URL(pending[1]!.url, 'http://local');
+    expect(url.searchParams.has('target')).toBe(false);
+    expect(url.searchParams.has('replica_metric')).toBe(false);
+    workspace.dispose();
+    connection.dispose();
+  });
   it('coalesces at 200ms, flushes, immediately retires selection and rejects late success', async () => {
     vi.useFakeTimers();
     const pending: Array<{

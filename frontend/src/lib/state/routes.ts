@@ -8,6 +8,7 @@ import { decimal } from '../format/decimal';
 
 export type SearchRoute = Omit<Query<'GET /api/v1/search'>, 'cursor' | 'match'> & {
   match?: 'syntax' | 'whole' | 'substring' | 'exact';
+  target?: 'files' | 'directories';
 };
 export type DirectoryRoute = Omit<Query<'GET /api/v1/snapshots/{id}/directory/entries'>, 'cursor'>;
 export type LocationRoute = Omit<Query<'GET /api/v1/contents/{id}/observations'>, 'cursor'>;
@@ -86,7 +87,8 @@ function parseQuery<K extends keyof operations>(key: K, params: URLSearchParams)
     } else result[name] = schema.type === 'array' ? values : value;
   }
   const validation =
-    key === 'GET /api/v1/search' && (!params.has('q') || result.q === '')
+    (key === 'GET /api/v1/search' || key === 'GET /api/v1/search/directories') &&
+    (!params.has('q') || result.q === '')
       ? { ...result, q: 'route-validation' }
       : result;
   encodeQuery(operation, validation);
@@ -94,15 +96,28 @@ function parseQuery<K extends keyof operations>(key: K, params: URLSearchParams)
 }
 
 export function parseSearch(params: URLSearchParams): SearchRoute {
-  const query = parseQuery('GET /api/v1/search', params);
+  const target = params.get('target');
+  if (
+    params.getAll('target').length > 1 ||
+    (target !== null && target !== 'files' && target !== 'directories')
+  )
+    throw new Error('Choose Files or Directories.');
+  const inputs = new URLSearchParams(params);
+  inputs.delete('target');
+  const query = parseQuery(
+    target === 'directories' ? 'GET /api/v1/search/directories' : 'GET /api/v1/search',
+    inputs,
+  );
   if (query.match === 'wildcard' || query.match === 'expression')
     throw new Error('Choose Search syntax, Whole-field syntax, Contains or Exact.');
   literalText(query.q ?? '');
-  if (query.directory !== undefined) validatePath(query.directory);
+  if ('directory' in query && query.directory !== undefined) validatePath(query.directory);
   return {
     field: 'name',
     scope: 'current',
-    replica_metric: 'disks',
+    ...(target === 'directories'
+      ? { target: 'directories' as const }
+      : { replica_metric: 'disks' as const }),
     limit: 50,
     ...query,
     match: query.match ?? 'syntax',
@@ -114,12 +129,16 @@ export function searchURL(query: SearchRoute): string {
   withoutCursor(query);
   literalText(query.q);
   if (query.directory !== undefined) validatePath(query.directory);
+  const { target, ...inputs } = query;
+  if (target !== undefined && target !== 'files' && target !== 'directories')
+    throw new Error('Choose Files or Directories.');
   const encoded = encodeQuery(
-    contract['GET /api/v1/search'],
-    query.q === '' ? { ...query, q: 'route-validation' } : query,
+    contract[target === 'directories' ? 'GET /api/v1/search/directories' : 'GET /api/v1/search'],
+    inputs.q === '' ? { ...inputs, q: 'route-validation' } : inputs,
   );
   const params = new URLSearchParams(encoded);
   params.set('q', query.q);
+  if (target === 'directories') params.set('target', target);
   return `/?${params}`;
 }
 
@@ -232,13 +251,35 @@ export const routes = {
     detailURL(`/snapshots/${id(value)}`, context),
 } as const;
 
-export function directoryBrowseURL(snapshot: string, query: DirectoryRoute): string {
+export function directoryBrowseURL(
+  snapshot: string,
+  query: DirectoryRoute,
+  context: DetailContext = {},
+): string {
   withoutCursor(query);
   validatePath(query.path ?? '');
-  return (
-    `/snapshots/${id(snapshot)}/directory` +
-    encodeQuery(contract['GET /api/v1/snapshots/{id}/directory/entries'], query)
+  const params = new URLSearchParams(
+    encodeQuery(contract['GET /api/v1/snapshots/{id}/directory/entries'], query),
   );
+  if (context.returnTo !== undefined) {
+    const destination = safeSearchReturn(context.returnTo);
+    if (destination === undefined) throw new Error('Invalid search return destination');
+    params.set('return_to', destination);
+  }
+  return `/snapshots/${id(snapshot)}/directory${params.size ? `?${params}` : ''}`;
+}
+
+export function parseDirectoryContext(params: URLSearchParams) {
+  const inputs = new URLSearchParams(params);
+  const returns = inputs.getAll('return_to');
+  if (returns.length > 1) throw new Error('Repeated parameter: return_to');
+  let returnTo: string | undefined;
+  if (returns.length) {
+    returnTo = safeSearchReturn(returns[0]!);
+    if (returnTo === undefined) throw new Error('Invalid search return destination');
+  }
+  inputs.delete('return_to');
+  return { query: parseDirectory(inputs), returnTo };
 }
 
 export function safeDetailReturn(value: string): string | undefined {
@@ -256,7 +297,7 @@ export function safeDetailReturn(value: string): string | undefined {
     const match = /^\/snapshots\/([1-9][0-9]*)\/directory$/.exec(url.pathname);
     if (url.origin !== 'http://coldcat.local' || !match) return undefined;
     id(match[1]!);
-    parseDirectory(url.searchParams);
+    parseDirectoryContext(url.searchParams);
     return url.pathname + url.search;
   } catch {
     return undefined;

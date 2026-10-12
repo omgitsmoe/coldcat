@@ -10,11 +10,13 @@
     id,
     query,
     returnTo,
+    searchReturnTo,
   }: {
     items: components['schemas']['DirectoryEntry'][];
     id: string;
     query: DirectoryRoute;
     returnTo: string;
+    searchReturnTo?: string;
   } = $props();
 </script>
 
@@ -34,8 +36,11 @@
           {#if item.directory}
             <a
               class="literal"
-              href="{resolve('/')}{directoryBrowseURL(id, { ...query, path: item.path }).slice(1)}"
-              >{item.path}</a
+              href="{resolve('/')}{directoryBrowseURL(
+                id,
+                { ...query, path: item.path },
+                { returnTo: searchReturnTo },
+              ).slice(1)}">{item.path}</a
             >
             <div>Directory</div>
           {:else}<span class="literal">{item.path}</span>

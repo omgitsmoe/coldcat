@@ -110,6 +110,8 @@ export function createClient(fetcher: Fetcher = (input, init) => fetch(input, in
     catalog: (signal?: AbortSignal) => request('GET /api/v1/catalog', {}, signal),
     search: (query: Query<'GET /api/v1/search'>, signal?: AbortSignal) =>
       request('GET /api/v1/search', query, signal),
+    searchDirectories: (query: Query<'GET /api/v1/search/directories'>, signal?: AbortSignal) =>
+      request('GET /api/v1/search/directories', query, signal),
     contents: (query: Query<'GET /api/v1/contents'> = {}, signal?: AbortSignal) =>
       request('GET /api/v1/contents', query, signal),
     lookupContent: (query: Query<'GET /api/v1/contents/lookup'>, signal?: AbortSignal) =>

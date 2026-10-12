@@ -3,6 +3,7 @@ import {
   routes,
   parseSearch,
   parseDirectory,
+  parseDirectoryContext,
   parseDetailContext,
   parseContentRoute,
   parseInventoryRoute,
@@ -15,6 +16,33 @@ import {
 } from '../../src/lib/state/routes';
 
 describe('literal route state', () => {
+  it('round trips directory searches and validates their browser return context', () => {
+    const route = parseSearch(
+      new URLSearchParams('target=directories&q=+%CE%A9mega+&scope=history&disk_id=2&limit=1'),
+    );
+    expect(route.target).toBe('directories');
+    expect(route.replica_metric).toBeUndefined();
+    const returnTo = searchURL(route);
+    expect(parseSearch(new URL(returnTo, 'http://local').searchParams)).toEqual(route);
+    expect(safeSearchReturn(returnTo)).toBe(returnTo);
+    const destination = directoryBrowseURL('3', { path: 'Ωmega/雪' }, { returnTo });
+    expect(parseDirectoryContext(new URL(destination, 'http://local').searchParams)).toEqual({
+      query: { path: 'Ωmega/雪', recursive: false, replica_metric: 'disks', limit: 50 },
+      returnTo,
+    });
+    expect(safeDetailReturn(destination)).toBe(destination);
+    for (const query of [
+      'target=bad',
+      'target=directories&target=files',
+      'target=directories&q=foo&other_replicas=0',
+      'target=directories&q=foo&directory=',
+      'target=directories&q=foo&replica_metric=disks',
+      'target=directories&q=foo&match=wildcard',
+    ])
+      expect(() => parseSearch(new URLSearchParams(query))).toThrow();
+    expect(() => parseDirectoryContext(new URLSearchParams('return_to=//evil'))).toThrow();
+    expect(() => parseDirectoryContext(new URLSearchParams('return_to=/&return_to=/'))).toThrow();
+  });
   it('preserves a validated literal directory return without broadening search-session returns', () => {
     const returnTo = directoryBrowseURL('1', {
       path: 'foo/É e\u0301\\x ?#%',
@@ -32,7 +60,7 @@ describe('literal route state', () => {
     for (const value of [
       '/snapshots/0/directory?path=',
       '/snapshots/1/directory?cursor=x',
-      '/snapshots/1/directory?return_to=%2F',
+      '/snapshots/1/directory?return_to=%2Fdisks',
       '/snapshots/1/directory?path=foo&path=foobar',
       '//evil/snapshots/1/directory',
       '/snapshots/1/directory#x',

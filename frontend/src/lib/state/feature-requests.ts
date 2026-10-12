@@ -28,24 +28,38 @@ function bindTraversal<T, P extends { items: T[]; next_cursor: string | null }>(
   };
 }
 
+export type SearchItem =
+  | Result<'GET /api/v1/search'>['items'][number]
+  | Result<'GET /api/v1/search/directories'>['items'][number];
+export interface SearchPage {
+  items: SearchItem[];
+  next_cursor: string | null;
+}
+export function searchItemID(item: SearchItem): string {
+  return 'observation' in item ? item.observation.id : item.id;
+}
+
 export function searchPages(connection: Connection, query: SearchRoute) {
   withoutCursor(query);
+  const { target, ...inputs } = query;
   const input = {
     field: 'name',
     match: 'substring',
     scope: 'current',
-    replica_metric: 'disks',
+    ...(target === 'directories' ? {} : { replica_metric: 'disks' as const }),
     limit: 50,
-    ...query,
-  } as Query<'GET /api/v1/search'>;
-  const encoded = encodeQuery(contract['GET /api/v1/search'], input);
+    ...inputs,
+  } satisfies SearchRoute;
+  const key = target === 'directories' ? 'GET /api/v1/search/directories' : 'GET /api/v1/search';
+  const encoded = encodeQuery(contract[key], input);
   return bindTraversal(
     connection,
-    new CursorTraversal<
-      Result<'GET /api/v1/search'>['items'][number],
-      Result<'GET /api/v1/search'>
-    >({ endpoint: 'search', resource: '', query: encoded }, (cursor, signal) =>
-      connection.client.search({ ...input, cursor }, signal),
+    new CursorTraversal<SearchItem, SearchPage>(
+      { endpoint: key, resource: '', query: encoded },
+      (cursor, signal) =>
+        target === 'directories'
+          ? connection.client.searchDirectories({ ...input, cursor }, signal)
+          : connection.client.search({ ...input, cursor }, signal),
     ),
   );
 }

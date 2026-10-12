@@ -1,11 +1,11 @@
-import type { Result } from '../../api/client';
 import type { Connection } from '../../state/connection';
 import { searchPages } from '../../state/feature-requests';
 import { searchURL, type SearchRoute } from '../../state/routes';
 import type { TraversalState } from '../../state/traversal';
 import { literalText, validatePath } from '../../format/path';
 
-export type SearchPage = Result<'GET /api/v1/search'>;
+export type { SearchPage } from '../../state/feature-requests';
+import type { SearchPage } from '../../state/feature-requests';
 export interface SearchIssue {
   kind: 'idle' | 'short' | 'invalid';
   message: string;
@@ -43,7 +43,13 @@ export function searchIssue(input: SearchRoute): SearchIssue | undefined {
     };
   }
   if (input.q === '')
-    return { kind: 'idle', message: 'Search for a remembered filename or disk-relative path.' };
+    return {
+      kind: 'idle',
+      message:
+        input.target === 'directories'
+          ? 'Search for a remembered directory name or disk-relative directory path.'
+          : 'Search for a remembered filename or disk-relative path.',
+    };
   const matchAll =
     (input.match === undefined || input.match === 'syntax' || input.match === 'whole') &&
     input.q.trim() === '*';

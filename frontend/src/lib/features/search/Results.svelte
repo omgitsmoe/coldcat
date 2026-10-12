@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { SearchPage } from './workspace';
+  import type { Result } from '../../api/client';
   import { resolve } from '$app/paths';
   import { contentURL, directoryBrowseURL, routes } from '../../state/routes';
   import { containingDirectory } from '../../format/path';
@@ -12,7 +12,7 @@
     returnTo,
     select,
   }: {
-    items: SearchPage['items'];
+    items: Result<'GET /api/v1/search'>['items'];
     selected?: string;
     returnTo: string;
     select: (id: string) => void;

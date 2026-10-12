@@ -5,7 +5,7 @@
   import { useConnection } from '../../state/context';
   import { directoryDetail, directoryPages } from '../../state/feature-requests';
   import {
-    parseDirectory,
+    parseDirectoryContext,
     directoryBrowseURL,
     routes,
     type DirectoryRoute,
@@ -28,6 +28,7 @@
   type Detail = Result<'GET /api/v1/snapshots/{id}/directory'>;
   type Page = Result<'GET /api/v1/snapshots/{id}/directory/entries'>;
   let query = $state<DirectoryRoute>();
+  let returnTo = $state<string>();
   let parseError = $state('');
   let detailOwner = $state<ReturnType<typeof directoryDetail>>();
   let pagesOwner = $state<ReturnType<typeof directoryPages>>();
@@ -41,7 +42,10 @@
   $effect(() => {
     let input: DirectoryRoute;
     try {
-      input = parseDirectory(new globalThis.URLSearchParams(search));
+      const parsed = parseDirectoryContext(new globalThis.URLSearchParams(search));
+      input = parsed.query;
+      returnTo = parsed.returnTo;
+      parseError = '';
     } catch (error) {
       parseError = error instanceof Error ? error.message : 'Invalid directory route';
       return;
@@ -98,6 +102,7 @@
   <pre>{search}</pre>
 {:else if query}
   <div class="source-context">
+    {#if returnTo}<a href="{resolve('/')}{returnTo.slice(1)}">Back to search</a>{/if}
     <a href="{resolve('/')}{routes.snapshot(id).slice(1)}">Inventory {id}</a>
     {#if source}
       <span class="badge"
@@ -110,7 +115,7 @@
     {/if}
   </div>
   <nav class="breadcrumbs" aria-label="Directory breadcrumbs">
-    <a href="{resolve('/')}{directoryBrowseURL(id, { ...query, path: '' }).slice(1)}"
+    <a href="{resolve('/')}{directoryBrowseURL(id, { ...query, path: '' }, { returnTo }).slice(1)}"
       >Root{source ? ` — Disk ${source.snapshot.disk_id}` : ` — Inventory ${id}`}</a
     >
     {#each breadcrumbs(query.path!) as crumb (crumb.path)}
@@ -118,8 +123,11 @@
       {#if crumb.path === query.path}<span class="literal" aria-current="page">{crumb.name}</span>
       {:else}<a
           class="literal"
-          href="{resolve('/')}{directoryBrowseURL(id, { ...query, path: crumb.path }).slice(1)}"
-          >{crumb.name}</a
+          href="{resolve('/')}{directoryBrowseURL(
+            id,
+            { ...query, path: crumb.path },
+            { returnTo },
+          ).slice(1)}">{crumb.name}</a
         >{/if}
     {/each}
   </nav>
@@ -186,7 +194,7 @@
   {:else}
     <section aria-label="Directory entry listing">
       <h2>Entries</h2>
-      <Filters {id} {query} {retire} {resume} />
+      <Filters {id} {query} {retire} {resume} {returnTo} />
       <p class="muted">{draft ? 'Last applied' : 'Applied'}: {directorySummary(query)}</p>
       <p class="muted">
         Replicas use current destination inventories only, even for a historical source; the source
@@ -217,7 +225,8 @@
               {items}
               {id}
               {query}
-              returnTo={directoryBrowseURL(id, query)}
+              searchReturnTo={returnTo}
+              returnTo={directoryBrowseURL(id, query, { returnTo })}
             />
           {/if}
           <PageControls

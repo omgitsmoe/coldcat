@@ -11,7 +11,14 @@
     query,
     retire,
     resume,
-  }: { id: string; query: DirectoryRoute; retire: () => void; resume: () => void } = $props();
+    returnTo,
+  }: {
+    id: string;
+    query: DirectoryRoute;
+    retire: () => void;
+    resume: () => void;
+    returnTo?: string;
+  } = $props();
   const initial = untrack(() => query);
   let recursive = $state(initial.recursive ?? false);
   let metric = $state(initial.replica_metric ?? 'disks');
@@ -39,13 +46,17 @@
         throw new Error('Minimum exceeds maximum.');
       }
       return {
-        url: directoryBrowseURL(id, {
-          path: query.path,
-          recursive,
-          replica_metric: metric,
-          ...bounds,
-          limit: Number(limit),
-        }),
+        url: directoryBrowseURL(
+          id,
+          {
+            path: query.path,
+            recursive,
+            replica_metric: metric,
+            ...bounds,
+            limit: Number(limit),
+          },
+          { returnTo },
+        ),
         error: '',
       };
     } catch (cause) {
@@ -56,7 +67,7 @@
     event.preventDefault();
     const url = validation.url;
     if (url) {
-      if (url === directoryBrowseURL(id, query)) resume();
+      if (url === directoryBrowseURL(id, query, { returnTo })) resume();
       else void goto(resolve(`/snapshots/[id]/directory?${url.split('?')[1]}`, { id }));
     }
   }

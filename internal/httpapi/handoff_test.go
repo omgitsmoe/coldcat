@@ -143,6 +143,7 @@ func TestOpenAPIEndpointHandoff(t *testing.T) {
 			"/api/v1/contents/" + contentID + "/observations", "", 200},
 		{"GET", "/api/v1/observations/{id}", "/api/v1/observations/" + observationID, "", 200},
 		{"GET", "/api/v1/search", "/api/v1/search?q=REPORT", "", 200},
+		{"GET", "/api/v1/search/directories", "/api/v1/search/directories?q=DOCS", "", 200},
 		{"GET", "/api/v1/snapshots/{id}/directories",
 			"/api/v1/snapshots/" + snapshotID + "/directories", "", 200},
 		{"GET", "/api/v1/snapshots/{id}/directory",

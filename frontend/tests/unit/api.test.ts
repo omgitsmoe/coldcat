@@ -25,6 +25,11 @@ const cases = [
   ],
   [
     'get',
+    '/api/v1/search/directories',
+    (c: ReturnType<typeof createClient>, s: AbortSignal) => c.searchDirectories({ q: 'photos' }, s),
+  ],
+  [
+    'get',
     '/api/v1/contents',
     (c: ReturnType<typeof createClient>, s: AbortSignal) => c.contents({}, s),
   ],

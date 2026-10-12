@@ -27,6 +27,8 @@
   import RequestFeedback from '../../components/RequestFeedback.svelte';
   import PageControls from '../../components/PageControls.svelte';
   import Results from './Results.svelte';
+  import DirectoryResults from './DirectoryResults.svelte';
+  import { searchItemID } from '../../state/feature-requests';
 
   const connection = useConnection();
   let workspace: SearchWorkspace | undefined;
@@ -34,6 +36,7 @@
   let input: globalThis.HTMLInputElement;
   let mounted = $state(false);
   let q = $state('');
+  let target = $state<'files' | 'directories'>('files');
   let field = $state<'name' | 'path'>('name');
   let match = $state<NonNullable<SearchRoute['match']>>('syntax');
   let scope = $state<'current' | 'history'>('current');
@@ -99,6 +102,7 @@
   }
   function drafts(route: SearchRoute) {
     q = route.q;
+    target = route.target ?? 'files';
     field = route.field ?? 'name';
     match = route.match ?? 'syntax';
     scope = route.scope ?? 'current';
@@ -120,25 +124,27 @@
       field,
       match,
       scope,
-      replica_metric: metric,
       limit: '50',
     });
+    if (target === 'directories') params.set('target', target);
+    else params.set('replica_metric', metric);
     for (const [key, value] of [
       ['disk_id', disk],
       ['snapshot_id', snapshot],
     ]) {
       if (value !== '') params.set(key!, value!);
     }
-    for (const [key, value] of Object.entries(
-      boundsQuery({
-        mode: boundMode,
-        exact,
-        minimum,
-        maximum,
-      }),
-    ))
-      params.set(key, value);
-    if (directoryEnabled) params.set('directory', directory);
+    if (target === 'files')
+      for (const [key, value] of Object.entries(
+        boundsQuery({
+          mode: boundMode,
+          exact,
+          minimum,
+          maximum,
+        }),
+      ))
+        params.set(key, value);
+    if (target === 'files' && directoryEnabled) params.set('directory', directory);
     // Invalid literal input remains visible and bookmarkable, but is never dispatched.
     const validation = new SvelteURLSearchParams(params);
     validation.set('q', 'route-validation');
@@ -156,6 +162,16 @@
       reset: false,
       state: page.state,
     });
+  }
+  function changeTarget(value: 'files' | 'directories') {
+    if (value === target) return;
+    target = value;
+    directoryEnabled = false;
+    directory = '';
+    metric = 'disks';
+    boundMode = 'any';
+    exact = minimum = maximum = '';
+    apply();
   }
   function changedQuery() {
     workspace?.retire();
@@ -219,14 +235,14 @@
     }
     if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && items.length) {
       event.preventDefault();
-      const current = items.findIndex((item) => item.observation.id === selected);
+      const current = items.findIndex((item) => searchItemID(item) === selected);
       const index =
         current < 0
           ? event.key === 'ArrowDown'
             ? 0
             : items.length - 1
           : Math.max(0, Math.min(items.length - 1, current + (event.key === 'ArrowDown' ? 1 : -1)));
-      workspace?.select(items[index]!.observation.id);
+      workspace?.select(searchItemID(items[index]!));
       void tick().then(() =>
         globalThis.document
           .querySelector('[data-selected-content="true"]')
@@ -282,6 +298,7 @@
         unsubscribe = workspace.subscribe(sync);
       }
       q = page.url.searchParams.get('q') ?? '';
+      target = page.url.searchParams.get('target') === 'directories' ? 'directories' : 'files';
       disk = page.url.searchParams.get('disk_id') ?? '';
       snapshot = page.url.searchParams.get('snapshot_id') ?? '';
       directoryEnabled = page.url.searchParams.has('directory');
@@ -357,7 +374,9 @@
 <h1>Search</h1>
 <form class="query-toolbar" role="search" onsubmit={submit}>
   <label class="field query-field" for="query"
-    >Filename or disk-relative path
+    >{target === 'directories'
+      ? 'Directory name or disk-relative path'
+      : 'Filename or disk-relative path'}
     <input
       id="query"
       class="input-search"
@@ -388,6 +407,16 @@
       input.focus();
     }}>Clear</button
   >
+  <div class="actions" role="group" aria-label="Search result type">
+    <button type="button" aria-pressed={target === 'files'} onclick={() => changeTarget('files')}
+      >Files</button
+    >
+    <button
+      type="button"
+      aria-pressed={target === 'directories'}
+      onclick={() => changeTarget('directories')}>Directories</button
+    >
+  </div>
 </form>
 <p id="search-syntax-hint" class="muted syntax-hint">
   {#if match === 'syntax' || match === 'whole'}
@@ -444,13 +473,13 @@
             bind:value={snapshot}
             edited={editedFilter}
           />
-          <label class="check-field"
-            ><input type="checkbox" bind:checked={directoryEnabled} /> Filter directory membership</label
-          >
-          <label class="field directory-field"
-            >Directory (empty is root)
-            <input class="literal" bind:value={directory} disabled={!directoryEnabled} />
-          </label>
+          {#if target === 'files'}<label class="check-field"
+              ><input type="checkbox" bind:checked={directoryEnabled} /> Filter directory membership</label
+            >
+            <label class="field directory-field"
+              >Directory (empty is root)
+              <input class="literal" bind:value={directory} disabled={!directoryEnabled} />
+            </label>{/if}
         </div>
         <p class="muted">
           Snapshot must belong to Disk when both are supplied (validated by the server).
@@ -465,25 +494,25 @@
             }}>Search this older snapshot in history</button
           >{/if}
       </fieldset>
-      <fieldset>
-        <legend>Redundancy</legend>
-        <label class="field"
-          >Other-copy metric <select bind:value={metric}>
-            <option value="disks">Disks</option><option value="locations">Locations</option>
-          </select></label
-        >
-        <ReplicaBounds
-          bind:mode={boundMode}
-          bind:exact
-          bind:minimum
-          bind:maximum
-          invalid={!!draftError}
-        />
-        <p class="muted">
-          Other-copy bounds require Current scope. Counts remain catalog-wide despite membership
-          filters.
-        </p>
-      </fieldset>
+      {#if target === 'files'}<fieldset>
+          <legend>Redundancy</legend>
+          <label class="field"
+            >Other-copy metric <select bind:value={metric}>
+              <option value="disks">Disks</option><option value="locations">Locations</option>
+            </select></label
+          >
+          <ReplicaBounds
+            bind:mode={boundMode}
+            bind:exact
+            bind:minimum
+            bind:maximum
+            invalid={!!draftError}
+          />
+          <p class="muted">
+            Other-copy bounds require Current scope. Counts remain catalog-wide despite membership
+            filters.
+          </p>
+        </fieldset>{/if}
     </div>
   </details>
   {#if dirty}<p class="status-warning" role="status">
@@ -500,13 +529,14 @@
     <summary>Search syntax help</summary>
     <ul>
       <li>
-        All modes ignore case. Name searches the final filename; Path searches the full relative
-        path.
+        All modes ignore case. Name searches the final {target === 'directories'
+          ? 'directory name'
+          : 'filename'}; Path searches the full relative path.
       </li>
       <li>Contains and Exact treat spaces, quotes, operators and wildcard characters literally.</li>
       <li>
-        Use <code>*</code> alone in either syntax mode to match all files, then apply advanced filters
-        (for example, exactly 1 other disk copy). Outer whitespace is ignored.
+        Use <code>*</code> alone in either syntax mode to match all {target}, then apply advanced
+        filters. Outer whitespace is ignored.
       </li>
       <li>
         Search syntax combines wildcards, uppercase AND / OR and parentheses.
@@ -524,14 +554,19 @@
       </li>
       <li>
         Search syntax matches each term anywhere; Whole-field syntax anchors each term to the entire
-        selected field. Both sort by path, then observation ID. Contains boosts exact and prefix
-        matches; Exact is literal whole-field equality.
+        selected field. Results sort by path, then {target === 'directories'
+          ? 'directory'
+          : 'observation'} ID.
+        {#if target === 'files'}Contains boosts exact and prefix matches.{/if}
+        Exact is literal whole-field equality.
       </li>
     </ul>
   </details>
   {#if selected}<div class="actions" aria-live="polite">
-      <span>Selected observation {selected}.</span>
-      <button class="button-compact" onclick={openSelected}>Open selected content</button>
+      <span>Selected {target === 'directories' ? 'directory' : 'observation'} {selected}.</span>
+      <button class="button-compact" onclick={openSelected}
+        >Open selected {target === 'directories' ? 'directory' : 'content'}</button
+      >
       <button class="button-compact button-quiet" onclick={() => workspace?.select()}
         >Cancel selection</button
       >
@@ -540,7 +575,7 @@
     <summary>Keyboard help</summary>
     <p>
       / or Ctrl/Cmd+K focuses search outside editable controls. On desktop, typing outside controls
-      inserts the character into search. Arrows select results; Enter opens selected content or
+      inserts the character into search. Arrows select results; Enter opens the selected result or
       searches immediately. Escape cancels selection without erasing the query. All actions also
       have visible controls.
     </p>
@@ -555,7 +590,15 @@
   </details>
 </div>
 {#if scope === 'history'}<p>
-    <strong>History scope — repeated and older inventory observations are included.</strong>
+    <strong
+      >History scope — repeated and older inventory {target === 'directories'
+        ? 'directories'
+        : 'observations'} are included.</strong
+    >
+  </p>{/if}
+{#if target === 'directories'}<p class="muted">
+    Directories are inferred from imported file paths; empty nonroot directories are unavailable.
+    File-copy filters do not apply. Switching result type clears file-only filters.
   </p>{/if}
 {#if parseError && parseError !== draftError}<p role="alert">{parseError}</p>
   <details>
@@ -573,7 +616,7 @@
   resource="Search"
   retained={view.pages.length > 0}
   emptyLabel={items.length === 0
-    ? 'No matching observations. Try another query or deliberately choose History scope.'
+    ? `No matching ${target === 'directories' ? 'directories' : 'observations'}. Try another query or deliberately choose History scope.`
     : undefined}
   loadingLabel={view.status === 'loading-more' ? 'Loading another page…' : 'Searching…'}
   retry={() => {
@@ -590,7 +633,21 @@
   </p>
 {/if}
 {#if items.length}
-  <Results {items} {selected} {returnTo} select={(id) => workspace?.select(id)} />
+  {#if target === 'directories'}
+    <DirectoryResults
+      items={items.filter((item) => 'directory' in item)}
+      {selected}
+      {returnTo}
+      select={(id) => workspace?.select(id)}
+    />
+  {:else}
+    <Results
+      items={items.filter((item) => 'observation' in item)}
+      {selected}
+      {returnTo}
+      select={(id) => workspace?.select(id)}
+    />
+  {/if}
 {/if}
 {#if view.pages.length && traversal}
   <PageControls

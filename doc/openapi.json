@@ -208,6 +208,31 @@
         }
       }
     },
+    "/api/v1/search/directories": {
+      "get": {
+        "summary": "Search directory names or disk-relative directory paths",
+        "description": "Search stored directories, not filenames or grouped file hits. One result per directory per complete inventory. Current selects the latest complete snapshot per disk by captured_at then id; history includes repeated older inventories. Directories are inferred from file paths; empty nonroot directories are unavailable. Root has empty path and basename and is included by standalone *. All modes use version-1 Unicode simple folding, preserving punctuation and original spelling. Name is the final /-separated directory segment. Syntax/whole use the same wildcard, implicit AND, uppercase AND/OR, quoting, escapes and complexity limits as file search; whole anchors each term to the entire field. Exact is literal whole-field equality; substring is literal containment with three or more Unicode code points. Every mode sorts by binary path then directory ID, without relevance boosting. Queries scan eligible stored directories; pagination limits output, not scanning work. File membership and replica parameters are not accepted. Keep query, filters and limit unchanged when following cursors. Successful imports invalidate cursors. Unknown, repeated and empty parameters are rejected.",
+        "parameters": [
+          {"name": "q", "in": "query", "required": true, "description": "Valid UTF-8, at most 1024 bytes, no NUL. Standalone unquoted * ignoring outer whitespace matches all directories in syntax/whole only. Exact allows short literal queries; other queries require three-code-point literal runs as in file search.", "schema": {"type": "string", "minLength": 1}},
+          {"name": "field", "in": "query", "schema": {"type": "string", "enum": ["name", "path"], "default": "name"}},
+          {"name": "match", "in": "query", "schema": {"type": "string", "enum": ["syntax", "whole", "exact", "substring"], "default": "syntax"}},
+          {"$ref": "#/components/parameters/Scope"},
+          {"name": "disk_id", "in": "query", "schema": {"$ref": "#/components/schemas/ID"}},
+          {"name": "snapshot_id", "in": "query", "description": "Complete snapshot; must belong to disk_id if both supplied. Older snapshots require history scope to return results.", "schema": {"$ref": "#/components/schemas/ID"}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}},
+          {"name": "cursor", "in": "query", "schema": {"type": "string", "minLength": 1, "maxLength": 16384}}
+        ],
+        "responses": {
+          "200": {"description": "Directory search page with recursive inventory totals; known bytes can be partial", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DirectorySearchPage"}, "example": {"scope": "current", "revision": "0", "filters": {"q": "photos", "field": "name", "match": "syntax", "scope": "current", "disk_id": null, "snapshot_id": null}, "items": [], "next_cursor": null}}}},
+          "400": {"$ref": "#/components/responses/Invalid"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "405": {"$ref": "#/components/responses/ReadOnlyMethod"},
+          "409": {"description": "Inventory revision changed; restart pagination", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+          "500": {"$ref": "#/components/responses/Internal"},
+          "503": {"$ref": "#/components/responses/Unavailable"}
+        }
+      }
+    },
     "/healthz": {
       "get": {
         "summary": "Check database/session readiness",
@@ -702,6 +727,34 @@
           }},
           "items": {"type": "array", "items": {"$ref": "#/components/schemas/SearchItem"}},
           "next_cursor": {"type": ["string", "null"]}
+        }
+      },
+      "DirectorySearchPage": {
+        "type": "object", "required": ["scope", "revision", "filters", "items", "next_cursor"],
+        "properties": {
+          "scope": {"type": "string", "enum": ["current", "history"]},
+          "revision": {"$ref": "#/components/schemas/Decimal"},
+          "filters": {"type": "object", "required": ["q", "field", "match", "scope", "disk_id", "snapshot_id"], "properties": {
+            "q": {"type": "string", "minLength": 1},
+            "field": {"type": "string", "enum": ["name", "path"]},
+            "match": {"type": "string", "enum": ["syntax", "whole", "exact", "substring"]},
+            "scope": {"type": "string", "enum": ["current", "history"]},
+            "disk_id": {"type": ["string", "null"], "pattern": "^[1-9][0-9]*$"},
+            "snapshot_id": {"type": ["string", "null"], "pattern": "^[1-9][0-9]*$"}
+          }},
+          "items": {"type": "array", "items": {"$ref": "#/components/schemas/DirectorySearchItem"}},
+          "next_cursor": {"type": ["string", "null"]}
+        }
+      },
+      "DirectorySearchItem": {
+        "type": "object", "required": ["id", "directory", "snapshot", "disk", "basename", "is_current"],
+        "properties": {
+          "id": {"$ref": "#/components/schemas/ID"},
+          "directory": {"$ref": "#/components/schemas/DirectorySummary"},
+          "snapshot": {"$ref": "#/components/schemas/Snapshot"},
+          "disk": {"$ref": "#/components/schemas/Disk"},
+          "basename": {"type": "string"},
+          "is_current": {"type": "boolean"}
         }
       },
       "SearchItem": {

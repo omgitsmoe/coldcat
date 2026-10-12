@@ -51,6 +51,7 @@ export function searchSummary(route: SearchRoute): string {
     exact: 'Exact',
   };
   const parts = [
+    ...(route.target === 'directories' ? ['Directories'] : []),
     `${route.field === 'path' ? 'Path' : 'Name'} · ${modes[route.match ?? 'syntax']}`,
     route.scope === 'history' ? 'History' : 'Current',
     `Query: ${route.q}`,

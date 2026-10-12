@@ -1,5 +1,5 @@
 // Generated from doc/openapi.json; do not edit.
-// SHA-256: c06374ad8c602fc6a4b00c9fe6ac85daa51f97a1a8d197222f65af8f18abd555
+// SHA-256: 6464bfd0a2ee8d0f09ceabface2de10d08cbde50e1089237f0391717030fafdf
 export interface components {
   schemas: {
     CatalogSummary: {
@@ -204,6 +204,28 @@ export interface components {
       items: Array<components['schemas']['SearchItem']>;
       next_cursor: string | null;
     };
+    DirectorySearchPage: {
+      scope: 'current' | 'history';
+      revision: components['schemas']['Decimal'];
+      filters: {
+        q: string;
+        field: 'name' | 'path';
+        match: 'syntax' | 'whole' | 'exact' | 'substring';
+        scope: 'current' | 'history';
+        disk_id: string | null;
+        snapshot_id: string | null;
+      };
+      items: Array<components['schemas']['DirectorySearchItem']>;
+      next_cursor: string | null;
+    };
+    DirectorySearchItem: {
+      id: components['schemas']['ID'];
+      directory: components['schemas']['DirectorySummary'];
+      snapshot: components['schemas']['Snapshot'];
+      disk: components['schemas']['Disk'];
+      basename: string;
+      is_current: boolean;
+    };
     SearchItem: {
       observation: components['schemas']['Observation'];
       content: components['schemas']['Content'];
@@ -380,6 +402,20 @@ export interface operations {
     };
     body: never;
     response: components['schemas']['SearchPage'];
+  };
+  'GET /api/v1/search/directories': {
+    query: {
+      q: string;
+      field?: 'name' | 'path';
+      match?: 'syntax' | 'whole' | 'exact' | 'substring';
+      scope?: 'current' | 'history';
+      disk_id?: components['schemas']['ID'];
+      snapshot_id?: components['schemas']['ID'];
+      limit?: number;
+      cursor?: string;
+    };
+    body: never;
+    response: components['schemas']['DirectorySearchPage'];
   };
   'GET /healthz': { query: Record<string, never>; body: never; response: { status: 'ready' } };
   'GET /api/v1/contents': {

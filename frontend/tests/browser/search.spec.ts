@@ -44,7 +44,7 @@ test('literal Unicode validation, Enter flush and latest delayed request wins', 
   const input = page.getByRole('searchbox');
   await expect(input).toBeFocused();
   await input.fill('😀雪');
-  await expect(page.getByText('Type at least 3 characters, or choose Exact.')).toBeVisible();
+  await expect(page.getByText('Use 3+ characters, Exact, or * in a syntax mode.')).toBeVisible();
   await page.waitForTimeout(250);
   expect(pending).toHaveLength(0);
   await input.fill('old');
